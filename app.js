@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "3ea1febc16";
+const APPV = "864fc1a389";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -667,7 +667,7 @@ async function push(){
 const stamp = () => { const d = new Date(); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 function localSaves(){ try { return JSON.parse(localStorage.getItem(LSAVES) || '[]'); } catch (e) { return []; } }
 async function listSaves(){
-  if (SYNC.ready){ try { const q = await savesCol().orderBy('at', 'desc').limit(40).get(); return q.docs.map(d => Object.assign({ id:d.id, cloud:true }, d.data())); } catch (e) {} }
+  if (SYNC.ready){ try { const q = await savesCol().orderBy('at', 'desc').limit(60).get(); return q.docs.map(d => Object.assign({ id:d.id, cloud:true }, d.data())); } catch (e) {} }
   return localSaves();
 }
 async function addSave(name){
@@ -679,8 +679,16 @@ async function addSave(name){
   try { const arr = localSaves(); arr.unshift(Object.assign({ id:'l' + row.at }, row)); localStorage.setItem(LSAVES, JSON.stringify(arr.slice(0, 12))); return true; }
   catch (e){ toast('Could not make a save point here.'); return false; }
 }
+/* keep the last 14 daily save points and the last 12 others */
 async function pruneSaves(){
-  try { const rows = await listSaves(); for (const r of rows.slice(12)) if (r.cloud) await savesCol().doc(r.id).delete(); } catch (e) {}
+  try { const rows = await listSaves(), daily = rows.filter(r => /^Daily/.test(r.name || '')), other = rows.filter(r => !/^Daily/.test(r.name || ''));
+    for (const r of daily.slice(14).concat(other.slice(12))) if (r.cloud) await savesCol().doc(r.id).delete(); } catch (e) {}
+}
+/* one automatic save point a day, the first time the game opens */
+async function autoDaily(){
+  if (!SYNC.ready || isBlank(S) || S.demo || S.autoSave === today()) return;
+  S.autoSave = today(); save();
+  await addSave('Daily · ' + longDate(today()));
 }
 async function deleteSave(row){
   if (row.cloud){ try { await savesCol().doc(row.id).delete(); } catch (e) { toast('Could not delete that save point.'); } }
@@ -1996,6 +2004,7 @@ function home(greeting){
   if (!S.intro) return intro(() => { S.intro = true; S.lastVisit = visitSnap(); save(); home(); });
   if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); home(); }); }
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
+  autoDaily();
   let greet = greeting || null;
   if (!home.greeted && S.stats.answered){ home.greeted = true; if (VOICE.play('c02')) greet = VO.c02.replace('Aaron', S.name); }
   mount([
@@ -2264,6 +2273,14 @@ function prizeSheet(){
 
 /* ---------- Grown-ups: one section at a time ---------- */
 let parentOK = false, gTab = 'play';
+/* a button that needs a second tap: "Sure? Tap again" */
+function sureBtn(label, fn){
+  let armed = false, t = null;
+  const b = h('button', { class:'btn alt small', type:'button', onclick:async () => {
+    if (!armed){ armed = true; put(b, 'Sure? Tap again'); b.classList.add('warn'); t = setTimeout(() => { armed = false; put(b, label); b.classList.remove('warn'); }, 4000); return; }
+    clearTimeout(t); b.disabled = true; await fn(); } }, label);
+  return b;
+}
 function sw(id, on, label, sub, fn){
   const b = h('button', { class:'switch', id, type:'button', role:'switch', 'aria-checked':String(on), 'aria-label':label, onclick:() => { const v = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', String(v)); fn(v); } });
   return h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:label }), h('span', { class:'small muted', text:sub })), b);
@@ -2308,7 +2325,7 @@ function grownups(){
         const go = h('button', { class:'btn alt small', type:'button', onclick:() => put(conf, h('div', { class:'confirm' }, h('span', { text:'Go back to this? Today’s progress is saved first, so you can undo.' }),
           h('div', { class:'row' }, h('button', { class:'btn small', type:'button', onclick:async () => { await restoreSave(r); toast('Went back to ' + r.name); grownups(); } }, 'Yes, go back'), h('button', { class:'btn alt small', type:'button', onclick:() => put(conf) }, 'Cancel')))) }, 'Go back');
         return h('div', {}, h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:r.name || 'Save point' }), h('span', { class:'muted', text:new Date(r.at).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) + ' · ' + r.a + '–' + r.m + ' fish · ' + r.w + ' words' })),
-          h('div', { class:'row', style:'gap:2px;flex-wrap:nowrap' }, go, h('button', { class:'linkbtn', type:'button', 'aria-label':'Delete ' + (r.name || 'save point'), onclick:async () => { await deleteSave(r); drawSaves(); } }, '✕'))), conf); }));
+          h('div', { class:'row', style:'gap:2px;flex-wrap:nowrap' }, go, (() => { let armed = false; const x = h('button', { class:'linkbtn', type:'button', 'aria-label':'Delete ' + (r.name || 'save point'), onclick:async () => { if (!armed){ armed = true; put(x, 'Delete?'); x.style.color = 'var(--miss)'; setTimeout(() => { armed = false; put(x, '✕'); x.style.color = ''; }, 4000); return; } await deleteSave(r); drawSaves(); } }, '✕'); return x; })())), conf); }));
     };
     const rst = h('input', { class:'fld', id:'rstin', type:'text', placeholder:'Type RESTART', 'aria-label':'Type RESTART to confirm', style:'max-width:150px' });
     const rbtn = h('button', { class:'btn alt small', type:'button', disabled:true, onclick:async () => {
@@ -2316,7 +2333,7 @@ function grownups(){
       const keep = { words:S.words, bank:S.bank, prizes:S.prizes.map(p => Object.assign({}, p, { announced:false, given:false })), name:S.name, pin:S.pin, settings:S.settings };
       S = Object.assign(fresh(), keep); SYNC.allowBlank = true; home.recapDone = true; save(); toast('Restarted. Tap Home to see the story.'); grownups(); } }, 'Restart from scratch');
     rst.addEventListener('input', () => { rbtn.disabled = rst.value.trim().toUpperCase() !== 'RESTART'; });
-    put(panel, h('p', { class:'small muted', text: SYNC.ready ? 'Progress syncs to the family after every answer, on every device with the family code. Save points are snapshots to go back to.' : 'Progress is saved in this browser. Save points are snapshots to go back to.' }),
+    put(panel, h('p', { class:'small muted', text: SYNC.ready ? 'Progress syncs to the family after every answer. Save points are snapshots to go back to: one is made automatically each day the game opens, and before anything replaces progress.' : 'Progress is saved in this browser. Save points are snapshots to go back to.' }),
       h('button', { class:'btn small', type:'button', style:'align-self:flex-start', onclick:async () => { if (await addSave('Grown-up save · ' + stamp())){ toast('Save point made'); drawSaves(); } } }, icon('save'), 'Make a save point'),
       list, h('div', { class:'notice' }, h('b', { text:'Restart from scratch. ' }), 'Clears fish, words, custard, badges, the race and the crown; the story plays again. A save point is made first.', h('div', { class:'row', style:'margin-top:6px' }, rst, rbtn)));
     drawSaves();
@@ -2364,10 +2381,9 @@ function grownups(){
       h('div', { class:'row' }, pinIn, h('button', { class:'btn small', type:'button', onclick:() => { if (pinIn.value.trim()){ S.pin = pinIn.value.trim(); save(); toast('PIN saved'); grownups(); } } }, 'Set PIN'), S.pin ? h('button', { class:'linkbtn', type:'button', onclick:() => { S.pin = ''; save(); grownups(); } }, 'Remove') : null),
       h('p', { class:'small muted', text:'The PIN keeps ' + S.name + ' out of Grown-ups (including restart). It is a child-lock, not real security.' }),
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => { code.value = exportCode(); code.select(); } }, 'Show backup code'), h('button', { class:'btn alt small', type:'button', onclick:() => { if (!code.value) code.value = exportCode(); copyText(code); } }, 'Copy'),
-        h('button', { class:'btn alt small', type:'button', onclick:() => { try { S = migrate(importCode(code.value), true); raceFix(); save(); toast('Progress restored'); grownups(); } catch (e) { bmsg.style.color = 'var(--miss)'; bmsg.textContent = 'Paste a full backup code in the box first.'; } } }, 'Restore')),
+        sureBtn('Restore', async () => { let o; try { o = migrate(importCode(code.value), true); } catch (e) { bmsg.style.color = 'var(--miss)'; bmsg.textContent = 'Paste a full backup code in the box first.'; return; } await addSave('Before restore · ' + stamp()); S = o; raceFix(); save(); toast('Progress restored'); grownups(); })),
       code, bmsg,
-      h('div', { class:'row' }, 
-        arch ? h('button', { class:'btn alt small', type:'button', onclick:() => { try { S = migrate(JSON.parse(arch), true); raceFix(); save(); toast('Pre-race progress restored'); grownups(); } catch (e) {} } }, 'Pre-race progress') : null));
+      arch ? h('div', { class:'row' }, sureBtn('Pre-race progress', async () => { try { const o = migrate(JSON.parse(arch), true); await addSave('Before pre-race restore · ' + stamp()); S = o; raceFix(); save(); toast('Pre-race progress restored'); grownups(); } catch (e) {} })) : null);
   }
   mount([topbar(), h('h2', { text:'Grown-ups' }), bar, panel], 'grownups');
 }
