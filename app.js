@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "df53683d8a";
+const APPV = "3ea1febc16";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -588,6 +588,7 @@ const getBase = () => { try { return +localStorage.getItem(BASEKEY) || 0; } catc
 const setBase = v => { try { localStorage.setItem(BASEKEY, String(v || 0)); } catch (e) {} };
 /* two devices played while apart: keep the best of both so no answers are lost */
 function mergeStates(a, b){
+  if (a.demo !== b.demo) return JSON.parse(JSON.stringify(a.demo ? b : a));
   const o = JSON.parse(JSON.stringify(a)), r = b;
   for (const k in (r.prog || {})){ const x = r.prog[k], y = o.prog[k]; if (!y || (x.seen || 0) > (y.seen || 0)) o.prog[k] = x; }
   o.points = Math.max(o.points || 0, r.points || 0); o.custard = Math.max(o.custard || 0, r.custard || 0);
@@ -622,6 +623,8 @@ async function pull(first){
     let remote = null;
     if (snap.exists){ try { remote = JSON.parse(snap.data().s); } catch (e) {} }
     SYNC.remoteReal = !!remote && !isBlank(remote);
+    /* demo progress never beats real progress: a device with real progress puts it back */
+    if (remote && remote.demo && !S.demo && !isBlank(S)){ keepCopy(S, 'Real progress (rescued)'); S.upd = Date.now(); saveLocal(); setSync('cloud'); push(); return; }
     const blankHere = isBlank(S) && !SYNC.allowBlank;
     const base = getBase();
     if (remote && !blankHere && base && (S.upd || 0) > base && (remote.upd || 0) > base && (remote.upd || 0) !== (S.upd || 0)){
@@ -637,7 +640,13 @@ async function pull(first){
     else setSync('cloud');
   } catch (e) { if (first) setSync('local'); }
 }
+/* a cloud save point of a state, so nothing replaced by sync is ever lost */
+function keepCopy(o, why){
+  if (!SYNC.ready || isBlank(o)) return;
+  try { savesCol().add({ name:why + ' · ' + stamp(), at:Date.now(), a:o.points, m:(o.race || {}).mf || 0, w:Object.values(o.prog || {}).filter(r => r && r.m).length, mw:(o.race || {}).mm || 0, s:JSON.stringify(o) }); } catch (e) {}
+}
 function adopt(remote, quiet){
+  if (!S.demo && !isBlank(S) && ((remote.stats || {}).answered || 0) < ((S.stats || {}).answered || 0)) keepCopy(S, 'Before sync');
   try { const merged = SYNC.pending && remote === SYNC.pending && getBase() && (S.upd || 0) > getBase() ? mergeStates(S, remote) : remote; S = migrate(merged, true); raceFix(); saveLocal(); setBase(remote.upd || 0); if (merged !== remote) pushSoon(); } catch (e) { return; }
   SYNC.pending = null;
   if (!quiet) toast('Progress synced from the family');
@@ -2345,7 +2354,7 @@ function grownups(){
   } else {
     const nameIn = h('input', { class:'fld', id:'namein', type:'text', value:S.name, style:'max-width:180px', onchange:e => { S.name = e.target.value.trim() || 'Aaron'; save(); toast('Name saved'); } });
     const pinIn = h('input', { class:'fld', id:'newpin', type:'text', inputmode:'numeric', maxlength:8, placeholder:S.pin ? 'PIN is set' : 'New PIN', 'aria-label':'New PIN', style:'max-width:130px' });
-    const code = h('textarea', { id:'bkcode', readonly:true, 'aria-label':'Backup code', style:'min-height:56px' });
+    const code = h('textarea', { id:'bkcode', placeholder:'Paste a backup code here to restore', 'aria-label':'Backup code', style:'min-height:56px' });
     const bmsg = h('p', { class:'small', 'aria-live':'polite' });
     const arch = archived();
     put(panel,
@@ -2357,7 +2366,7 @@ function grownups(){
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => { code.value = exportCode(); code.select(); } }, 'Show backup code'), h('button', { class:'btn alt small', type:'button', onclick:() => { if (!code.value) code.value = exportCode(); copyText(code); } }, 'Copy'),
         h('button', { class:'btn alt small', type:'button', onclick:() => { try { S = migrate(importCode(code.value), true); raceFix(); save(); toast('Progress restored'); grownups(); } catch (e) { bmsg.style.color = 'var(--miss)'; bmsg.textContent = 'Paste a full backup code in the box first.'; } } }, 'Restore')),
       code, bmsg,
-      h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => { loadDemo(); toast('Demo data loaded'); grownups(); } }, 'Load demo progress'),
+      h('div', { class:'row' }, 
         arch ? h('button', { class:'btn alt small', type:'button', onclick:() => { try { S = migrate(JSON.parse(arch), true); raceFix(); save(); toast('Pre-race progress restored'); grownups(); } catch (e) {} } }, 'Pre-race progress') : null));
   }
   mount([topbar(), h('h2', { text:'Grown-ups' }), bar, panel], 'grownups');
