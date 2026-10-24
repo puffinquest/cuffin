@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "e69fdca308";
+const APPV = "565b25c5d9";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -1119,7 +1119,7 @@ const VOICE = (() => {
 })();
 
 /* ---------- family sync through Firebase (app version) ---------- */
-const FIREBASE_CONFIG = {};
+const FIREBASE_CONFIG = {"apiKey": "AIzaSyDuMhwC18PE-xUUGg2wCl6nnQHh7aUNlF4", "authDomain": "cuffin-18ac1.firebaseapp.com", "projectId": "cuffin-18ac1", "storageBucket": "cuffin-18ac1.firebasestorage.app", "messagingSenderId": "774135872665", "appId": "1:774135872665:web:4332c6fa25e59813eecc08"};
 const FB_VER = '10.12.2';
 const FAMKEY = KEY + '-family';
 function familyCode(){ try { return localStorage.getItem(FAMKEY) || ''; } catch (e) { return ''; } }
