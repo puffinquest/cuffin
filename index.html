@@ -461,6 +461,53 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
   .banner,.res{animation:popin .4s ease-out} @keyframes popin{0%{transform:scale(.85);opacity:0}100%{transform:none;opacity:1}}
 }
 @media (prefers-reduced-motion: reduce){ .confetti{display:none} .ticker span{padding-left:0} }
+/* say-it button, celebrations, streak row, report, pinky, news */
+.wordrow{display:flex;align-items:center;gap:8px;min-width:0}
+.wordrow>div{min-width:0}
+.say-it{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line);background:var(--surface-2);color:var(--ink)}
+.say-it svg{width:20px;height:20px}
+.say-it:active{transform:scale(.94)}
+.celeb{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  background:radial-gradient(circle at 50% 35%,#1D3A8C,#060D24 75%);color:#fff;
+  padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.celin{position:relative;z-index:2;width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:clamp(8px,2dvh,16px)}
+.celin h2{font:400 clamp(1.7rem,5.5dvh,2.5rem)/1.05 var(--font-display);color:#FFD23F;text-shadow:0 3px 0 rgba(0,0,0,.35)}
+.celin .eyebrow{font:400 .8rem var(--font-display);letter-spacing:.14em}
+.celin .btn.kick{width:100%;margin-top:4px}
+.celsub{font-weight:600;color:#DCE4FF;max-width:34ch}
+.celword{font:800 clamp(2rem,6.5dvh,3rem)/1.05 var(--font-body);color:#fff;overflow-wrap:anywhere}
+.celin .say-it{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3);color:#fff}
+.celart{font-size:clamp(3.5rem,11dvh,5.5rem);line-height:1}
+.celtro .tsv{display:block;width:clamp(110px,22dvh,170px);height:clamp(110px,22dvh,170px)} .celtro svg{width:100%;height:100%}
+.celbadge{width:clamp(90px,15dvh,120px);height:clamp(90px,15dvh,120px);border-radius:50%;display:grid;place-items:center;background:#FFC83D;color:#2A1E00;box-shadow:0 6px 0 #B07E00}
+.celbadge svg{width:55%;height:55%}
+.celflame{position:relative;font-size:clamp(4rem,12dvh,6rem);line-height:1}
+.celflame b{position:absolute;left:50%;bottom:12%;transform:translateX(-50%);font:400 clamp(1.3rem,4dvh,1.9rem) var(--font-display);color:#fff;text-shadow:0 2px 0 #9E1328,0 0 8px #9E1328}
+.celeb .linkbtn{text-decoration:underline}
+.streakrow{display:flex;gap:8px;align-items:stretch}
+.streakrow>div{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:14px;border:2px solid var(--line);background:var(--surface);padding:6px 8px;min-width:0}
+.flame{font-size:1.25rem} .flame b,.cpots b{font:400 1.15rem var(--font-display)} .flame .small,.goal .small{font-size:.72rem;font-weight:700;color:var(--muted)}
+.flame.cold span:first-child{filter:grayscale(.75);opacity:.6} .flame.out b{color:var(--muted)}
+.cpots{font-size:1.2rem;flex:.6!important}
+.goal{flex:1.4!important} .goal.done{border-color:var(--win);background:var(--win-soft)}
+.gwrap{position:relative;width:34px;height:34px;flex:none} .gring{width:34px;height:34px}
+.gr0{fill:none;stroke:var(--surface-2);stroke-width:4} .gr1{fill:none;stroke:var(--win);stroke-width:4;stroke-linecap:round}
+.gtx{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:.78rem}
+.reps{display:flex;flex-direction:column;gap:6px}
+.rep{display:grid;grid-template-columns:28px auto 1fr;gap:8px;align-items:center;border-radius:12px;background:var(--surface-2);padding:7px 10px;font-size:.9rem}
+.rep .em{font-size:1.15rem} .rep .k{color:var(--muted);font-weight:700} .rep b{text-align:right}
+.pinky{display:flex;flex-direction:column;gap:8px;width:100%;text-align:center}
+.pinky .pq{font:400 clamp(1.2rem,3.5dvh,1.6rem)/1.15 var(--font-display);color:var(--team)}
+.pinky .small{color:var(--muted)!important}
+.pbtns{display:flex;gap:10px} .pbtns .btn.kick{flex:2} .pbtns .btn.alt{flex:1}
+.pinkydone{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;border-radius:16px;padding:14px;background:var(--win-soft);border:3px solid var(--win);font-size:1.05rem}
+.pinkydone span{font-size:2rem}
+.news{display:flex;flex-direction:column;gap:2px;border-radius:12px;padding:7px 12px;background:#0B1533;color:#fff;border-left:6px solid #FCD116}
+.news b{font:400 .75rem var(--font-display);letter-spacing:.12em;color:#FCD116}
+.news span{font-weight:800}
+.bkday{font:400 .72rem var(--font-display);letter-spacing:.06em;color:var(--muted);margin-top:6px}
+@media (max-height:720px){ .streakrow>div{padding:4px 6px} .gwrap,.gring{width:28px;height:28px} }
+@media (prefers-reduced-motion: no-preference){ .celin{animation:popin .4s ease-out} .celart,.celbadge,.celtro,.celflame{animation:hop .9s ease-out 2} }
 </style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -502,5 +549,5 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=82e0d311e9"></script>
+<script src="app.js?v=5523defc39"></script>
 </body></html>

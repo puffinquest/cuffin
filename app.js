@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "82e0d311e9";
+const APPV = "5523defc39";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -535,7 +535,7 @@ function fresh(){
   return { v:1, name:'Aaron', bank:'Sample words (58)', words:sampleWords(),
     prog:{}, points:0, fishV:1, history:[], rounds:[], badges:{}, prizes:[], pin:'', last:'', demo:false,
     race:{ mf:0, mm:0, ms:0 }, custard:0, book:{ list:[], next:[] }, intro:false, leader:null, lastVisit:null, upd:0, mv:2,
-    settings:{ hints:true, sound:true, music:true },
+    settings:{ hints:true, sound:true, music:true, cvoice:true, mvoice:true }, freeze:[], goal:'', freezeAsk:'',
     stats:{ answered:0, right:0, spell:0, fixed:0, best:0, rounds:0, perfect:0 } };
 }
 const isBlank = o => !o || ((!o.stats || !o.stats.answered) && !(o.history && o.history.length));
@@ -582,6 +582,29 @@ function archived(){ try { return localStorage.getItem(ARCH); } catch (e) { retu
 let S = load();
 
 /* ---------- family sync + save points ---------- */
+/* the last version both this device and the family copy agreed on, so we can tell when BOTH have changed */
+const BASEKEY = KEY + '-base';
+const getBase = () => { try { return +localStorage.getItem(BASEKEY) || 0; } catch (e) { return 0; } };
+const setBase = v => { try { localStorage.setItem(BASEKEY, String(v || 0)); } catch (e) {} };
+/* two devices played while apart: keep the best of both so no answers are lost */
+function mergeStates(a, b){
+  const o = JSON.parse(JSON.stringify(a)), r = b;
+  for (const k in (r.prog || {})){ const x = r.prog[k], y = o.prog[k]; if (!y || (x.seen || 0) > (y.seen || 0)) o.prog[k] = x; }
+  o.points = Math.max(o.points || 0, r.points || 0); o.custard = Math.max(o.custard || 0, r.custard || 0);
+  for (const k in (r.stats || {})) o.stats[k] = Math.max(o.stats[k] || 0, r.stats[k] || 0);
+  for (const k of ['mf', 'mm']) o.race[k] = Math.max(o.race[k] || 0, (r.race || {})[k] || 0);
+  o.badges = Object.assign({}, r.badges || {}, o.badges || {});
+  const hist = {}; (r.history || []).concat(o.history || []).forEach(x => { const c = hist[x.d]; if (!c || (x.p || 0) >= (c.p || 0)) hist[x.d] = x; });
+  o.history = Object.values(hist).sort((x, y) => x.d < y.d ? -1 : 1).slice(-400);
+  const seenR = new Set((o.rounds || []).map(x => x.d + '|' + x.a + '|' + x.r)); o.rounds = (o.rounds || []).concat((r.rounds || []).filter(x => !seenR.has(x.d + '|' + x.a + '|' + x.r))).slice(-200);
+  const bl = {}; ((r.book || {}).list || []).concat((o.book || {}).list || []).forEach(e => { const c = bl[e.k]; bl[e.k] = c ? Object.assign({}, c, e, { ok:c.ok || e.ok, pinky:c.pinky || e.pinky, chk:c.chk || e.chk }) : e; });
+  o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
+  o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
+  if (!o.leader && r.leader) o.leader = r.leader;
+  o.intro = o.intro || r.intro;
+  o.upd = Math.max(o.upd || 0, r.upd || 0) + 1;
+  return o;
+}
 const SYNC = { mode:'local', ready:false, db:null, uid:null, busy:false, again:false, timer:null, pending:null, tries:0 };
 function setSync(m){ SYNC.mode = m; const el = $('#syncchip'); if (el) drawSync(el); }
 function drawSync(el){
@@ -600,6 +623,12 @@ async function pull(first){
     if (snap.exists){ try { remote = JSON.parse(snap.data().s); } catch (e) {} }
     SYNC.remoteReal = !!remote && !isBlank(remote);
     const blankHere = isBlank(S) && !SYNC.allowBlank;
+    const base = getBase();
+    if (remote && !blankHere && base && (S.upd || 0) > base && (remote.upd || 0) > base && (remote.upd || 0) !== (S.upd || 0)){
+      const inRound = R && R.queue && R.queue.length;
+      if (inRound){ SYNC.pending = remote; setSync('cloud'); return; }
+      adopt(mergeStates(S, remote), true); push(); return;
+    }
     if (remote && (((remote.upd || 0) > (S.upd || 0)) || (blankHere && SYNC.remoteReal))){
       const inRound = R && R.queue && R.queue.length;
       if (inRound && !blankHere) SYNC.pending = remote; else adopt(remote, first);
@@ -609,7 +638,7 @@ async function pull(first){
   } catch (e) { if (first) setSync('local'); }
 }
 function adopt(remote, quiet){
-  try { S = migrate(remote, true); raceFix(); saveLocal(); } catch (e) { return; }
+  try { const merged = SYNC.pending && remote === SYNC.pending && getBase() && (S.upd || 0) > getBase() ? mergeStates(S, remote) : remote; S = migrate(merged, true); raceFix(); saveLocal(); setBase(remote.upd || 0); if (merged !== remote) pushSoon(); } catch (e) { return; }
   SYNC.pending = null;
   if (!quiet) toast('Progress synced from the family');
   if (['home','progress','trophies','grownups'].includes(screen)) SCREENS[screen]();
@@ -621,7 +650,7 @@ async function push(){
   if (isBlank(S) && SYNC.remoteReal && !SYNC.allowBlank) return;   // never let a fresh start overwrite real progress
   if (SYNC.busy){ SYNC.again = true; return; }
   SYNC.busy = true; setSync('saving');
-  try { await progRef().set({ s:JSON.stringify(S), upd:S.upd || Date.now(), fish:S.points, words:masteredCount() }); SYNC.tries = 0; setSync('cloud'); }
+  try { const u = S.upd || Date.now(); await progRef().set({ s:JSON.stringify(S), upd:u, fish:S.points, words:masteredCount(), played:S.last || '' }); setBase(u); SYNC.tries = 0; setSync('cloud'); }
   catch (e){ if (e && e.code === 'unavailable' && SYNC.tries < 2){ SYNC.tries++; setTimeout(push, 1500 + Math.random() * 1500); } else setSync('error'); }
   SYNC.busy = false;
   if (SYNC.again){ SYNC.again = false; push(); }
@@ -662,7 +691,7 @@ function parseD(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y,
 function addDays(s, n){ const d = parseD(s); d.setDate(d.getDate()+n); return dstr(d); }
 function daysSince(s){ if (!s) return 999; return Math.round((parseD(today()) - parseD(s)) / 864e5); }
 function dayStreak(){
-  const days = new Set(S.history.map(x => x.d));
+  const days = new Set(S.history.map(x => x.d).concat(S.freeze || []));
   let d = today(); if (!days.has(d)) d = addDays(d, -1);
   let n = 0; while (days.has(d)){ n++; d = addDays(d, -1); }
   return n;
@@ -775,7 +804,7 @@ const BADGES = [
   { id:'clear',  n:'Clear Water',     d:'Get 10 fish ahead of the Mirror.',           ic:'fish',   t:c => c.S.points - c.S.race.mf >= 10 },
   { id:'half',   n:'Half-Way Hero',   d:'Master half of all the words.',              ic:'trophy', t:c => c.total >= 10 && c.m >= c.total/2 },
   { id:'d3',     n:'Three-Day Flyer', d:'Play 3 days in a row.',                      ic:'wave',   t:c => c.days >= 3 },
-  { id:'d7',     n:'Week of Waves',   d:'Play 7 days in a row.',                      ic:'trophy', t:c => c.days >= 7 },
+  { id:'d7',     n:'Perfect Week',    d:'Play 7 days in a row.',                      ic:'trophy', t:c => c.days >= 7 },
   { id:'r10',    n:'Regular',         d:'Finish 10 rounds.',                          ic:'flame',  t:c => c.S.stats.rounds >= 10 },
   { id:'cust5',  n:'Custard Collector', d:'Win 5 pots of custard.',             ic:'custard', t:c => (c.S.custard || 0) >= 5 },
   { id:'leader', n:'Crowned',         d:'Beat the Mirror and become Leader.',         ic:'crown',  t:c => !!c.S.leader }
@@ -812,7 +841,8 @@ function newRound(picks, kind){
   return { queue: picks.map(w => ({ w, retry:false, tries:0, lastType:'' })), idx:0, total:picks.length, kind:kind || 'mixed',
     firstTry:0, points:0, mfish:0, custard:0, book:[], streak:0, best:0, fixed:0, results:[], missed:[], mastered:[], hello:say('start') };
 }
-function startRound(kind){
+function startRound(kind){ streakRescue(() => startRound2(kind)); }
+function startRound2(kind){
   let pool = allItems();
   if (kind === 'cards') pool = CARD_ITEMS;
   else if (kind === 'tricky'){ pool = trickyWords(); if (!pool.length){ toast('Nothing tricky yet!'); return home(say('empty')); } }
@@ -822,7 +852,7 @@ function startRound(kind){
   if (first.length && S.book) S.book.next = B.filter(k => !first.some(x => pk(x) === k));
   const rest = pickWords(n - first.length, pool.filter(x => !first.includes(x)));
   R = newRound(shuffle(first).concat(rest), kind);
-  R.rank0 = rankInfo(masteredCount()).i;
+  R.rank0 = rankInfo(masteredCount()).i; R.lastD = S.points - S.race.mf; R.badges0 = Object.keys(S.badges || {}).length;
   SND.prime(); SND.fx('whistle'); SND.loop(true);
   if (Math.random() < .5) setTimeout(() => VOICE.play('c04'), 600);
   question();
@@ -1085,6 +1115,18 @@ const VO = {
   c17:'Write that one in your vocabulary book. The puffin community is watching.',
   c18:'Book check. Have you actually written it down? I am checking. Officially.',
   c19:'Written down. Good. That is how we beat the Mirror.',
+  c20:'Pinky promise? The puffin community takes pinky promises very seriously.',
+  c21:'A pinky promise. Witnessed. Officially.',
+  c22:'Not yet? Good. Honesty. Take your time.',
+  c23:'Right. Here’s how we’re doing.',
+  c24:'Breaking news. We are miles ahead of the Mirror. Don’t tell him. Actually… do tell him.',
+  c25:'The Mirror is in front. This is not a drill. Four in. Four hold. Four out.',
+  c26:'And we’re back in front. I would like that noted.',
+  c27:'A badge. The puffin community does not hand these out lightly.',
+  c28:'Another day, another fish. Our streak lives on.',
+  c29:'A pot of custard, sacrificed to save the streak. A noble custard.',
+  c30:'Daily goal done. Floppy. Warm. Like custard.',
+  c31:'Seven days in a row. A perfect week. The puffin community is speechless.',
   m01:'Mwah-ha-ha! Did somebody say CROWN? It’s mine. It matches my feathers.',
   m02:'Ha! Correct! Obviously.',
   m03:'Polish my beak and call me Professor!',
@@ -1094,12 +1136,17 @@ const VO = {
   m07:'I’ve already ordered the crown. Size: magnificent.',
   m08:'NOOOO! I demand a rematch! Best of five hundred!',
   m09:'A vocabulary book? I keep all my words in my head. Next to my reflection.',
-  m10:'Writing things down? That’s cheating! …Is it? It looks like it works.'
+  m10:'Writing things down? That’s cheating! …Is it? It looks like it works.',
+  m11:'I’m in FRONT! Somebody take a picture! From my good side!',
+  m12:'This is fine. Everything is fine. I’m simply letting you win. For now.',
+  m13:'Mastered? Pfft. I mastered that word years ago. Probably.',
+  m14:'Pinky promise? I don’t even have pinkies. I have FEATHERS.',
+  m15:'A streak? I also have a streak. It’s a streak of being magnificent.'
 };
-const HAVE = new Set(["c01", "c02", "c03", "c04", "c05", "c06", "c07", "c08", "c09", "c10", "c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "m01", "m02", "m03", "m04", "m05", "m06", "m07", "m08", "m09", "m10"]);
+const HAVE = new Set(["c01", "c02", "c03", "c04", "c05", "c06", "c07", "c08", "c09", "c10", "c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27", "c28", "c29", "c30", "c31", "m01", "m02", "m03", "m04", "m05", "m06", "m07", "m08", "m09", "m10", "m11", "m12", "m13", "m14", "m15"]);
 const VOICE = (() => {
   let cur = null, waiting = null;
-  const can = id => !!(S && S.settings && S.settings.sound && (HAVE.has(id) || window.__voTest));
+  const can = id => !!(S && S.settings && S.settings.sound && (id[0] === 'm' ? S.settings.mvoice !== false : S.settings.cvoice !== false) && (HAVE.has(id) || window.__voTest));
   function start(id){
     if (window.__voTest){ window.__voTest.push(id); return; }
     try {
@@ -1197,26 +1244,6 @@ function openSheet(kids, withScrim, pad){
 }
 function toast(t){ const e = h('div', { class:'toast', role:'status', text:t }); put($('#toastbox'), e); setTimeout(() => { if (e.parentNode) e.remove(); }, 2600); }
 const cimg = (src, cls, size, alt) => h('img', { class:cls || '', src, alt:alt || '', width:size, height:size, decoding:'async' });
-function toggleBtn(kind){
-  const lab = kind === 'sound' ? 'All sounds' : 'Music';
-  const ic = () => icon(kind === 'sound' ? (S.settings.sound ? 'sound' : 'mute') : (S.settings.music ? 'music' : 'nomusic'));
-  const b = h('button', { class:'tbtn', type:'button', 'aria-pressed':String(S.settings[kind]), 'aria-label':lab + (S.settings[kind] ? ' on' : ' off'), title:lab,
-    onclick:() => {
-      S.settings[kind] = !S.settings[kind];
-      if (kind === 'sound' && !S.settings.sound) VOICE.stop();
-      if (kind === 'sound' && !S.settings.sound) S.settings.music = false;    // the speaker button silences everything
-      if (kind === 'music' && S.settings.music) S.settings.sound = true;
-      save();
-      document.querySelectorAll('.tbtn[data-k]').forEach(x => x.refresh());
-      if (!S.settings.music){ SND.stop(); SND.loop(false); } else if (R && R.queue && R.queue.length) SND.loop(true);
-      if (S.settings[kind]){ SND.prime(); SND.fx('tap'); }
-      toast(kind === 'sound' ? (S.settings.sound ? 'Sounds on' : 'All sounds off') : (S.settings.music ? 'Music on' : 'Music off'));
-    } }, ic());
-  b.dataset.k = kind;
-  b.refresh = () => { b.setAttribute('aria-pressed', String(S.settings[kind])); b.setAttribute('aria-label', lab + (S.settings[kind] ? ' on' : ' off')); put(b, ic()); };
-  return b;
-}
-const soundBtns = () => [toggleBtn('sound'), toggleBtn('music')];
 function topbar(){
   const chip = h('span', { class:'sync', id:'syncchip', 'aria-live':'polite' }); drawSync(chip);
   return h('div', { class:'topbar' },
@@ -1298,28 +1325,32 @@ function question(){
     if (o.ok) SND.fx(o.custard ? 'custard' : 'goal'); else SND.fx('wrong');
     const mir = o.mir;
     let cv = null, mv = null;
-    if (o.custard) cv = VOICE.pick('c09');
-    else if (o.lock === 'mastered') cv = VOICE.pick('c10');
+    const dNow = S.points - S.race.mf, drama = raceDrama(R.lastD == null ? dNow : R.lastD, dNow); R.lastD = dNow;
+    if (drama){ cv = VOICE.pick(drama.voice); if (drama.voice2) mv = VOICE.pick(drama.voice2); if (cv) o.line = VO[cv]; }
+    else if (o.custard) cv = VOICE.pick('c09');
+    else if (o.lock === 'mastered') cv = null;
     else if (Math.random() < 1 / 3) cv = o.ok ? VOICE.pick('c05', 'c06') : VOICE.pick('c07', 'c08');
-    if (mir && !mir.sat){
+    if (mir && !mir.sat && !drama){
       if (o.custard && Math.random() < .5) mv = VOICE.pick('m06');
       else if (!cv && Math.random() < .25) mv = mir.ok ? VOICE.pick('m02', 'm03') : VOICE.pick('m04', 'm05');
     }
-    if (cv){ o.line = VO[cv]; setTimeout(() => VOICE.play(cv), 1000); }
+    if (cv && !drama){ o.line = VO[cv]; } if (cv){ setTimeout(() => VOICE.play(cv), 1000); }
     if (mv) setTimeout(() => VOICE.play(mv), cv ? 1200 : 1000);
     if (mir && !mir.sat && !mv) setTimeout(() => SND.fx(mir.ok ? 'mRight' : 'mWrong'), 900);
-    const nb = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); o.next(); } }, o.nextLabel);
+    const goOn = o.lock === 'mastered' ? () => { closeSheet(); celebrateMastered(q.w, o.next); } : o.next;
+    const nb = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); goOn(); } }, o.nextLabel);
     openSheet([
       h('div', { class:'res ' + (o.ok ? 'ok' : 'no'), role:'status' }, o.ok ? h('span', { style:'font-size:2rem', 'aria-hidden':'true', text:'⚽' }) : h('span', { class:'plate', 'aria-hidden':'true', text:'🍽️' }),
         h('div', {}, h('div', { class:'big', text: o.ok ? 'GOAL!' : 'OFF THE POST' }), h('div', { class:'small muted', text: o.ok ? 'Fresh fish!' : 'No fish this time. Eventually still counts.' })),
         h('div', { class:'fish', text:'+' + (o.fish || 0) + ' 🐟' })),
+      drama ? h('div', { class:'news', role:'status' }, h('b', { text:drama.title }), h('span', { text:drama.text })) : null,
       o.answer || null,
       o.book ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📓' }), h('b', { text:'Next: write it in your vocabulary book.' })) : null,
       o.line ? h('p', { class:'line clamp2', text:o.line }) : null,
       noteFor(o.lock, o.custard),
       mir ? h('div', { class:'mline' }, cimg(mir.sat || !mir.ok ? MIMG.sad : MIMG.smug, '', 34, 'The Mirror'),
         h('div', { style:'min-width:0' }, mir.sat ? h('b', { text:'Mirror sits this one out. ' }) : h('span', {}, h('b', { text:'Mirror: ' }), '“' + mir.guess + '” ' + (mir.ok ? '✓ +' + mir.fish + ' 🐟 ' : '✗ ')),
-          h('span', { class:'q', text: mv ? VO[mv] : o.custard && !mir.sat ? pickOne(MCUSTARD) : mirrorLine(mir) }))) : null,
+          h('span', { class:'q', text: mv ? VO[mv] : drama && drama.mline ? drama.mline : o.custard && !mir.sat ? pickOne(MCUSTARD) : mirrorLine(mir) }))) : null,
       nb], false);
     setTimeout(() => nb.focus({ preventScroll:true }), 60);
     R.keys = e => { if (e.key === 'Enter' && document.activeElement !== nb) nb.click(); };
@@ -1398,12 +1429,18 @@ function question(){
   /* similar & opposite cards: know it? → similar → (sheet) → opposite, 3 choices → (sheet) → review */
   function cardFlow(){
     const c = q.w.card, opts4 = shuffle(c.o.slice());
-    const g = { ps:null, po:null, s:false, o:false }; let fishN = 0, mS = false, mO = false;
+    /* three ways round: normal (similar then opposite), swap (opposite first), reverse (show the partner word, find the card word) */
+    const r0 = peek(q.w), seenB4 = r0 && r0.seen > 0;
+    const mode = window.__cardMode || (!seenB4 || item.retry ? 'normal' : pickOne(['normal', 'normal', 'swap', 'reverse']));
+    const oppFirst = mode === 'swap' || (mode === 'reverse' && Math.random() < .5);
+    const roleOf = n => (n === 1) !== oppFirst ? 'sim' : 'opp';
+    const decoys = shuffle(CARDS.filter(x => x.w !== c.w && !c.o.includes(x.w) && !x.o.includes(c.w)).map(x => x.w));
+    const g = { ps:null, po:null, s:false, o:false }; let fishN = 0, mS = false, mO = false, firstRight = null;
+    const LBL = { sim:'SIMILAR', opp:'OPPOSITE' };
     const track = phase => h('div', { class:'track', 'aria-hidden':'true' },
-      hintsOn ? h('span', { class: phase === 0 ? 'on0' : 'done', text: phase === 0 ? 'KNOW IT?' : '✓ KNOW IT' }) : null,
-      h('span', { class: phase === 1 ? 'on1' : phase > 1 ? 'done' : '', text: phase > 1 ? '✓ SIMILAR' : '1 SIMILAR' }),
-      h('span', { class: phase === 2 ? 'on2' : phase > 2 ? 'done' : '', text: phase > 2 ? '✓ OPPOSITE' : '2 OPPOSITE' }));
-    const word = () => h('div', { class:'word', text:c.w });
+      hintsOn && mode !== 'reverse' ? h('span', { class: phase === 0 ? 'on0' : 'done', text: phase === 0 ? 'KNOW IT?' : '✓ KNOW IT' }) : null,
+      [1, 2].map(n => h('span', { class: phase === n ? (roleOf(n) === 'sim' ? 'on1' : 'on2') : phase > n ? 'done' : '', text: phase > n ? '✓ ' + LBL[roleOf(n)] : n + ' ' + LBL[roleOf(n)] })));
+    const word = t => wordWithSpeak(t || c.w);
     function know(){
       setStrip('', 'SIMILAR & OPPOSITE CARD');
       const yes = h('button', { class:'kbtn yes', type:'button', onclick:() => { SND.fx('tap'); stage(1); } }, h('span', { class:'em', 'aria-hidden':'true', text:'👍' }), 'I KNOW IT');
@@ -1429,35 +1466,47 @@ function question(){
       if (matchMedia('(hover:hover)').matches){ b.addEventListener('mouseenter', () => { if (ib.getAttribute('aria-pressed') !== 'true') b.title = x.m || ''; }); }
       return { row:h('div', { class:'orow' }, b, ib), b };
     }
+    /* what part n asks: the big word shown, the right answer, the choices */
+    function part(n){
+      const role = roleOf(n), partner = role === 'sim' ? c.s : c.p;
+      if (mode === 'reverse'){
+        const list = shuffle([c.w].concat(decoys.slice(n === 1 ? 0 : 3, n === 1 ? 3 : 5)));
+        return { role, show:partner, right:c.w, list, banner: role === 'sim' ? 'BACKWARDS! Which word is SIMILAR to' : 'BACKWARDS! Which word is the OPPOSITE of' };
+      }
+      const list = n === 1 ? opts4 : opts4.filter(w => w !== firstRight);
+      return { role, show:c.w, right:partner, list, banner: role === 'sim' ? (n === 1 ? 'The SIMILAR word to' : 'FLIP IT! The SIMILAR word to') : (n === 1 ? 'UPSIDE DOWN! The OPPOSITE of' : 'FLIP IT! The OPPOSITE of') };
+    }
     function stage(n){
-      const s2 = n === 2, list = s2 ? opts4.filter(w => w !== c.s) : opts4;
-      setStrip(s2 ? 'opp' : 'sim', s2 ? 'PART 2 · OPPOSITE' : 'PART 1 · SIMILAR');
-      if (s2) SND.fx('flip');
-      const rows = list.map((wd, i) => optRow(wd, i, (w, b) => pick(n, w, b, rows, list)));
+      const P = part(n), opp = P.role === 'opp';
+      setStrip(opp ? 'opp' : 'sim', 'PART ' + n + ' · ' + LBL[P.role] + (mode === 'reverse' ? ' · BACKWARDS' : ''));
+      if (n === 2 || opp) SND.fx('flip');
+      const rows = P.list.map((wd, i) => optRow(wd, i, (w, b) => pick(n, P, w, b, rows)));
       put(body, track(n),
-        h('div', { class:'banner ' + (s2 ? 's2' : 's1'), role:'status' }, h('span', { class:'em', 'aria-hidden':'true', text: s2 ? '🔄' : '🤝' }), h('span', { text: s2 ? 'FLIP IT! The OPPOSITE of' : 'The SIMILAR word to' })),
-        word(), h('div', { class:'answers ' + (s2 ? 's2' : 's1') }, rows.map(r => r.row)),
-        hintsOn ? h('p', { class:'small muted', text: s2 ? 'Only 3 choices: the similar word has gone. Tap i to peek.' : 'Tap i to peek at a word. Peeking doesn’t pick it.' }) : null);
+        h('div', { class:'banner ' + (opp ? 's2' : 's1'), role:'status' }, h('span', { class:'em', 'aria-hidden':'true', text: opp ? '🔄' : '🤝' }), h('span', { text:P.banner })),
+        word(P.show), h('div', { class:'answers ' + (opp ? 's2' : 's1') }, rows.map(r => r.row)),
+        hintsOn ? h('p', { class:'small muted', text: n === 2 ? 'Only 3 choices this time. Tap i to peek.' : 'Tap i to peek at a word. Peeking doesn’t pick it.' }) : null);
       R.keys = e => { const i = '1234'.indexOf(e.key); if (i > -1 && rows[i] && !rows[i].b.disabled) rows[i].b.click(); };
     }
-    function pick(n, wd, btn, rows, list){
+    function pick(n, P, wd, btn, rows){
       if (rows[0].b.disabled) return;
-      const right = n === 1 ? c.s : c.p, ok = wd === right;
-      if (n === 1){ g.ps = wd; g.s = ok; } else { g.po = wd; g.o = ok; }
+      const right = P.right, ok = wd === right;
+      if (n === 1) firstRight = right;
+      if (P.role === 'sim'){ g.ps = wd; g.s = ok; } else { g.po = wd; g.o = ok; }
       if (ok){ S.points += 1; R.points += 1; fishN++; }
       let mir;
       if (!item.retry){
-        const t = mirrorTry(1); R.mfish += t.fish; if (n === 1) mS = t.ok; else mO = t.ok;
-        const wr = list.filter(x => x !== right);
+        const t = mirrorTry(1); R.mfish += t.fish; if (P.role === 'sim') mS = t.ok; else mO = t.ok;
+        const wr = P.list.filter(x => x !== right);
         mir = { ok:t.ok, fish:t.fish, guess: t.ok ? right : wr[rnd(wr.length)] };
       } else mir = { sat:true };
       rows.forEach(r => { r.b.disabled = true; if (r.b.dataset.t === right) r.b.classList.add('correct'); if (!mir.sat && r.b.dataset.t === mir.guess) r.b.querySelector('.mk').before(mtag()); });
       if (!ok) btn.classList.add('wrong');
       refresh();
-      const x = info(right);
-      resultSheet({ ok, fish: ok ? 1 : 0, mir, line: ok ? say('right') : null,
-        answer:h('p', { class:'line' }, h('span', { class:'role ' + (n === 1 ? 'sim' : 'opp'), style:'margin-right:6px', text: n === 1 ? 'SIMILAR' : 'OPPOSITE' }), h('b', { text:right }), ' = ' + x.m),
-        nextLabel: n === 1 ? 'Part 2: Opposite 🔄' : 'See the whole card', next: n === 1 ? () => { closeSheet(); stage(2); } : () => { closeSheet(); review(); } });
+      const answer = mode === 'reverse'
+        ? h('p', { class:'line' }, h('b', { text:P.show }), ' is the ', h('span', { class:'role ' + P.role, text:LBL[P.role] }), ' of ', h('b', { text:c.w }), ' = ' + info(c.w).m)
+        : h('p', { class:'line' }, h('span', { class:'role ' + P.role, style:'margin-right:6px', text:LBL[P.role] }), h('b', { text:right }), ' = ' + info(right).m);
+      resultSheet({ ok, fish: ok ? 1 : 0, mir, line: ok ? say('right') : null, answer,
+        nextLabel: n === 1 ? 'Part 2: ' + (roleOf(2) === 'sim' ? 'Similar 🤝' : 'Opposite 🔄') : 'See the whole card', next: n === 1 ? () => { closeSheet(); stage(2); } : () => { closeSheet(); review(); } });
     }
     function review(){
       if (done) return; done = true;
@@ -1468,29 +1517,32 @@ function question(){
       setStrip('', 'CARD REVIEW');
       const roles = {}; roles[c.s] = 'sim'; roles[c.p] = 'opp';
       const order = [c.s, c.p].concat(c.o.filter(w => w !== c.s && w !== c.p));
+      const rev = mode === 'reverse';
       put(body, h('div', { class:'banner ' + (ok ? 's1' : 's2'), text: fishN === 2 ? '🐟🐟 Both parts right!' : fishN === 1 ? '🐟 One part right' : '🍽️ No fish this time' }),
         h('div', { class:'review' },
           h('div', { class:'rv' }, h('span', { class:'role', text:'THE WORD' }), h('div', { style:'min-width:0' }, h('div', { class:'w', text:c.w }), h('div', { class:'m', text:info(c.w).m })), h('span')),
-          order.map(w => { const right = roles[w], picked = g.ps === w ? 'sim' : g.po === w ? 'opp' : null, good = picked && picked === right, bad = picked && picked !== right;
-            return h('div', { class:'rv ' + (good ? 'rv-good' : bad ? 'rv-bad' : '') }, h('span', { class:'role ' + (right || 'no'), text: right === 'sim' ? 'SIMILAR' : right === 'opp' ? 'OPPOSITE' : '—' }),
+          order.map(w => { const right = roles[w], picked = rev ? null : g.ps === w ? 'sim' : g.po === w ? 'opp' : null, good = picked && picked === right, bad = picked && picked !== right;
+            const revMark = rev && right ? ((right === 'sim' ? g.s : g.o) ? '✅ you' : '❌ you') : '';
+            return h('div', { class:'rv ' + (good || (rev && revMark === '✅ you') ? 'rv-good' : bad || (rev && revMark === '❌ you') ? 'rv-bad' : '') }, h('span', { class:'role ' + (right || 'no'), text: right === 'sim' ? 'SIMILAR' : right === 'opp' ? 'OPPOSITE' : '—' }),
               h('div', { style:'min-width:0' }, h('div', { class:'w', text:w }), h('div', { class:'m', text:info(w).m })),
-              h('span', { class:'you', text: picked ? (good ? '✅ you' : '❌ you') : '' })); })),
-        h('p', { class:'small muted', text: ok ? 'Both parts right: this card counts.' : 'Cards count only when both parts are right. It will come back.' }));
+              h('span', { class:'you', text: picked ? (good ? '✅ you' : '❌ you') : revMark })); })),
+        h('p', { class:'small muted', text: ok ? 'Both parts right: this card counts.' : rev ? 'You picked ' + [g.s ? null : g.ps, g.o ? null : g.po].filter(Boolean).join(' and ') + '. Cards count only when both parts are right.' : 'Cards count only when both parts are right. It will come back.' }));
       SND.fx(ok ? 'goal' : 'page');
-      { const v = res.custard ? VOICE.pick('c09') : res.lock === 'mastered' ? VOICE.pick('c10') : null; if (v) setTimeout(() => VOICE.play(v), 600); }
+      { const v = res.custard ? VOICE.pick('c09') : null; if (v) setTimeout(() => VOICE.play(v), 600); }
       const bk = ok ? null : bookAdd(q.w, true);
+      const after = res.lock === 'mastered' ? () => { closeSheet(); celebrateMastered(q.w, goNext); } : goNext;
       openSheet([bk ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📓' }), h('b', { text:'Next: write it in your vocabulary book.' })) : null, noteFor(res.lock, res.custard),
-        (() => { const nb = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); if (bk){ closeSheet(); bookStop(bk, goNext); } else goNext(); } }, bk ? '📓 Book time' : lastQ() ? 'Full time ⚽' : 'Next question'); setTimeout(() => nb.focus({ preventScroll:true }), 60); return nb; })()], false, true);
+        (() => { const nb = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); if (bk){ closeSheet(); bookStop(bk, goNext); } else after(); } }, bk ? '📓 Book time' : lastQ() ? 'Full time ⚽' : 'Next question'); setTimeout(() => nb.focus({ preventScroll:true }), 60); return nb; })()], false, true);
       R.keys = null;
     }
-    if (hintsOn) know(); else stage(1);
+    if (hintsOn && mode !== 'reverse') know(); else stage(1);
   }
 
   if (q.type === 'sim') cardFlow();
   else {
     setStrip(q.type === 'gap' ? 'gap' : q.type === 'scram' ? 'scram' : '', TYPE_LABEL[q.type].toUpperCase());
     const lead = item.retry ? say('retry') : R.idx === 0 ? R.hello : pickOne(['Your question.', 'Here it comes.', 'The Mirror is watching.', 'Take your time.', 'Concentrate. Floppy, warm, like custard.']);
-    const top = q.type === 'w2m' ? [h('p', { class:'muted', text:'What does this word mean?' }), h('div', { class:'word', text:q.w.w })]
+    const top = q.type === 'w2m' ? [h('p', { class:'muted', text:'What does this word mean?' }), wordWithSpeak(q.w.w)]
       : q.type === 'm2w' ? [h('p', { class:'muted', text:'Which word means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
       : q.type === 'gap' ? [h('p', { class:'muted', text:'Which word fills the gap?' }), h('p', { class:'sentence' }, q.gap.before, h('span', { class:'blank', 'aria-label':'gap' }), q.gap.after)]
       : q.type === 'scram' ? [h('p', { class:'muted', text:'Unscramble the word that means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
@@ -1501,7 +1553,7 @@ function question(){
   const quit = h('button', { class:'quit', type:'button', 'aria-label':'Quit this match', onclick:() => { SND.loop(false); R = null; home(say('quit')); } }, icon('x'));
   put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length));
   const keepSheet = sheetEl; sheetEl = null;
-  mount([h('div', { class:'qbar' }, quit, pipsEl, qn, h('div', { class:'tools' }, soundBtns())), boardBox, h('div', { class:'pitch' }, strip, body)], null);
+  mount([h('div', { class:'qbar' }, quit, pipsEl, qn, h('div', { class:'tools' }, reportBtn(true), soundBtns())), boardBox, h('div', { class:'pitch' }, strip, body)], null);
   if (keepSheet) keepSheet.forEach(e => e.remove());
   drawPips();
 }
@@ -1529,9 +1581,11 @@ function finishRound(){
   for (const p of S.prizes) if (!p.announced && m >= p.at){ p.announced = true; prizes.push(p); }
   save();
   const x = { acc, stars, bonus, badges, prizes, round:R };
+  const party = matchCelebrations(R, badges);
   R = null;
   if (SYNC.pending) adopt(SYNC.pending, true);
-  if (crowned) ceremony(false, () => summary(x)); else summary(x);
+  const end = () => { if (crowned) ceremony(false, () => summary(x)); else summary(x); };
+  if (party.length){ screen = 'party'; celebrateAll(party, end); } else end();
 }
 function summary(x){
   screen = 'summary';
@@ -1539,7 +1593,7 @@ function summary(x){
   const key = x.stars === 3 ? 'end3' : x.stars === 2 ? 'end2' : x.stars === 1 ? 'end1' : 'end0';
   SND.tune(mirWon ? 'lose' : 'win');
   const rankUp = r.rank0 != null && rankInfo(masteredCount()).i > r.rank0;
-  { const v = rankUp ? VOICE.pick('c15') : mirWon || tie ? VOICE.pick('c14') : VOICE.pick('c13'); const v2 = mirWon && Math.random() < .5 ? VOICE.pick('m07') : null;
+  { const v = rankUp ? null : mirWon || tie ? VOICE.pick('c14') : VOICE.pick('c13'); const v2 = mirWon && Math.random() < .5 ? VOICE.pick('m07') : null;
     if (v) setTimeout(() => VOICE.play(v), 1500); if (v2) setTimeout(() => VOICE.play(v2), 1700); }
   const missed = [...new Set(r.missed)];
   const extra = [x.badges.length ? '🏅 New badge: ' + x.badges.map(b => b.n).join(', ') : null, x.prizes.length ? '🎁 Prize unlocked: ' + x.prizes.map(p => p.text || 'a surprise').join(', ') + '. Ask a grown-up!' : null].filter(Boolean);
@@ -1581,7 +1635,7 @@ function bookAdd(x, withPair){
 function bookBox(e){
   return h('div', { class:'book', role:'note' },
     h('div', { class:'bk' }, h('span', { 'aria-hidden':'true', text:'📓' }), e.again ? 'ADD THE SIMILAR AND OPPOSITE TO YOUR BOOK' : 'WRITE IT IN YOUR VOCABULARY BOOK'),
-    h('div', { class:'bw', text:e.w }),
+    h('div', { class:'wordrow' }, h('div', { class:'bw', text:e.w }), speakBtn(e.w)),
     e.m ? h('div', { class:'bm', text:e.m }) : null,
     e.s ? h('div', { class:'bp' }, h('span', { class:'role sim', text:'SIMILAR' }), ' ' + e.s + '  ', h('span', { class:'role opp', text:'OPPOSITE' }), ' ' + e.o) : null);
 }
@@ -1644,7 +1698,8 @@ function bookCheck(list, done){
   mount([h('div', { class:'qbar' }, h('span', { class:'qn', text:'FULL TIME · BOOK CHECK' }), h('div', { class:'tools' }, soundBtns())), led(true, 'BOOK'), cue2, h('div', { class:'pitch' }, strip2, body2)], null);
   show();
 }
-function markBook(k, ok){ const e = bookStore().list.find(b => b.k === k); if (e) e.ok = ok; }
+function markBook(k, ok){ const e = bookStore().list.find(b => b.k === k); if (e){ e.ok = ok; e.chk = ok ? 'ok' : 'miss'; } }
+function markPinky(k){ const e = bookStore().list.find(b => b.k === k); if (e){ e.pinky = true; save(); } }
 
 /* the big STOP card: full screen, Cuffin, the word, and a pencil timer before he can carry on */
 const BOOK_SECS = 15;
@@ -1654,23 +1709,206 @@ function bookStop(e, next){
   let left = secs, timer = null;
   const num = h('span', { class:'num', text:String(left) });
   const ring = h('div', { class:'ring', role:'timer', 'aria-label':'Writing time' }, h('span', { class:'pen', 'aria-hidden':'true', text:'✏️' }), num);
-  const go = h('button', { class:'btn kick', type:'button', disabled:true, onclick:() => { if (go.disabled) return; clearInterval(timer); SND.fx('fish'); VOICE.stop(); ov.remove(); R && (R.keys = prevKeys); next(); } }, '✍️ Keep writing…');
+  const finish = () => { clearInterval(timer); SND.fx('fish'); ov.remove(); R && (R.keys = prevKeys); next(); };
+  /* after the timer: a pinky promise that it really is in the book */
+  function promise(){
+    VOICE.stop(); SND.fx('page');
+    const mv = Math.random() < .3 && VOICE.can('m14');
+    VOICE.play('c20'); if (mv) VOICE.play('m14');
+    const yes = h('button', { class:'btn kick', type:'button', onclick:() => { markPinky(e.k); e.pinky = true; VOICE.stop(); VOICE.play('c21'); put(stopgo, h('div', { class:'pinkydone', role:'status' }, h('span', { 'aria-hidden':'true', text:'🤙' }), h('b', { text:'Pinky promise witnessed. Officially.' }))); SND.fx('cheer'); setTimeout(finish, 1500); } }, '🤙 Pinky promise!');
+    const no = h('button', { class:'btn alt', type:'button', onclick:() => { VOICE.stop(); VOICE.play('c22'); left = Math.max(5, Math.round(secs / 2)); secsNow = left; put(stopgo, ring, go); go.disabled = true; put(go, '✍️ Keep writing…'); ring.classList.remove('done'); num.textContent = String(left); ring.style.setProperty('--p', '0'); timer = setInterval(tick, 1000); } }, 'Not yet…');
+    put(stopgo, h('div', { class:'pinky' }, h('p', { class:'pq', text:'Pinky promise it’s in your book?' }), mv ? h('p', { class:'small', style:'color:#C9D2F2', text:'The Mirror: “' + VO.m14 + '”' }) : null, h('div', { class:'pbtns' }, yes, no)));
+    setTimeout(() => yes.focus({ preventScroll:true }), 30);
+  }
+  let secsNow = secs;
+  const go = h('button', { class:'btn kick', type:'button', disabled:true, onclick:() => { if (go.disabled) return; promise(); } }, '✍️ Keep writing…');
+  const stopgo = h('div', { class:'stopgo' }, ring, go);
   const ov = h('div', { class:'stopov', role:'dialog', 'aria-modal':'true', 'aria-labelledby':'stoph' },
     h('div', { class:'stopin' },
       h('div', { class:'stoptop' }, cimg(IMG.hello, 'stopimg', 150, 'Cuffin'), h('div', {}, h('h2', { id:'stoph', text:'STOP!' }), h('p', { class:'stopsub', text:'Write it in your vocabulary book.' }))),
       bookBox(e),
       h('p', { class:'stopline', text: (VOICE.can('c17') ? VO.c17 : pickOne(BOOK_SAY)) + ' I will check at full time.' }),
-      h('div', { class:'stopgo' }, ring, go)));
+      stopgo));
   document.body.append(ov);
   const prevKeys = R ? R.keys : null; if (R) R.keys = null;
   if (!VOICE.play('c17')) SND.fx('whistle');
   const tick = () => {
     left--; num.textContent = String(Math.max(0, left));
-    ring.style.setProperty('--p', String(1 - left / secs));
+    ring.style.setProperty('--p', String(1 - left / secsNow));
     if (left <= 0){ clearInterval(timer); ring.classList.add('done'); num.textContent = '✓'; go.disabled = false; put(go, '✍️ I’ve written it'); SND.fx('tile'); setTimeout(() => go.focus({ preventScroll:true }), 30); }
   };
   ring.style.setProperty('--p', '0');
   timer = setInterval(tick, 1000);
+}
+
+/* ---------- celebrations, sound panel, progress report, saying words, streaks, race drama ---------- */
+
+/* say a word aloud with the device's own British voice */
+let ttsVoice = null;
+function pickTts(){
+  try {
+    const vs = speechSynthesis.getVoices();
+    ttsVoice = vs.find(v => /en-GB/i.test(v.lang) && /Daniel|Kate|Serena|Arthur|Martha|Google UK English Female|Google UK English Male/.test(v.name)) || vs.find(v => /en-GB/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || null;
+  } catch (e) {}
+}
+if ('speechSynthesis' in window){ pickTts(); try { speechSynthesis.onvoiceschanged = pickTts; } catch (e) {} }
+function sayWord(w){
+  if (!('speechSynthesis' in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(w); u.lang = 'en-GB'; u.rate = .85; if (ttsVoice) u.voice = ttsVoice;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+const speakBtn = w => ('speechSynthesis' in window) ? h('button', { class:'say-it', type:'button', 'aria-label':'Hear how to say ' + w, title:'Hear it', onclick:e => { e.stopPropagation(); sayWord(w); } }, icon('sound')) : null;
+const wordWithSpeak = (w, cls) => h('div', { class:'wordrow' }, h('div', { class:cls || 'word', text:w }), speakBtn(w));
+
+/* sound panel: one speaker button opens four switches */
+function soundPanel(){
+  const row = (key, label, sub) => {
+    const b = h('button', { class:'switch', type:'button', role:'switch', 'aria-checked':String(S.settings[key] !== false), 'aria-label':label, onclick:() => {
+      const v = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', String(v)); S.settings[key] = v;
+      if (key === 'sound' && !v){ VOICE.stop(); SND.stop(); SND.loop(false); }
+      if (key === 'music' && !v){ SND.stop(); SND.loop(false); }
+      if (key === 'music' && v && R && R.queue && R.queue.length) SND.loop(true);
+      if ((key === 'cvoice' || key === 'mvoice') && !v) VOICE.stop();
+      if (v){ SND.prime(); SND.fx('tap'); }
+      save(); document.querySelectorAll('.tbtn[data-k]').forEach(x => x.refresh && x.refresh()); } });
+    return h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:label }), h('span', { class:'small muted', text:sub })), b);
+  };
+  openSheet([h('h2', { text:'Sound' }),
+    h('div', {}, row('sound', 'Sound effects', 'Goals, misses and fanfares. Off = everything silent.'), row('music', 'Music', 'Story music and the match groove.'),
+      row('cvoice', 'Cuffin’s voice', 'Cuffin speaking.'), row('mvoice', 'The Mirror’s voice', 'The Mirror speaking.')),
+    h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Done')], true);
+}
+function soundBtns(){
+  const ic = () => icon(S.settings.sound ? 'sound' : 'mute');
+  const b = h('button', { class:'tbtn', type:'button', 'aria-label':'Sound settings', title:'Sound', 'aria-pressed':String(!!S.settings.sound), onclick:() => { SND.prime(); soundPanel(); } }, ic());
+  b.dataset.k = 'sound'; b.refresh = () => { b.setAttribute('aria-pressed', String(!!S.settings.sound)); put(b, ic()); };
+  return b;
+}
+
+/* full-screen celebration; next() runs when he taps on */
+function confettiBox(n){
+  const box = h('div', { class:'confetti', 'aria-hidden':'true' }), cols = ['#FCD116', '#1D5BD8', '#D7263D', '#FFC83D', '#3DDC84', '#B48BFF'];
+  for (let k = 0; k < (n || 50); k++) box.append(h('i', { style:'left:' + rnd(100) + '%;background:' + cols[k % cols.length] + ';animation-delay:' + (Math.random() * 1.4).toFixed(2) + 's' }));
+  return box;
+}
+function celebrate(o, next){
+  closeSheet();
+  const go = h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); ov.remove(); if (R) R.keys = prev; next && next(); } }, o.button || 'Brilliant!');
+  const ov = h('div', { class:'celeb', role:'dialog', 'aria-modal':'true', 'aria-labelledby':'celebh' }, confettiBox(o.confetti || 50),
+    h('div', { class:'celin' },
+      h('div', { class:'eyebrow', style:'color:#FFD23F', text:o.kicker || '' }),
+      o.art || null,
+      h('h2', { id:'celebh', text:o.title }),
+      o.big ? wordWithSpeak(o.big, 'celword') : null,
+      o.sub ? h('p', { class:'celsub', text:o.sub }) : null,
+      o.line ? h('div', { class:'mline', style:'background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff' }, cimg(o.who === 'm' ? MIMG.smug : IMG.right, '', 34, ''), h('span', { class:'q', text:o.line })) : null,
+      go));
+  document.body.append(ov);
+  const prev = R ? R.keys : null; if (R) R.keys = null;
+  SND.fx(o.sound || 'cheer'); if (o.tune) SND.tune(o.tune);
+  if (o.voice) setTimeout(() => VOICE.play(o.voice), 900);
+  if (o.voice2) setTimeout(() => VOICE.play(o.voice2), 1000);
+  setTimeout(() => go.focus({ preventScroll:true }), 80);
+}
+function celebrateAll(list, done){ const next = () => { const c = list.shift(); if (!c) return done(); celebrate(c, next); }; next(); }
+const bigEmoji = e => h('div', { class:'celart', 'aria-hidden':'true', text:e });
+
+/* "How are we doing?" */
+function progressReport(){
+  const T = allItems().length, aM = masteredCount(), A = S.points, M = S.race.mf, d = A - M, ri = rankInfo(aM), st = dayStreak();
+  const playedToday = S.history.some(x => x.d === today());
+  VOICE.play('c23');
+  const line = d >= 10 ? 'We are well clear. The Mirror has gone very quiet. Suspiciously quiet.' : d > 0 ? 'We are ahead, but only just. No time for custard.' : d === 0 ? 'Dead level. Every answer counts.' : 'The Mirror is in front. Four in. Four hold. Four out. We can catch him.';
+  const r = (em, k, v) => h('div', { class:'rep' }, h('span', { class:'em', 'aria-hidden':'true', text:em }), h('span', { class:'k', text:k }), h('b', { text:v }));
+  openSheet([
+    h('div', { class:'say' }, cimg(IMG.hello, '', 52, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:VOICE.can('c23') ? VO.c23 : 'Right. Here’s how we’re doing.' }))),
+    h('div', { class:'reps' },
+      r('🐟', 'Fresh fish', A + ' v ' + M + (d > 0 ? ' · we lead by ' + d : d < 0 ? ' · Mirror leads by ' + (-d) : ' · level')),
+      r('🔒', 'Words mastered', aM + ' of ' + T + ' (Mirror ' + S.race.mm + ')'),
+      r('🏆', 'Trophy', ri.cur.name + (ri.next ? ' · ' + (ri.next.at - aM) + ' words to ' + (SHORT_RANK[ri.next.name] || ri.next.name) : '')),
+      r('🔥', 'Streak', st + ' day' + (st === 1 ? '' : 's') + (playedToday ? ' · today’s goal done ✓' : ' · play today to keep it')),
+      r('🍮', 'Custard', (S.custard || 0) + ' pot' + ((S.custard || 0) === 1 ? '' : 's'))),
+    h('p', { class:'line', text:line }),
+    h('button', { class:'btn wide', type:'button', onclick:closeSheet }, 'Back to it')], true);
+}
+const reportBtn = small => h('button', { class: small ? 'tbtn' : 'btn alt small', type:'button', 'aria-label':'How are we doing?', title:'How are we doing?', onclick:() => { SND.fx('tap'); progressReport(); } }, small ? '📣' : ['📣 ', 'How are we doing?']);
+
+/* streaks */
+const datesBetween = (a, b) => { const out = []; let d = addDays(a, 1); while (d < b){ out.push(d); d = addDays(d, 1); } return out; };
+function streakRescue(done){
+  const played = [...new Set(S.history.map(x => x.d).concat(S.freeze || []))].sort();
+  const last = played[played.length - 1];
+  if (!last || last >= addDays(today(), -1) || S.freezeAsk === today()) return done();
+  const missed = datesBetween(last, today());
+  if (missed.length > 2) return done();
+  let n = 0, d = last; const set = new Set(played); while (set.has(d)){ n++; d = addDays(d, -1); }
+  if (n < 2 || (S.custard || 0) < missed.length) return done();
+  S.freezeAsk = today(); save();
+  const k = missed.length;
+  const yes = h('button', { class:'btn kick', type:'button', onclick:() => { ov.remove(); S.freeze = (S.freeze || []).concat(missed); S.custard -= k; save();
+    celebrate({ kicker:'STREAK SAVED', art:bigEmoji('🔥'), title:n + '-day streak saved!', sub:'Cost: ' + k + ' pot' + (k > 1 ? 's' : '') + ' of custard. Play today to keep it going.', voice:VOICE.can('c29') ? 'c29' : null, line:VOICE.can('c29') ? VO.c29 : 'A pot of custard, sacrificed to save the streak. A noble custard.' }, done); } }, '🍮 Save my streak');
+  const no = h('button', { class:'linkbtn', type:'button', style:'color:#C9D2F2', onclick:() => { ov.remove(); done(); } }, 'Let it go');
+  const ov = h('div', { class:'celeb', role:'dialog', 'aria-modal':'true' }, h('div', { class:'celin' },
+    h('div', { class:'eyebrow', style:'color:#FFD23F', text:'STREAK IN DANGER' }), bigEmoji('🔥'),
+    h('h2', { text:'Your ' + n + '-day streak is in danger!' }),
+    h('p', { class:'celsub', text:'You missed ' + (k === 1 ? 'yesterday' : k + ' days') + '. Spend ' + k + ' pot' + (k > 1 ? 's' : '') + ' of custard to keep your streak alive? You have ' + S.custard + '.' }),
+    yes, no));
+  document.body.append(ov); SND.fx('page');
+}
+
+/* race drama: at most one big moment per match (plus a comeback after it) */
+function raceDrama(dPrev, dNow){
+  if (!R) return null;
+  R.drama = R.drama || 0;
+  if (dPrev >= 0 && dNow < 0 && R.drama === 0){
+    R.drama = 1; R.wasBehind = true;
+    return { title:'BREAKING NEWS', text:'The Mirror takes the lead!', voice:'c25', voice2:'m11', mline:'I’m in FRONT! Somebody take a picture! From my good side!' };
+  }
+  if (dPrev <= 0 && dNow > 0 && R.wasBehind && R.drama === 1){
+    R.drama = 2;
+    return { title:'WHAT A COMEBACK', text:'Cuffin is back in front!', voice:'c26', mline:msay('behind') };
+  }
+  if (dPrev < 10 && dNow >= 10 && R.drama === 0 && !R.farDone){
+    R.drama = 1; R.farDone = true;
+    return { title:'BREAKING NEWS', text:'Cuffin is ' + dNow + ' fish clear of the Mirror!', voice:'c24', voice2:'m12', mline:'This is fine. Everything is fine. I’m simply letting you win. For now.' };
+  }
+  return null;
+}
+
+function celebrateMastered(x, next){
+  const v = VOICE.pick('c10'), v2 = Math.random() < .35 ? VOICE.pick('m13') : null;
+  celebrate({ kicker:'WORD MASTERED', art:bigEmoji('🔒'), title:'Locked in for good!', big:x.w, sub:x.card ? info(x.w).m : x.m, voice:v, voice2:v2, tune:'win',
+    line:v ? VO.c10 : 'Mastered. The puffin community will be informed.', button:'Keep going' }, next);
+}
+/* end-of-match celebrations: new trophy, badges, daily goal, streak */
+function matchCelebrations(round, badges){
+  const list = [], m = masteredCount(), ri = rankInfo(m);
+  if (round.rank0 != null && ri.i > round.rank0) list.push({ kicker:'NEW TROPHY', art:h('div', { class:'celtro' }, trophyEl(ri.i, true)), title:TROPHY_NAMES[ri.i] + '!', sub:'You are now ' + ri.cur.name + '. ' + m + ' words mastered.', voice:VOICE.pick('c15'), tune:'win', line:VOICE.can('c15') ? VO.c15 : 'A new trophy. I would like that noted.' });
+  for (const b of badges){
+    const pw = b.id === 'd7', v = pw ? VOICE.pick('c31') : VOICE.pick('c27');
+    list.push({ kicker:pw ? 'PERFECT WEEK' : 'NEW BADGE', art:h('div', { class:'celbadge' }, icon(b.ic)), title:b.n, sub:b.d, voice:v, line:v ? VO[v] : 'A badge. The puffin community does not hand these out lightly.' });
+  }
+  if (S.goal !== today() && todayCount() >= GOAL){
+    S.goal = today(); save();
+    const st = dayStreak(), v = st >= 2 ? VOICE.pick('c28') : VOICE.pick('c30'), v2 = st >= 3 && Math.random() < .3 ? VOICE.pick('m15') : null;
+    list.push({ kicker:'DAILY GOAL DONE', art:h('div', { class:'celflame' }, h('span', { 'aria-hidden':'true', text:'🔥' }), h('b', { text:String(st) })), title:st >= 2 ? st + '-day streak!' : 'Daily goal done!', sub:st >= 2 ? 'Come back tomorrow to make it ' + (st + 1) + '.' : 'Play again tomorrow to start a streak.', voice:v, voice2:v2, line:v ? VO[v] : 'Daily goal done. Floppy. Warm. Like custard.', confetti:30 });
+  }
+  return list;
+}
+const GOAL = 10;
+const todayCount = () => (S.rounds || []).filter(x => x.d === today()).reduce((a, x) => a + (x.n || 0), 0);
+/* the flame and the goal ring on Home */
+function streakRow(){
+  const st = dayStreak(), n = Math.min(GOAL, todayCount()), pct = n / GOAL, done = n >= GOAL;
+  const ring = sv('svg', { viewBox:'0 0 36 36', class:'gring', 'aria-hidden':'true' },
+    sv('circle', { cx:18, cy:18, r:15, class:'gr0' }), sv('circle', { cx:18, cy:18, r:15, class:'gr1', 'stroke-dasharray':(94.25 * pct).toFixed(1) + ' 94.25', transform:'rotate(-90 18 18)' }));
+  return h('div', { class:'streakrow' },
+    h('div', { class:'flame' + (st ? '' : ' out') + (S.history.some(x => x.d === today()) ? '' : ' cold'), title:'Days in a row' }, h('span', { 'aria-hidden':'true', text:'🔥' }), h('b', { text:String(st) }), h('span', { class:'small', text:st === 1 ? 'day' : 'days' })),
+    h('div', { class:'goal' + (done ? ' done' : ''), title:'Daily goal' }, h('div', { class:'gwrap' }, ring, h('span', { class:'gtx', text: done ? '✓' : n + '' })), h('span', { class:'small', text: done ? 'Goal done!' : 'Goal: ' + GOAL + ' answers' })),
+    h('div', { class:'cpots', title:'Custard pots' }, h('span', { 'aria-hidden':'true', text:'🍮' }), h('b', { text:String(S.custard || 0) })));
 }
 
 /* ---------- Home: the scoreboard and one big button ---------- */
@@ -1700,15 +1938,15 @@ function home(greeting){
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
   let greet = greeting || null;
   if (!home.greeted && S.stats.answered){ home.greeted = true; if (VOICE.play('c02')) greet = VO.c02.replace('Aaron', S.name); }
-  const saveBtn = h('button', { class:'btn alt small', type:'button', onclick:async () => { saveBtn.disabled = true; const ok = await addSave(S.name + '’s save · ' + stamp()); saveBtn.disabled = false; if (ok){ SND.fx('fish'); toast(SYNC.ready ? 'Saved for the family' : 'Saved on this device'); } } }, icon('save'), 'Save');
   mount([
     topbar(),
     S.leader ? h('div', { class:'leaderbox', role:'status' }, crownSvg(''), h('div', { style:'min-width:0' }, h('b', { text:'Leaders of the Puffin Community' }), h('div', { class:'small', text:'Crowned ' + longDate(S.leader.d) }))) : null,
     led(false),
     h('div', { class:'homemid' },
       sayBlock('com', greet || homeLine(), S.leader ? IMG.right : IMG.hello),
+      streakRow(),
       h('button', { class:'btn kick', type:'button', onclick:() => startRound('mixed') }, '⚽ KICK OFF'),
-      h('div', { class:'homerow' }, h('button', { class:'btn alt small', type:'button', onclick:moreSheet }, icon('more'), 'More matches'), saveBtn))
+      h('div', { class:'homerow' }, h('button', { class:'btn alt small', type:'button', onclick:moreSheet }, icon('more'), 'More matches'), reportBtn(false)))
   ], 'home');
 }
 SCREENS.home = () => home();
@@ -1979,7 +2217,8 @@ function grownups(){
       h('form', { class:'row', onsubmit:e => { e.preventDefault(); if (inp.value === S.pin){ parentOK = true; grownups(); } else { msg.textContent = 'That is not the PIN.'; inp.value = ''; } } }, inp, h('button', { class:'btn small', type:'submit' }, 'Unlock')), msg)], 'grownups');
     setTimeout(() => inp.focus(), 30); return;
   }
-  const tabs = [['play','Play'],['book','Book'],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
+  const nb = bookStore().list.filter(e => e.d === today()).length;
+  const tabs = [['play','Play'],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
   const bar = h('div', { class:'subtabs', role:'group', 'aria-label':'Grown-ups sections' }, tabs.map(([id, t]) => h('button', { type:'button', 'aria-pressed':String(gTab === id), onclick:() => { gTab = id; grownups(); } }, t)));
   const panel = h('div', { class:'panel grow', style:'overflow-y:auto' });
   const c = counts(), T = allItems().length;
@@ -1987,14 +2226,18 @@ function grownups(){
     put(panel,
       sw('sw-hints', S.settings.hints, 'Hints', S.settings.hints ? 'On: “not sure” explanations, peeks and hint buttons.' : 'Off (test mode): no hints, every answer is ' + S.name + '’s own.', v => { S.settings.hints = v; save(); grownups(); }),
       sw('sw-sound', S.settings.sound, 'All sounds', 'Goals, misses, the Mirror and music. ' + S.name + ' can also switch this with the speaker button.', v => { S.settings.sound = v; if (!v){ S.settings.music = false; SND.stop(); SND.loop(false); } save(); grownups(); if (v){ SND.prime(); SND.fx('goal'); } }),
+      sw('sw-cv', S.settings.cvoice !== false, 'Cuffin’s voice', 'The recorded Cuffin lines.', v => { S.settings.cvoice = v; if (!v) VOICE.stop(); save(); grownups(); }),
+      sw('sw-mv', S.settings.mvoice !== false, 'The Mirror’s voice', 'The recorded Mirror lines.', v => { S.settings.mvoice = v; if (!v) VOICE.stop(); save(); grownups(); }),
       sw('sw-music', S.settings.music, 'Music', 'Story fanfare, chapter sting, crowning anthem, match groove.', v => { S.settings.music = v; if (v) S.settings.sound = true; save(); grownups(); if (!v){ SND.stop(); SND.loop(false); } else { SND.prime(); SND.tune('win'); } }),
       h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:'Previews' }), h('span', { class:'small muted', text:'These do not change any progress.' }))),
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => intro(() => grownups()) }, 'The story'), h('button', { class:'btn alt small', type:'button', onclick:() => chapter(() => grownups()) }, 'Today’s chapter'), h('button', { class:'btn alt small', type:'button', onclick:() => ceremony(true, () => grownups()) }, 'The crowning')));
   } else if (gTab === 'book'){
-    const L = bookStore().list.slice(0, 60);
-    put(panel, h('p', { class:'small muted', text:'Words ' + S.name + ' was asked to write in his vocabulary book (newest first). ✓ = typed it correctly from the book at the Book check.' }),
-      L.length ? h('div', { class:'saves grow' }, L.map(e => h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:e.w }), h('span', { class:'muted', text:(e.m || '') + (e.s ? ' · similar ' + e.s + ', opposite ' + e.o : '') })),
-        h('span', { class:'you', title: e.ok ? 'Checked' : 'Not checked yet', text:(e.ok ? '✓ ' : '… ') + shortDate(e.d) })))) : h('p', { class:'muted', text:'Nothing written yet.' }));
+    const L = bookStore().list.slice(0, 120), days = {};
+    L.forEach(e => { (days[e.d] = days[e.d] || []).push(e); });
+    const st = e => e.ok || e.chk === 'ok' ? ['✅', 'Typed it from the book at the Book check'] : e.chk === 'miss' ? ['❌', 'Missed it at the Book check'] : e.pinky ? ['🤙', 'Pinky-promised it’s written'] : ['…', 'Not checked yet'];
+    put(panel, h('p', { class:'small muted', text:'Words ' + S.name + ' should have written in his vocabulary book, by day. ✅ checked · ❌ missed at the check · 🤙 pinky-promised · … not checked yet.' }),
+      L.length ? h('div', { class:'saves grow' }, Object.keys(days).sort().reverse().map(d => [h('div', { class:'bkday', text:longDate(d) + ' · ' + days[d].length + ' word' + (days[d].length === 1 ? '' : 's') }),
+        days[d].map(e => { const [i, t] = st(e); return h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:e.w }), h('span', { class:'muted', text:(e.m || '') + (e.s ? ' · similar ' + e.s + ', opposite ' + e.o : '') })), h('span', { class:'you', title:t, 'aria-label':t, text:i })); })])) : h('p', { class:'muted', text:'Nothing written yet.' }));
   } else if (gTab === 'saves'){
     const list = h('div', { class:'saves grow' }, h('p', { class:'muted', text:'Loading…' }));
     const drawSaves = async () => {
@@ -2129,6 +2372,10 @@ function loadDemo(){
 /* ---------- test hooks (only with #test in the address) ---------- */
 if (location.hash === '#test'){
   window.__cwq = {
+    party: () => { S.goal = ''; celebrateAll(matchCelebrations({ rank0:0 }, [BADGES.find(b => b.id === 'd7'), BADGES[0]]), () => home()); },
+    mastered: () => celebrateMastered(allItems()[0], () => home()),
+    stop: () => { R = newRound(allItems().slice(0, 2), 'mixed'); bookStop(bookAdd(allItems()[3]), () => home()); },
+    rescue: () => { const d1 = addDays(today(), -2), d2 = addDays(today(), -3); S.history = [{ d:d2, p:1 }, { d:d1, p:2 }]; S.freeze = []; S.freezeAsk = ''; S.custard = 3; save(); streakRescue(() => home()); },
     S: () => S, home: () => { home.recapDone = true; home(); }, ceremony: () => ceremony(true, () => home()), intro: () => intro(() => home()), chapter: () => chapter(() => home()),
     reset: () => { S = fresh(); S.intro = true; S.lastVisit = visitSnap(); save(); home.recapDone = true; home(); },
     demo: () => { loadDemo(); home.recapDone = true; home(); },
