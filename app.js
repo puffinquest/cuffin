@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "5523defc39";
+const APPV = "df53683d8a";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -1169,13 +1169,15 @@ const VOICE = (() => {
 const FIREBASE_CONFIG = {"apiKey": "AIzaSyDuMhwC18PE-xUUGg2wCl6nnQHh7aUNlF4", "authDomain": "cuffin-18ac1.firebaseapp.com", "projectId": "cuffin-18ac1", "storageBucket": "cuffin-18ac1.firebasestorage.app", "messagingSenderId": "774135872665", "appId": "1:774135872665:web:4332c6fa25e59813eecc08"};
 const FB_VER = '10.12.2';
 const FAMKEY = KEY + '-family';
+const VAPID = 'BA0SEXTIs1175Cf8RHBq-G-8x61xoYcTiaxgvZtnhvby8Ef201mxs30VyJ83FDn6kuTAQN2etu688vhHJR67F74';
+let FBAPP = null;
 function familyCode(){ try { return localStorage.getItem(FAMKEY) || ''; } catch (e) { return ''; } }
 const famId = c => String(c || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function setFamily(c){ try { if (c) localStorage.setItem(FAMKEY, c); else localStorage.removeItem(FAMKEY); } catch (e) {} }
 async function fbInit(){
   const base = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
   const [appM, authM, fsM] = await Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-firestore.js')]);
-  const app = appM.initializeApp(FIREBASE_CONFIG);
+  const app = appM.initializeApp(FIREBASE_CONFIG); FBAPP = app;
   await authM.signInAnonymously(authM.getAuth(app));
   const fs = fsM.getFirestore(app);
   const mapPath = p => p.replace(/^data\/users\/([^/]+)\/progress/, 'families/$1/state/progress');
@@ -1218,6 +1220,55 @@ function familyScreen(done){
       if (famId(c).length < 12){ msg.style.color = 'var(--miss)'; msg.textContent = 'That doesn’t look like a family code. It looks like PUFFIN-XXXX-XXXX.'; return; }
       setFamily(c); SND.prime(); done(); } }, inp, go, msg))], null);
   setTimeout(() => inp.focus(), 60);
+}
+
+/* ---------- 4pm reminders (push notifications) ---------- */
+const REMKEY = KEY + '-remind';
+const remindState = () => { try { return localStorage.getItem(REMKEY) || ''; } catch (e) { return ''; } };
+const pushCapable = () => 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+async function sha(t){ const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(b)].slice(0, 12).map(x => x.toString(16).padStart(2, '0')).join(''); }
+async function turnOnReminders(){
+  if (!pushCapable()) throw new Error('unsupported');
+  const perm = await Notification.requestPermission();   // must be the first thing after the tap (iPhone rule)
+  if (perm !== 'granted') throw new Error('denied');
+  const fam = famId(familyCode()); if (!fam || !FBAPP) throw new Error('nosync');
+  const base = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
+  const [mM, fsM] = await Promise.all([import(base + 'firebase-messaging.js'), import(base + 'firebase-firestore.js')]);
+  if (mM.isSupported && !(await mM.isSupported())) throw new Error('unsupported');
+  const reg = await navigator.serviceWorker.ready;
+  const token = await mM.getToken(mM.getMessaging(FBAPP), { vapidKey:VAPID, serviceWorkerRegistration:reg });
+  if (!token) throw new Error('notoken');
+  const id = await sha(token);
+  await fsM.setDoc(fsM.doc(fsM.getFirestore(FBAPP), 'families/' + fam + '/tokens/' + id), { t:token, at:Date.now(), dev:(isIOS() ? 'iPhone/iPad' : navigator.platform || 'device') });
+  try { localStorage.setItem(REMKEY, id); } catch (e) {}
+  return true;
+}
+async function testNotice(){
+  const reg = await navigator.serviceWorker.ready;
+  await reg.showNotification('Cuffin’s Word Quest', { body:'Test from Cuffin. If you can read this, reminders work. I would like that noted.', icon:'icons/icon-192.png', badge:'icons/icon-192.png', tag:'cuffin-test' });
+}
+function remindBlock(){
+  const box = h('div', { class:'set', style:'flex-wrap:wrap' });
+  const draw = (msg, warn) => {
+    const on = remindState() && pushCapable() && Notification.permission === 'granted';
+    const lbl = h('div', { class:'lbl' }, h('b', { text:'4pm reminder' + (on ? ': on ✓' : '') }),
+      h('span', { class:'small muted', text: on ? 'This device gets one nudge at 4pm on days ' + S.name + ' hasn’t played yet.' : 'One nudge at 4pm, only on days ' + S.name + ' hasn’t played. Turn it on on each device that should get it.' }),
+      msg ? h('span', { class:'small', style:'color:' + (warn ? 'var(--miss)' : 'var(--win)'), text:msg }) : null);
+    let btn;
+    if (!pushCapable() || (isIOS() && !standalone())) btn = null;
+    else if (on) btn = h('button', { class:'btn alt small', type:'button', onclick:async () => { try { await testNotice(); draw('Test sent.'); } catch (e) { draw('Could not show a test.', true); } } }, 'Send a test');
+    else btn = h('button', { class:'btn small', type:'button', onclick:async () => {
+      btn.disabled = true; put(btn, 'Turning on…');
+      try { await turnOnReminders(); SND.fx('fish'); draw('Reminders on.'); }
+      catch (e){ const m = String(e && e.message || e); draw(m === 'denied' ? 'Notifications are blocked. Settings → Notifications → Cuffin → Allow, then try again.' : m === 'nosync' ? 'Needs the family code and a connection. Try again in a moment.' : 'Couldn’t turn on: ' + m, true); }
+    } }, '🔔 Turn on');
+    const extra = !pushCapable() || (isIOS() && !standalone()) ? h('span', { class:'small', style:'color:var(--miss);flex-basis:100%', text: isIOS() ? 'On iPhone/iPad: open the game from its home-screen icon (needs iOS 16.4 or newer) to turn this on.' : 'This browser can’t do reminders.' }) : null;
+    put(box, lbl, btn, extra);
+  };
+  draw();
+  return box;
 }
 
 /* ---------- shared UI ---------- */
@@ -2228,6 +2279,7 @@ function grownups(){
       sw('sw-sound', S.settings.sound, 'All sounds', 'Goals, misses, the Mirror and music. ' + S.name + ' can also switch this with the speaker button.', v => { S.settings.sound = v; if (!v){ S.settings.music = false; SND.stop(); SND.loop(false); } save(); grownups(); if (v){ SND.prime(); SND.fx('goal'); } }),
       sw('sw-cv', S.settings.cvoice !== false, 'Cuffin’s voice', 'The recorded Cuffin lines.', v => { S.settings.cvoice = v; if (!v) VOICE.stop(); save(); grownups(); }),
       sw('sw-mv', S.settings.mvoice !== false, 'The Mirror’s voice', 'The recorded Mirror lines.', v => { S.settings.mvoice = v; if (!v) VOICE.stop(); save(); grownups(); }),
+      remindBlock(),
       sw('sw-music', S.settings.music, 'Music', 'Story fanfare, chapter sting, crowning anthem, match groove.', v => { S.settings.music = v; if (v) S.settings.sound = true; save(); grownups(); if (!v){ SND.stop(); SND.loop(false); } else { SND.prime(); SND.tune('win'); } }),
       h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:'Previews' }), h('span', { class:'small muted', text:'These do not change any progress.' }))),
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => intro(() => grownups()) }, 'The story'), h('button', { class:'btn alt small', type:'button', onclick:() => chapter(() => grownups()) }, 'Today’s chapter'), h('button', { class:'btn alt small', type:'button', onclick:() => ceremony(true, () => grownups()) }, 'The crowning')));

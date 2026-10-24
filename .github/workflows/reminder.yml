@@ -1,0 +1,23 @@
+name: 4pm reminder
+on:
+  schedule:
+    - cron: '0 15 * * *'   # 4pm UK in summer time
+    - cron: '0 16 * * *'   # 4pm UK in winter
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Send a test now, even if Aaron has played (yes/no)'
+        default: 'no'
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save firebase-admin@12
+      - run: node scripts/remind.mjs
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FORCE: ${{ github.event.inputs.force == 'yes' && '1' || '' }}
