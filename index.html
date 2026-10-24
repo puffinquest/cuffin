@@ -353,7 +353,7 @@ svg.ic{width:1.15em;height:1.15em;fill:currentColor;flex:none;vertical-align:-.2
 }
 
 /* grown-ups */
-.subtabs{display:flex;gap:4px;overflow-x:auto;flex:none;padding-bottom:2px}
+.subtabs{display:flex;flex-wrap:wrap;gap:4px;flex:none;padding-bottom:2px}
 .subtabs button{flex:none;border:2px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:700;font-size:.8rem;color:var(--muted)}
 .subtabs button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .set{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line)} .set:first-child{border-top:0}
@@ -455,7 +455,7 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
   .float{animation:float 2.6s ease-in-out infinite} @keyframes float{50%{transform:translateY(-8px)}}
   .tantrum{animation:tantrum .35s ease-in-out 6} @keyframes tantrum{25%{transform:rotate(-9deg) translateX(-6px)}75%{transform:rotate(9deg) translateX(6px)}}
   .crowndrop{animation:crowndrop 1.1s cubic-bezier(.3,1.5,.5,1) .3s both} @keyframes crowndrop{0%{transform:translate(-50%,-260%) rotate(-30deg)}100%{transform:translateX(-50%)}}
-  .confetti i{animation:conf 2.8s linear forwards} @keyframes conf{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:1;transform:translateY(760px) rotate(720deg)}}
+  .confetti i{animation:conf 2.8s linear forwards} @keyframes conf{0%{opacity:1;transform:translateY(0) rotate(0)}85%{opacity:1}100%{opacity:0;transform:translateY(110vh) rotate(720deg)}}
   .wobble{animation:wob .7s ease-in-out} @keyframes wob{25%{transform:rotate(-8deg) scale(1.1)}75%{transform:rotate(8deg) scale(1.1)}}
   .ball{animation:pulse 1.6s ease-in-out infinite} @keyframes pulse{50%{transform:scale(1.06)}}
   .banner,.res{animation:popin .4s ease-out} @keyframes popin{0%{transform:scale(.85);opacity:0}100%{transform:none;opacity:1}}
@@ -513,6 +513,9 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .stuck{border:2px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-weight:700;font-size:.85rem;color:var(--muted)}
 .cue span{font-size:.95rem;line-height:1.3}
 .peek svg{width:22px;height:22px}
+.slide .cert p,.cert p{color:#0B1533} .slide .cert .t{color:#D7263D}
+.slots.win .slot{border-color:var(--win)!important;background:var(--win-soft)!important;color:var(--ink)}
+@media (max-height:700px){ .rv:has(.role.no) .m{display:none} .rv .m{font-size:.74rem} }
 </style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -554,5 +557,5 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=d193a00ef0"></script>
+<script src="app.js?v=7dee063363"></script>
 </body></html>
