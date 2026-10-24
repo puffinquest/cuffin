@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "f5558186d7";
+const APPV = "d193a00ef0";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -952,6 +952,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
     else note = 'It stays on the tricky list for now.';
   }
   if (fishDone != null) pts = fishDone; else { R.points += pts; S.points += pts; }
+  { const nb = checkBadges(); if (nb.length) R.newBadges = (R.newBadges || []).concat(nb); }   // earned the moment it happens, celebrated at full time
   if (custard) line = say('custard');
   return { pts, line, note, lock, custard };
 }
@@ -1663,7 +1664,7 @@ function finishRound(){
   S.last = today(); snapshot();
   const crowned = !S.leader && allDone() && S.points > S.race.mf;
   if (crowned) S.leader = { d:today(), a:S.points, m:S.race.mf };
-  const badges = checkBadges(), prizes = [], m = masteredCount();
+  const badges = (R.newBadges || []).concat(checkBadges()), prizes = [], m = masteredCount();
   for (const p of S.prizes) if (!p.announced && m >= p.at){ p.announced = true; prizes.push(p); }
   save();
   const x = { acc, stars, bonus, badges, prizes, round:R };
@@ -2071,6 +2072,7 @@ function home(greeting){
   if (!S.intro) return intro(() => { S.intro = true; S.lastVisit = visitSnap(); save(); home(); });
   if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); home(); }); }
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
+  { const nb = checkBadges(); if (nb.length){ save(); toast('🏅 New badge: ' + nb.map(b => b.n).join(', ')); } }   // catch up on badges earned in an unfinished match
   autoDaily();
   let greet = greeting || null;
   if (!home.greeted && S.stats.answered){ home.greeted = true; if (VOICE.play('c02')) greet = VO.c02.replace('Aaron', S.name); }
