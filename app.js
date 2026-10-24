@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "41eb5a11e2";
+const APPV = "bc2df5a5bc";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -594,7 +594,7 @@ const setBase = v => { try { localStorage.setItem(BASEKEY, String(v || 0)); } ca
 /* what the family copy looked like when this device last agreed with it: lets a merge add up both devices' gains */
 const BASESKEY = KEY + '-basestate';
 const getBaseState = () => { try { return JSON.parse(localStorage.getItem(BASESKEY) || 'null'); } catch (e) { return null; } };
-function setBaseAll(o){ setBase(o.upd || 0); try { localStorage.setItem(BASESKEY, JSON.stringify({ points:o.points || 0, custard:o.custard || 0, stats:o.stats || {}, race:{ mf:(o.race || {}).mf || 0, mm:(o.race || {}).mm || 0 } })); } catch (e) {} }
+function setBaseAll(o){ setBase(o.upd || 0); try { localStorage.setItem(BASESKEY, JSON.stringify({ points:o.points || 0, custard:o.custard || 0, stats:o.stats || {}, race:{ mf:(o.race || {}).mf || 0, mm:(o.race || {}).mm || 0 }, tstat:o.tstat || {} })); } catch (e) {} }
 const roundKey = x => x.id || (x.d + '|' + x.a + '|' + x.r + '|' + x.n);
 /* two devices played while apart: add up what each one gained since they last agreed, so no answers are lost */
 function mergeStates(a, b, base){
@@ -616,6 +616,8 @@ function mergeStates(a, b, base){
   const bl = {}; ((r.book || {}).list || []).concat((o.book || {}).list || []).forEach(e => { const c = bl[e.k]; bl[e.k] = c ? Object.assign({}, c, e, { ok:c.ok || e.ok, pinky:c.pinky || e.pinky, chk:c.chk || e.chk, s:e.s || c.s, o:e.o || c.o }) : e; });
   o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
   o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
+  o.tstat = {}; for (const k of new Set(Object.keys(a.tstat || {}).concat(Object.keys(r.tstat || {})))){ const x = (a.tstat || {})[k] || [0, 0], y = (r.tstat || {})[k] || [0, 0], z = base && base.tstat && base.tstat[k]; o.tstat[k] = [0, 1].map(i => add(x[i], y[i], z ? z[i] : 0)); }
+  o.tstatFrom = [a.tstatFrom, r.tstatFrom].filter(Boolean).sort()[0] || '';
   if (!o.leader && r.leader) o.leader = r.leader;
   o.intro = o.intro || r.intro;
   o.upd = Math.max(o.upd || 0, r.upd || 0) + 1;
@@ -870,14 +872,26 @@ function checkBadges(){
 
 /* ---------- round engine ---------- */
 let R = null, FORCE = null;
+/* spaced review: a word's gap grows each new day he gets it right (1, 2, 4, 8… days; faster once mastered), and resets to tomorrow after a miss */
+function schedule(r, ok, hinted){
+  const t = today();
+  if (!ok){ r.iv = 1; r.due = addDays(t, 1); r.sd = t; return; }   // a miss: back tomorrow, even if the retry later today is right
+  if (hinted){ if (!r.iv) r.iv = 1; r.due = addDays(t, 1); return; }
+  if (r.sd === t) return;   // already stretched today
+  r.sd = t;
+  r.iv = !r.iv ? 1 : Math.min(60, Math.max(r.iv + 1, Math.round(r.iv * (isMasteredRec(r) ? 2.5 : 2))));
+  r.due = addDays(t, r.iv);
+}
+const dueIn = r => r && r.due ? -daysSince(r.due) : null;   // 0 = due today, negative = overdue
 function weight(x){
-  const r = peek(x); let b;
+  const r = peek(x); let b; const dn = dueIn(r);
   if (!r || r.seen === 0) b = 3;
   else if (r.wob) b = 7;
-  else if (isMasteredRec(r)) b = daysSince(r.last) >= 7 ? 1.5 : 0.35;
+  else if (isMasteredRec(r)) b = dn == null ? (daysSince(r.last) >= 7 ? 1.5 : 0.35) : dn <= 0 ? 3 + Math.min(4, -dn * .5) : 0.12;   // due mastered words come back; others rest
   else if (r.streak >= 3) b = (r.dy || []).includes(today()) && (r.ty || []).length >= 2 ? 0.3 : 6;   // waiting for another day / ready to lock in
   else if (r.miss > 0 && r.streak === 0) b = 7;
   else b = 4;
+  if (r && r.seen && !isMasteredRec(r) && !r.wob && dn != null){ if (dn <= 0) b *= 1.4; else if (b < 7) b *= .6; }   // learning words: due ones first
   return x.card ? b * 1.6 : b;
 }
 function pickWords(n, pool){
@@ -903,6 +917,8 @@ function startRound2(kind){
   const B = S.book && S.book.next || [], n = Math.min(10, pool.length);
   const first = kind === 'tricky' ? [] : pool.filter(x => B.includes(pk(x))).slice(0, 4);
   if (first.length && S.book) S.book.next = B.filter(k => !first.some(x => pk(x) === k));
+  const due = shuffle(pool.filter(x => !first.includes(x) && (() => { const r = peek(x), d = dueIn(r); return r && r.seen && d != null && d <= 0; })())).sort((a, b) => dueIn(peek(a)) - dueIn(peek(b))).slice(0, Math.min(3, n - first.length));   // up to 3 due reviews, most overdue first
+  first.push(...due);
   const rest = pickWords(n - first.length, pool.filter(x => !first.includes(x)));
   R = newRound(shuffle(first).concat(rest), kind);
   R.rank0 = rankInfo(masteredCount()).i; R.lastD = S.points - S.race.mf; R.badges0 = Object.keys(S.badges || {}).length;
@@ -973,7 +989,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
       if (r.wob){ r.wob = false; }
       else if (!r.m && meetsMastery(r, !!q.w.card)) r.m = true;
       const now = isMasteredRec(r);
-      if (now && !was){ lock = 'mastered'; line = say('mastered'); R.mastered.push(q.w.w); }
+      if (now && !was){ lock = 'mastered'; line = say('mastered'); R.mastered.push(q.w.w); r.md = today(); }
       else if (!now && r.streak >= 3){ lock = (q.w.card && !r.ty.includes('sim')) ? 'needsim' : r.ty.length < 2 ? 'type' : 'day'; line = say(lock === 'day' ? 'lockin' : lock === 'needsim' ? 'needSim' : 'needType'); }
       else line = (R.streak === 3 || R.streak === 5 || R.streak === 10) ? say('streak', { n:R.streak }) : say(item.retry ? 'fixed' : 'right');
     }
@@ -988,6 +1004,8 @@ function scoreItem(item, q, ok, fishDone, hinted){
     else note = 'It stays on the tricky list for now.';
   }
   if (fishDone != null) pts = fishDone; else { R.points += pts; S.points += pts; }
+  schedule(r, ok, hinted && ok);
+  { if (!S.tstatFrom) S.tstatFrom = today(); S.tstat = S.tstat || {}; const ts = S.tstat[q.type] || (S.tstat[q.type] = [0, 0]); ts[1]++; if (ok) ts[0]++; }
   raceFix();
   { const nb = checkBadges(); if (nb.length) R.newBadges = (R.newBadges || []).concat(nb); }   // earned the moment it happens, celebrated at full time
   if (custard) line = say('custard');
@@ -1691,7 +1709,7 @@ function snapshot(){
 /* leaving early still counts today's answers towards the streak and goal, and celebrates any badge */
 function quitMatch(){
   SND.loop(false); closeSheet();
-  const n = (R.results || []).filter(Boolean).length, nb = R.newBadges || [];
+  const n = (R.results || []).reduce((a, v, i) => a + (v && R.queue[i] && !R.queue[i].retry ? 1 : 0), 0), nb = R.newBadges || [];
   if (n){
     S.rounds.push({ id:Date.now().toString(36) + rnd(1e6), d:today(), r:R.firstTry, n, a:R.points, m:R.mfish, part:true }); if (S.rounds.length > 200) S.rounds.shift();
     raceFix(); S.last = today(); snapshot(); save();
@@ -2097,6 +2115,38 @@ function narrateLines(lines, delay){
   setTimeout(() => { if (tok !== NARR.tok) return; VOICE.whenIdle(() => speakLines(lines.map(tidy).filter(Boolean), tok)); }, delay || 600);
 }
 
+/* ---------- Grown-ups → Insights: where Aaron is strong and where he struggles ---------- */
+const TYPE_NAMES = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spelling', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite' };
+function ago(d){ const n = daysSince(d); return n >= 999 ? 'never' : n === 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago'; }
+function whenDue(r){ const dn = dueIn(r); if (dn == null) return ''; return dn < 0 ? 'review overdue' : dn === 0 ? 'review today' : dn === 1 ? 'review tomorrow' : 'review in ' + dn + ' days'; }
+function insightsPanel(){
+  const items = allItems().map(x => ({ x, r:peek(x) }));
+  const c = counts(), seenL = items.filter(o => o.r && o.r.seen);
+  const dueToday = seenL.filter(o => { const d = dueIn(o.r); return d != null && d <= 0; }).length;
+  const dueWeek = seenL.filter(o => { const d = dueIn(o.r); return d != null && d > 0 && d <= 7; }).length;
+  const tricky = seenL.filter(o => o.r.miss > 0 && o.r.seen >= 2)
+    .map(o => Object.assign(o, { rate:o.r.miss / o.r.seen }))
+    .sort((a, b) => (b.r.wob ? 1 : 0) - (a.r.wob ? 1 : 0) || b.rate - a.rate || b.r.miss - a.r.miss).slice(0, 10);
+  const recent = seenL.filter(o => o.r.md && daysSince(o.r.md) <= 6 && isMasteredRec(o.r)).map(o => o.x.w);
+  const R7 = (S.rounds || []).filter(x => daysSince(x.d) <= 6), Rold = (S.rounds || []).filter(x => daysSince(x.d) > 6 && daysSince(x.d) <= 27);
+  const pct = rs => { const n = rs.reduce((a, x) => a + (x.n || 0), 0); return n ? Math.round(100 * rs.reduce((a, x) => a + (x.r || 0), 0) / n) : null; };
+  const p7 = pct(R7), pOld = pct(Rold);
+  const cell = (k, v, sub) => h('div', { class:'st' }, h('div', { class:'k', text:k }), h('div', { class:'v', text:String(v) }), sub ? h('div', { class:'d', style:'color:var(--muted)', text:sub }) : null);
+  const ts = S.tstat || {};
+  const typeRows = Object.keys(TYPE_NAMES).filter(t => ts[t] && ts[t][1]).map(t => { const [ok, n] = ts[t], p = Math.round(100 * ok / n);
+    return h('div', { class:'irow' }, h('span', { class:'iname', text:TYPE_NAMES[t] }), h('span', { class:'ibar', 'aria-hidden':'true' }, h('i', { style:'width:' + p + '%;background:' + (p >= 80 ? 'var(--win)' : p >= 60 ? 'var(--gold)' : 'var(--miss)') })), h('b', { class:'ipct', text:p + '%' }), h('span', { class:'small muted', text:'of ' + n })); });
+  return h('div', { class:'insights' },
+    h('div', { class:'stat4' }, cell('MASTERED', c.mastered, 'of ' + allItems().length), cell('LEARNING', c.learning + c.lock, c.new + ' not started'), cell('DUE TODAY', dueToday, dueWeek + ' more this week'),
+      cell('RIGHT FIRST TIME', p7 == null ? '–' : p7 + '%', p7 == null ? 'last 7 days' : pOld == null ? 'last 7 days' : (p7 > pOld ? '▲ ' : p7 < pOld ? '▼ ' : '= ') + 'was ' + pOld + '% before')),
+    h('h3', { class:'ih', text:'Words he finds hardest' }),
+    tricky.length ? h('div', { class:'saves' }, tricky.map(o => h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:o.x.w }),
+      h('span', { class:'muted', text:'Wrong ' + o.r.miss + ' of ' + o.r.seen + ' · seen ' + ago(o.r.last) + (whenDue(o.r) ? ' · ' + whenDue(o.r) : '') })),
+      h('span', { class:'you', title:o.r.wob ? 'Was mastered, slipped once' : isMasteredRec(o.r) ? 'Mastered' : 'Still learning', text:o.r.wob ? '🟠 wobbly' : isMasteredRec(o.r) ? '✅' : '📘' })))) : h('p', { class:'muted small', text:'No tricky words yet. Words show here once he has missed them.' }),
+    typeRows.length ? [h('h3', { class:'ih', text:'By question type' }), h('div', { class:'itypes' }, typeRows)] : null,
+    recent.length ? [h('h3', { class:'ih', text:'Mastered this week' }), h('p', { class:'small', text:recent.join(', ') })] : null,
+    h('p', { class:'small muted', text:(S.tstatFrom ? 'Question-type figures count from ' + longDate(S.tstatFrom) + '. ' : '') + '📘 learning · ✅ mastered · 🟠 wobbly (slipped once after mastering).' }));
+}
+
 /* ---------- Home: the scoreboard and one big button ---------- */
 function homeLine(){
   const now = new Date();
@@ -2416,7 +2466,7 @@ function grownups(){
     setTimeout(() => inp.focus(), 30); return;
   }
   const nb = bookStore().list.filter(e => e.d === today()).length;
-  const tabs = [['play','Play'],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
+  const tabs = [['play','Play'],['insights','Insights'],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
   const bar = h('div', { class:'subtabs', role:'group', 'aria-label':'Grown-ups sections' }, tabs.map(([id, t]) => h('button', { type:'button', 'aria-pressed':String(gTab === id), onclick:() => { gTab = id; grownups(); } }, t)));
   const panel = h('div', { class:'panel grow', style:'overflow-y:auto' });
   const c = counts(), T = allItems().length;
@@ -2430,6 +2480,8 @@ function grownups(){
       sw('sw-music', S.settings.music, 'Music', 'Story fanfare, chapter sting, crowning anthem, match groove.', v => { S.settings.music = v; if (v) S.settings.sound = true; save(); grownups(); if (!v){ SND.stop(); SND.loop(false); } else { SND.prime(); SND.tune('win'); } }),
       h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:'Previews' }), h('span', { class:'small muted', text:'These do not change any progress.' }))),
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => intro(() => grownups()) }, 'The story'), h('button', { class:'btn alt small', type:'button', onclick:() => chapter(() => grownups()) }, 'Today’s chapter'), h('button', { class:'btn alt small', type:'button', onclick:() => ceremony(true, () => grownups()) }, 'The crowning')));
+  } else if (gTab === 'insights'){
+    put(panel, insightsPanel());
   } else if (gTab === 'book'){
     const L = bookStore().list.slice(0, 120), days = {};
     L.forEach(e => { (days[e.d] = days[e.d] || []).push(e); });
@@ -2483,6 +2535,7 @@ function grownups(){
     put(panel, h('div', { class:'prose' },
       h('div', { class:'row', style:'gap:6px' }, h('span', { class:'chip', text:'Mastered ' + c.mastered + '/' + T }), h('span', { class:'chip', text:'Nearly there ' + c.lock }), h('span', { class:'chip', text:'Accuracy ' + (S.stats.answered ? accuracy() + '%' : '–') })),
       h('p', {}, h('b', { text:'Mastered: ' }), '3 right in a row, in 2 question types, on 2 different days, no hints. A miss knocks the run back by 2.'),
+      h('p', {}, h('b', { text:'Review timing: ' }), 'each word has its own review date. Every new day he gets it right, the gap grows (1, 2, 4, 8 days…, faster once mastered, up to 2 months). A miss brings it back tomorrow. Each match starts with up to 3 words that are due, most overdue first.'),
       h('p', {}, h('b', { text:'Cards: ' }), 'must also include a fully right similar & opposite answer. After 2 right, the game steers the card to that test.'),
       h('p', {}, h('b', { text:'Wobbly: ' }), 'a mastered word that is missed stops counting until he gets it right again; two misses and it must be re-earned.'),
       h('p', {}, h('b', { text:'Vocabulary book: ' }), 'a miss or “not sure” asks him to write the word down before carrying on. At full time a Book check shows the meaning and he types the word from his book (+1 fish each). Written words come first in the next match.'),
