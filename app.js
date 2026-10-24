@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "565b25c5d9";
+const APPV = "82e0d311e9";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -1169,8 +1169,7 @@ function familyScreen(done){
     h('form', { style:'display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px', onsubmit:ev => {
       ev.preventDefault(); const c = inp.value.trim().toUpperCase();
       if (famId(c).length < 12){ msg.style.color = 'var(--miss)'; msg.textContent = 'That doesn’t look like a family code. It looks like PUFFIN-XXXX-XXXX.'; return; }
-      setFamily(c); SND.prime(); done(); } }, inp, go, msg),
-    h('button', { class:'linkbtn', type:'button', onclick:() => { setFamily('LOCAL'); done(); } }, 'Play on this device only'))], null);
+      setFamily(c); SND.prime(); done(); } }, inp, go, msg))], null);
   setTimeout(() => inp.focus(), 60);
 }
 
