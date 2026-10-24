@@ -347,7 +347,7 @@ svg.ic{width:1.15em;height:1.15em;fill:currentColor;flex:none;vertical-align:-.2
 @media (prefers-reduced-motion: no-preference){ .stopin{animation:popin .35s ease-out} .stopimg{animation:hop .8s ease-out 2} .ring .pen{animation:wob .6s ease-in-out infinite} @keyframes hop{35%{transform:translateY(-10px) rotate(-4deg)}} @keyframes wob{25%{transform:rotate(-12deg)}75%{transform:rotate(12deg)}} }
 
 /* tablets: bigger, roomier */
-@media (min-width:700px) and (min-height:700px){
+@media (min-width:700px) and (min-height:950px){
   .app,.tabbar nav,.sheet{zoom:1.22}
   .app,.tabbar nav{max-width:600px}
 }
@@ -513,7 +513,7 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .stuck{border:2px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-weight:700;font-size:.85rem;color:var(--muted)}
 .cue span{font-size:.95rem;line-height:1.3}
 .peek svg{width:22px;height:22px}
-.slide .cert p,.cert p{color:#0B1533} .slide .cert .t{color:#D7263D}
+.slide .cert,.slide .cert p,.slide .cert div,.slide .cert span,.cert p{color:#0B1533} .slide .cert .t{color:#D7263D}
 .slots.win .slot{border-color:var(--win)!important;background:var(--win-soft)!important;color:var(--ink)}
 @media (max-height:700px){ .rv:has(.role.no) .m{display:none} .rv .m{font-size:.74rem} }
 </style>
@@ -557,5 +557,5 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=7dee063363"></script>
+<script src="app.js?v=41eb5a11e2"></script>
 </body></html>

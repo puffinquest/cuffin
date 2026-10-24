@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "7dee063363";
+const APPV = "41eb5a11e2";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -543,6 +543,7 @@ const isBlank = o => !o || ((!o.stats || !o.stats.answered) && !(o.history && o.
 function migrate(o, restoring){
   const f = fresh();
   if (!o.fishV){ o.points = Math.round((o.points || 0) / 10); (o.history || []).forEach(x => { x.p = Math.round((x.p || 0) / 10); }); o.fishV = 1; }
+  if (!o.race && o.mv === 2) o.race = { mf:0, mm:0, ms:0 };   // a current save with a damaged race: don't treat it as a pre-race save
   if (!o.race){
     if (restoring){
       const m = Object.values(o.prog || {}).filter(r => r && r.streak >= 3).length;
@@ -558,7 +559,9 @@ function migrate(o, restoring){
   if (o.mv !== 2){ for (const k in (o.prog || {})){ const r = (o.prog || {})[k]; if (r){ r.ty = r.ty || []; r.dy = r.dy || []; r.m = r.streak >= 3 && r.ty.length >= 2 && r.dy.length >= 2 && (!k.startsWith('card:') || r.ty.includes('sim')); } } o.mv = 2; }
   for (const k in f) if (o[k] === undefined || o[k] === null) o[k] = f[k];
   for (const k of ['stats', 'race', 'settings', 'book', 'badges', 'prog']) if (typeof o[k] !== 'object' || Array.isArray(o[k])) o[k] = f[k];
-  if (!Array.isArray(o.history)) o.history = []; if (!Array.isArray(o.rounds)) o.rounds = []; if (!Array.isArray(o.words) || !o.words.length) o.words = f.words; if (!Array.isArray(o.prizes)) o.prizes = []; if (!Array.isArray(o.book.list)) o.book.list = []; if (!Array.isArray(o.book.next)) o.book.next = [];
+  if (!Array.isArray(o.history)) o.history = []; o.history = o.history.filter(x => x && typeof x === 'object' && x.d);
+  if (Array.isArray(o.rounds)) o.rounds = o.rounds.filter(x => x && typeof x === 'object');
+  if (o.settings && !o.settings.sound) o.settings.music = false; if (!Array.isArray(o.rounds)) o.rounds = []; if (!Array.isArray(o.words) || !o.words.length) o.words = f.words; if (!Array.isArray(o.prizes)) o.prizes = []; if (!Array.isArray(o.book.list)) o.book.list = []; if (!Array.isArray(o.book.next)) o.book.next = [];
   for (const k in f.stats) if (o.stats[k] === undefined) o.stats[k] = 0;
   for (const k in f.race) if (o.race[k] === undefined) o.race[k] = 0;
   for (const k in f.settings) if (o.settings[k] === undefined) o.settings[k] = f.settings[k];
@@ -648,7 +651,7 @@ async function decide(remote, first){
   /* a Restart, Restore or Go back is deliberate: the newest one wins outright */
   const re = remote.epoch || 0, le = S.epoch || 0;
   if (re !== le){
-    if (le > re) return write(remote);
+    if (le > re){ if (answered(remote) > answered(S)) keepCopy(remote, 'Before the restart reached the family'); return write(remote); }
     if (inRoundNow()){ SYNC.pending = true; return setSync('cloud'); }
     return adopt(remote, first, null, 'Before a restart on another device');
   }
@@ -666,8 +669,10 @@ async function decide(remote, first){
   if (remoteChanged){ if (inRoundNow() && localChanged){ SYNC.pending = true; return setSync('cloud'); } return adopt(remote, first); }
   return write(remote);
 }
-async function write(remote){
+async function write(remote, again){
   if (isBlank(S) && remote && !isBlank(remote) && !((S.epoch || 0) > (remote.epoch || 0))) return setSync('cloud');   // never let a fresh start overwrite real progress
+  /* check nobody else saved since we looked; if they did, decide again rather than overwrite them */
+  if (!again){ try { const now = await fetchRemote(); if ((now && now.upd || 0) !== (remote && remote.upd || 0)) return decide(now, false); } catch (e) {} }
   setSync('saving');
   const snap = JSON.parse(JSON.stringify(S));
   for (let t = 0; t < 3; t++){
@@ -826,7 +831,7 @@ function mirrorMastery(ok){
   else if (!ok && r.mm > c.aM && Math.random() < .5) r.mm--;
   r.mm = Math.max(0, Math.min(r.mm, raceCaps().mastMax));
 }
-function raceFix(){ const c = raceCaps(); if (c.end) S.race.mf = Math.min(S.race.mf, Math.max(0, c.A - 1)); S.race.mm = Math.min(S.race.mm, c.mastMax); }
+function raceFix(){ const c = raceCaps(); S.race.mf = Math.min(S.race.mf, c.A + LEAD_CAP); if (c.end) S.race.mf = Math.min(S.race.mf, Math.max(0, c.A - 1)); S.race.mm = Math.min(S.race.mm, c.mastMax); }
 const allDone = () => { const T = allItems().length; return T > 0 && masteredCount() >= T; };
 function misspell(w){
   const s = [...w], V = 'aeiou', tries = [
@@ -976,7 +981,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
   } else {
     r.miss++; r.streak = Math.max(0, r.streak - 2); R.streak = 0; R.missed.push(q.w.w);
     if (r.m && !r.wob){ r.wob = true; lock = 'wobble'; }   // one slip on a mastered word: needs one right answer to re-secure
-    else { r.m = false; r.wob = false; }
+    else { if (r.m){ r.ty = []; r.dy = []; } r.m = false; r.wob = false; }   // a second slip on a mastered word: earn it again
     line = say('wrong'); R.results[R.idx] = 'bad';
     if (!item.retry){ queueRetry(item); note = 'We will come back to this one in a moment.'; }
     else if (item.tries < 2){ queueRetry(item); note = 'One more go at this later.'; }
@@ -1000,7 +1005,7 @@ document.addEventListener('keydown', e => {
 const SND = (() => {
   let ac = null, out, sfxBus, musBus, piece = null, loopTimer = null, loopAt = 0, loopStep = 0;
   const wantS = () => !!(S && S.settings && S.settings.sound);
-  const wantM = () => !!(S && S.settings && S.settings.music);
+  const wantM = () => !!(S && S.settings && S.settings.sound && S.settings.music);
   function ctx(){
     if (!ac){
       const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
@@ -1691,9 +1696,8 @@ function quitMatch(){
     S.rounds.push({ id:Date.now().toString(36) + rnd(1e6), d:today(), r:R.firstTry, n, a:R.points, m:R.mfish, part:true }); if (S.rounds.length > 200) S.rounds.shift();
     raceFix(); S.last = today(); snapshot(); save();
   }
+  const party = n ? matchCelebrations({ rank0:R.rank0 }, nb) : [];
   R = null;
-  const party = nb.map(b => ({ kicker:'NEW BADGE', art:h('div', { class:'celbadge' }, icon(b.ic)), title:b.n, sub:b.d, voice:VOICE.pick('c27'), line:VOICE.can('c27') ? VO.c27 : 'A badge. The puffin community does not hand these out lightly.' }));
-  if (n && S.goal !== today() && todayCount() >= GOAL){ S.goal = today(); save(); }
   if (party.length){ screen = 'party'; celebrateAll(party, () => home(say('quit'))); } else home(say('quit'));
 }
 function finishRound(){
@@ -1901,7 +1905,7 @@ function soundPanel(){
     const b = h('button', { class:'switch', type:'button', role:'switch', 'aria-checked':String(S.settings[key] !== false), 'aria-label':label, onclick:() => {
       const v = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', String(v)); S.settings[key] = v;
       if (key === 'sound' && !v){ VOICE.stop(); stopNarr(); SND.stop(); SND.loop(false); S.settings.music = false; const mb = document.querySelector('.sheet [aria-label="Music"]'); if (mb) mb.setAttribute('aria-checked', 'false'); }
-      if (key === 'music' && v && !S.settings.sound){ S.settings.sound = true; const sb = document.querySelector('.sheet [aria-label="Sound effects"]'); if (sb) sb.setAttribute('aria-checked', 'true'); }
+      if (key === 'music' && v && !S.settings.sound){ S.settings.sound = true; const sb = document.querySelector('.sheet [aria-label="All sounds"]'); if (sb) sb.setAttribute('aria-checked', 'true'); }
       if (key === 'music' && !v){ SND.stop(); SND.loop(false); }
       if (key === 'music' && v && R && R.queue && R.queue.length) SND.loop(true);
       if ((key === 'cvoice' || key === 'mvoice') && !v) VOICE.stop();
