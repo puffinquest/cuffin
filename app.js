@@ -1,0 +1,2194 @@
+(function(){
+'use strict';
+const APPV = "e69fdca308";
+/* ---------- tiny DOM helpers ---------- */
+const $ = (s, r=document) => r.querySelector(s);
+function h(tag, props, ...kids){
+  const e = document.createElement(tag);
+  if (props) for (const k in props){
+    const v = props[k];
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.slice(0,2) === 'on') e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, '');
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const c of kids.flat(Infinity)){
+    if (c == null || c === false) continue;
+    e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return e;
+}
+const SVGNS = 'http://www.w3.org/2000/svg';
+function sv(tag, attrs, ...kids){
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return e;
+}
+function icon(name){
+  const s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('class', 'ic'); s.setAttribute('aria-hidden', 'true');
+  const u = document.createElementNS(SVGNS, 'use'); u.setAttribute('href', '#i-' + name);
+  s.append(u); return s;
+}
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const rnd = n => Math.floor(Math.random()*n);
+const norm = w => String(w).trim().toLowerCase();
+
+/* ---------- Cuffin and the Mirror: photos and voices ---------- */
+const IMG = { hello:'img/cuffin-front.webp', ask:'img/cuffin-front.webp', right:'img/cuffin-side.webp', wrong:'img/cuffin-lie.webp' };
+const MIMG = { ask:'img/mirror-side.webp', smug:'img/mirror-front.webp', sad:'img/mirror-lie.webp' };
+const SAY = {
+  first:[
+    "I am Cuffin. I have crossed the Atlantic eleven times. Twelve, if you count the one that went wrong. Giles is retiring, and somebody sensible must lead the puffins. That is me. With your help. Mostly your help."
+  ],
+  hello:[
+    "Welcome back, {name}. The puffin community has been expecting you.",
+    "You took your time. I flew through a hurricane to be here. It was extremely inconvenient.",
+    "Ah. {name}. Somebody has to keep an eye on the Mirror.",
+    "Good. You are here. We have a network, and the network says the Mirror has been practising his bow."
+  ],
+  aheadHome:[
+    "We are ahead. Do not tell the Mirror. He will sulk. He will sulk anyway.",
+    "Ahead of the Mirror. The puffin community approves. Keep flapping.",
+    "We are in front. I would like that noted. Officially."
+  ],
+  behindHome:[
+    "The Mirror is in front. Do not panic. Four in. Four hold. Four out. Then we catch him.",
+    "He is ahead for now. Eventually still counts. Let us go and get some fish.",
+    "The Mirror is gloating. It is not a good look on him. Shall we fix it?"
+  ],
+  levelHome:[
+    "Level. Beak and beak. The puffin community calls this a proper race.",
+    "Dead level with the Mirror. One good round and the crown starts looking at us."
+  ],
+  leaderHome:[
+    "Leader of the Puffin Community. It is in our literature now. Permanently.",
+    "Giles sends his regards. He is on a rock, eating sprats. He seems very happy.",
+    "We won. The Mirror is still sulking. I have offered him a fish. He said it was the wrong shade of silver."
+  ],
+  birthday:["Happy birthday, {name}. And to me. The puffin community sent fish."],
+  streakDays:[
+    "{n} days in a row. The puffin community has noted this. Officially.",
+    "{n} days running. That is what a migration looks like."
+  ],
+  start:[
+    "We will test you. The puffin community takes vocabulary seriously.",
+    "Four in. Four hold. Four out. Right. Ready?",
+    "Ten questions. The Mirror is already polishing his beak. Let us disappoint him."
+  ],
+  right:[
+    "Correct. The puffin community notes it with approval.",
+    "Correct. I would like that noted.",
+    "Precisely right. We have a network, and the network is impressed.",
+    "Yes. Exactly that. Fresh fish for the team.",
+    "Correct. I knew you knew."
+  ],
+  wrong:[
+    "Not quite. There is a gap between what happens and what you do next. You are in it. Look at the answer.",
+    "Not this time. Eventually still counts.",
+    "Don't fight the swell. Let it hold you. Read the answer, then we go again.",
+    "Not this time. The puffin community has been wrong too. Roughly twice. Look at the answer."
+  ],
+  streak:[
+    "{n} in a row. I also did well once. I would like that noted too.",
+    "{n} in a row. The puffin community is murmuring. The Mirror is sweating."
+  ],
+  retry:[
+    "Back again. A second chance. The puffin community believes in those.",
+    "Now then. Let us see if it stuck."
+  ],
+  fixed:[
+    "Fixed. That is how it works. I have already forgotten the mistake.",
+    "There it is. Forgiven instantly."
+  ],
+  know:[
+    "Before we race, a quick question between us. Do you know this word?",
+    "First things first. Do you know this one? Be honest. Nobody is counting."
+  ],
+  knowYes:[
+    "Good. I would like that noted.",
+    "Excellent. The network had a feeling you would."
+  ],
+  explain:[
+    "Right. Here is the puffin community's official explanation.",
+    "We have a network. The network says this:",
+    "Simple. Listen carefully, because I will say it once. Possibly twice."
+  ],
+  explainEnd:[
+    "Now you know it. That is how it works.",
+    "There. Stored safely in the brain. Next to the fish facts.",
+    "Got it? Good. Not sure is allowed. Not knowing for ever is not."
+  ],
+  end0:["Hard round. The sea does that. Nothing is lost: those words come back, and next time they are easier. Eventually still counts."],
+  end1:["A good start. Some words slipped away, so they will come round again. That is the plan, not the problem."],
+  end2:["Very good. I am only saying that because it is true. The puffin community agrees."],
+  end3:["Perfect. Every one, first time. I am speechless, which for a puffin is a large achievement. And no, there is still no custard in the North Atlantic."],
+  badge:["A badge. The puffin community does not hand these out lightly. Well, it does, but it was a careful kind of lightly."],
+  prize:["Official notice from the puffin community: a prize has been earned. It is outside my area. Please see Mummy or Daddy."],
+  empty:["There is nothing tricky on the list. This is either very good news, or a sign you have not started yet."],
+  quit:["Leaving mid-match is allowed. Your answers so far are saved. I will be here. So, sadly, will the Mirror."]
+};
+SAY.custard = [
+  "Five in a row. A pot of custard for the team. I have looked into it. I am still not convinced it is the same custard. The mystery continues.",
+  "Custard earned. There is no custard in the North Atlantic. I have checked. And yet, here it is. The universe is strange.",
+  "A pot of custard. The puffin community has formally given up trying to explain it. We simply accept it and carry on.",
+  "Five in a row. Floppy, warm, like custard. Which is now ours. I have questions. Nobody has answers."
+];
+const MCUSTARD = [
+  "Custard? CUSTARD? Nobody told me there was custard!",
+  "I'd have custard too if they gave it out for being fluffy.",
+  "That custard should be mine. I'm the yellowest one here. Well. My feet are.",
+  "I don't even like custard. (I love custard.)"
+];
+const GCUSTARD = [
+  "Giles has never tasted custard. He says it sounds like a rumour.",
+  "Giles has asked for custard at his leaving party. Nobody knows where to get it.",
+  "Giles believes a burrow, from the inside, feels almost exactly like custard. It is his leading theory.",
+  "A seagull claims to have seen custard near Newfoundland. Giles has asked for evidence."
+];
+const CHAPTERS = ["The Custard Question","Beak to Beak","The Puddle Plot","Fish, Fog and Custard","A Very Fluffy Problem","The Great Fish Count","Custard at Dawn","Mirror, Mirror","Rock Bottom","The Sprat Strategy","The Wobbly Words","Custard Clues","Feathers at Dawn","The Sulking Season","A Crown Too Shiny","The Custard Conspiracy","Wind, Waves and Vocabulary","The Twelfth Crossing","Snack Attack","The Final Stretch"];
+SAY.needSim = ["Three in a row. To master a card, you must beat it in a similar and opposite question. It is coming."];
+SAY.hinted = [
+  "A hint, well used. Fish for the team. It will not count towards mastering it, though. The puffin community is strict about that.",
+  "Correct, with a little help. Next time, try it without the hint and it starts to count."
+];
+SAY.lockin = [
+  "Three in a row. Come back on another day and get it right again, and it is locked in for good.",
+  "Nearly mastered. The puffin community needs to see it on another day. That is how we know it has stuck."
+];
+SAY.needType = ["Three in a row. Now get it right in a different kind of question and it is mastered."];
+SAY.mastered = ["Mastered. Locked in. The puffin community has written it down in ink.", "That word is mastered. Officially. I would like that noted."];
+SAY.since = {
+  won:["Last time, we out-fished the Mirror. He has been sulking ever since. Let us give him more to sulk about.", "Good last session. The Mirror spent the night practising in front of a puddle."],
+  lost:["Last time, the Mirror sneaked a few more fish than us. Do not worry. Four in. Four hold. Four out. Today we get them back.", "The Mirror had a good day last time. He will not stop talking about it. Shall we stop him?"],
+  level:["Last time it was level. Beak and beak. Today somebody breaks away.", "Dead level last time. The puffin community is on the edge of its rock."]
+};
+const ASAY = [
+  "Mirror, you are about as scary as a wet sock.",
+  "I've got the brain. Cuffin's got the feathers. You've got... a reflection.",
+  "Polish your trophy cabinet, Mirror. It's going to stay empty.",
+  "Bring it on, fluff-ball.",
+  "I don't need luck. I've got vocabulary.",
+  "Cuffin, hold my fish.",
+  "Every word I learn is another fish in our bucket.",
+  "Mirror, mirror on the wall, who's the cleverest of them all? Not you.",
+  "See you at the finish line. I'll be the one next to the puffin in the crown.",
+  "You've been practising? Cute. So have I."
+];
+const PRE = [
+  "I've been practising all night. In front of a mirror. Obviously.",
+  "Today's the day I take the lead! I can feel it in my extremely fluffy bones.",
+  "I had my feathers blow-dried for the occasion. You can tell, can't you?",
+  "Giles told me I'm his favourite. He didn't. But he will.",
+  "I've learned a new word today: WINNER. It's spelled M-I-R-R-O-R.",
+  "Ready to lose, scruffy? I've brought a spare crown. For me."
+];
+const GILES = [
+  "Giles has started packing. He owns three rocks and one very old sprat.",
+  "Giles was seen practising his retirement nap. It went well.",
+  "Giles asked for a quiet leaving party. The Mirror has booked a brass band.",
+  "Giles polished the crown today. It took four hours and one sock.",
+  "Giles reminds everyone: the crown goes to the puffin who masters every word. No shortcuts.",
+  "Giles has written his leaving speech. It is mostly about fish.",
+  "A seagull tried on the crown. Giles has had a word with it.",
+  "Giles once knew a puffin who learned ten words a day. He would like that noted.",
+  "Giles has been spotted measuring Cuffin's head. For reasons.",
+  "Giles says the Mirror asked to borrow the crown 'just for a photo'. The answer was no."
+];
+const MSAY = {
+  right:[
+    "Ha! Correct! Obviously. I studied that word in a very shiny puddle.",
+    "Ding ding ding! The Mirror strikes again! Somebody fetch me a fish and a round of applause.",
+    "Correct, naturally. Have I mentioned I am magnificent? I shall mention it again. Magnificent.",
+    "Right AGAIN. Is it hard being this clever? Yes. Yes it is. For me.",
+    "Bullseye! Polish my beak and call me Professor.",
+    "Oh, did I get it? I did. I always do. Except when I don't. Which is hardly ever. Sometimes."
+  ],
+  wrong:[
+    "WHAT?! That question was clearly rigged. By the wind. And possibly a seagull.",
+    "I meant to do that. It is a cunning plan. You would not understand it. Neither do I.",
+    "Curses! Foiled by vocabulary!",
+    "Wrong? Me? I demand a recount. And a mirror. Mostly the mirror.",
+    "That word is spelled wrong in the dictionary. I shall be writing to them. In glitter.",
+    "Nobody saw that. Nobody saw that. Cuffin, stop writing it down.",
+    "Pah! I wasn't even trying. I was admiring my reflection in the question."
+  ],
+  sitout:[
+    "A re-do? Pfft. I'm sitting this one out. I'll just stand here looking fabulous.",
+    "Retries are for puffins who get things wrong. I wouldn't know. Wake me when it's my turn.",
+    "Not my question. I shall be over here. Sulking. Magnificently."
+  ],
+  ahead:[
+    "Look at the scoreboard! LOOK AT IT! I'm winning! Somebody take a picture!",
+    "Practise your bow, Cuffin. You'll be bowing to ME.",
+    "I've already ordered the crown. In gold. Size: magnificent.",
+    "Ahead! The crown is practically sitting on my fluffy head!"
+  ],
+  behind:[
+    "Behind? A temporary situation. Like weather. Or Cuffin's feathers.",
+    "Enjoy your little lead. I have a plan. It involves... more fish.",
+    "Don't get comfortable! The Mirror always comes back. Like a boomerang. A fluffy boomerang.",
+    "This is fine. Everything is fine. I am simply letting you win. For now. Probably."
+  ],
+  level:[
+    "Neck and neck! Beak and beak! Dramatic music, please!",
+    "Level! The tension! I may faint. Somebody fan me with a fish."
+  ],
+  roundWin:[
+    "Another round to the Mirror! Mwah-ha-ha! I'd stay for a chat, but I have a crown to try on.",
+    "Did you see me? Of course you did. Everyone always sees me. I sparkle."
+  ],
+  roundLose:[
+    "That round doesn't count. I had a feather in my eye. A very big feather.",
+    "Fine. FINE. You won that round. I am writing a strongly worded letter to the sea.",
+    "Hmph. Luck. Pure luck. And a bit of brains. Mostly luck."
+  ],
+  home:[
+    "Mwah-ha-ha! Oh, sorry. I was practising my winner's laugh.",
+    "The crown will look SO good on me. It matches my feathers.",
+    "I've never crossed the Atlantic. I've never needed to. Things come to me."
+  ],
+  entrance:[
+    "Mwah-ha-ha! Did somebody say CROWN? It's mine. It matches my feathers."
+  ],
+  custard:MCUSTARD,
+  defeat:[
+    "NOOOOO! This is an outrage! A scandal! A... a very fair result, actually, but I refuse to say so!",
+    "I demand a rematch! Best of three! Best of five hundred!",
+    "Fine! Keep your silly crown! I didn't want it anyway! (I wanted it very much.)",
+    "I'm not crying. My eyes are just... reflecting. Very hard."
+  ]
+};
+const lastSay = {};
+function pickLine(bank, key, vars){
+  const arr = bank[key]; let i = rnd(arr.length);
+  const tag = (bank === MSAY ? 'm:' : 'c:') + key;
+  if (arr.length > 1 && lastSay[tag] === i) i = (i + 1) % arr.length;
+  lastSay[tag] = i;
+  const v = Object.assign({ name: S ? S.name : 'Aaron' }, vars || {});
+  return arr[i].replace(/\{(\w+)\}/g, (m, k) => v[k] != null ? v[k] : m);
+}
+const say = (key, vars) => pickLine(SAY, key, vars);
+const pickOne = arr => arr[rnd(arr.length)];
+const msay = (key, vars) => pickLine(MSAY, key, vars);
+
+/* ---------- sample word bank: word, meaning, example sentence (replace via Grown-ups) ---------- */
+const SAMPLE = [
+["illegible","So messy or faint that you can't read it.","The doctor's handwriting was so illegible that nobody could read the note."],
+["immortal","Living forever and never dying.","In the story, the wizard drank a potion to become immortal."],
+["impolite","Not polite; rude.","It is impolite to talk with your mouth full."],
+["impure","Not clean or pure; mixed with something else.","The water from the muddy river was impure, so we boiled it."],
+["inadequate","Not enough, or not good enough.","One small sandwich was inadequate for a whole football team."],
+["incorrect","Not correct; wrong.","Cuffin circled the incorrect answer in red."],
+["indirect","Not straight; going the long way round.","We took an indirect route home and got lost twice."],
+["informal","Relaxed and casual, not formal.","The party was informal, so everyone wore trainers."],
+["inoffensive","Harmless; it doesn't upset anyone.","The joke was gentle and inoffensive, so everyone laughed."],
+["irreparable","So badly damaged that it can't be fixed.","The phone fell in the sea and the damage was irreparable."],
+["illogical","Doesn't make sense; not based on good reasoning.","Wearing sunglasses at midnight seems illogical."],
+["impatient","Not able to wait calmly.","Aaron was impatient for the match to start."],
+["improper","Not the correct or proper way to do something.","It is improper to wear muddy boots in the house."],
+["inaccurate","Not exactly right; has mistakes in it.","The map was inaccurate and sent us into a field of cows."],
+["incapable","Not able to do something.","The old printer seems incapable of printing anything on time."],
+["invalid","Not allowed or accepted; it doesn't count.","The goal was invalid because the player was offside."],
+["irrational","Not sensible or based on reason.","Being scared of a harmless money spider is irrational."],
+["irresistible","Too tempting to say no to.","The smell of fresh pancakes was irresistible."],
+["irresponsible","Not careful or sensible; doesn't think about the results.","Leaving the gate open was irresponsible because the dog ran off."],
+["antibiotic","A medicine that kills harmful germs called bacteria.","The doctor gave her an antibiotic to clear up the infection."],
+["anticlimax","A letdown when something exciting turns out to be disappointing.","After all that waiting, the tiny firework was an anticlimax."],
+["antiseptic","A cleaning liquid that stops germs getting into a cut.","Mum dabbed antiseptic on the cut on my knee."],
+["antivirus","A computer program that protects against viruses.","Dad installed antivirus on the laptop to keep it safe."],
+["autograph","A famous person's own signature.","The striker signed his autograph on my shirt."],
+["autopilot","A system that flies a plane or steers a ship by itself.","The pilot switched on the autopilot and ate a sandwich."],
+["reappear","To show up again.","The sun will reappear when the clouds move away."],
+["redesign","To plan how something looks all over again, in a new way.","The club decided to redesign its kit for next season."],
+["reemerge","To come out again.","The puffin dived and took ages to reemerge from the waves."],
+["rephrase","To say something again using different words.","If they don't understand, try to rephrase the question."],
+["antifreeze","A liquid that stops water freezing, used in car engines.","Dad poured antifreeze into the car before the icy winter."],
+["antisocial","Not wanting to be around other people, or not friendly.","Playing loud music at midnight is antisocial."],
+["autobiography","The story of someone's life, written by that person.","The footballer wrote an autobiography about his life."],
+["automobile","An old-fashioned word for a car.","Grandpa still calls his car an automobile."],
+["reapply","To put on again, or to ask for something again.","Remember to reapply your sun cream after swimming."],
+["rearrange","To put things in a different order.","We had to rearrange the furniture to fit the new sofa."],
+["redecorate","To give a room a new look with paint or wallpaper.","We are going to redecorate my bedroom with blue paint."],
+["redo","To do something again.","My homework was messy, so I had to redo it."],
+["reheat","To make something hot again.","Can you reheat the soup in the microwave?"],
+["return","To go or come back, or to give something back.","Please return the library book by Friday."],
+["disadvantage","Something that makes things harder for you.","Being short can be a disadvantage in basketball."],
+["disappear","To vanish so nobody can see it.","The magician made the coin disappear."],
+["disappointed","Sad because something wasn't as good as you hoped.","We were disappointed when the match was cancelled."],
+["disbelief","Not being able to believe something.","He stared at the final score in disbelief."],
+["disconnect","To unplug or separate two things that were joined.","Remember to disconnect the charger when the battery is full."],
+["dishonest","Not telling the truth.","It is dishonest to copy someone else's answers."],
+["mishear","To hear something wrongly.","In a noisy crowd, it is easy to mishear your own name."],
+["misinform","To give someone wrong information.","Please don't misinform the new boy about where the lunch hall is."],
+["misjudge","To judge or guess something wrongly.","Goalkeepers sometimes misjudge a high ball."],
+["mispronounced","Said a word the wrong way.","The teacher mispronounced my name on the first day."],
+["metaphor","Saying one thing IS another, like 'the sea is a blanket'.","'The classroom was a zoo' is a metaphor."],
+["simile","Comparing two things using 'like' or 'as'.","'As brave as a lion' is a simile."],
+["alliteration","Words close together that start with the same sound.","'Purple puffins paddle past' uses alliteration."],
+["personification","Giving human actions or feelings to something that isn't human.","'The wind whispered' is an example of personification."],
+["onomatopoeia","A word that sounds like the noise it describes, like SPLASH.","'Buzz' and 'splash' are examples of onomatopoeia."],
+["noun","A naming word for a person, place, thing or idea.","'Puffin' is a noun because it names a thing."],
+["verb","A doing or being word.","'Run' is a verb because it is a doing word."],
+["adjective","A word that describes a noun.","'Fluffy' is an adjective that describes the Mirror."],
+["adverb","A word that tells you how, when or where something happens.","In 'Cuffin flew quickly', the word 'quickly' is an adverb."]
+];
+
+/* ---------- similar & opposite cards (Marie Redmond Super Brain). Add more here; progress is kept separately. ---------- */
+const CARDS = [
+{w:"collide", o:["proclaim", "reconcile", "collage", "clash"], s:"clash", p:"reconcile"},
+{w:"evaporate", o:["sustain", "polish", "dissolve", "solidify"], s:"dissolve", p:"solidify"},
+{w:"fair", o:["rowdy", "just", "sleek", "devious"], s:"just", p:"devious"},
+{w:"agitate", o:["acquire", "descend", "disturb", "pacify"], s:"disturb", p:"pacify"},
+{w:"tranquil", o:["errand", "thorough", "placid", "perturbed"], s:"placid", p:"perturbed"},
+{w:"burden", o:["punctual", "onus", "advantage", "roam"], s:"onus", p:"advantage"},
+{w:"gravitate", o:["drift", "omen", "consume", "withdraw"], s:"drift", p:"withdraw"},
+{w:"convey", o:["transfer", "seize", "permit", "command"], s:"transfer", p:"seize"},
+{w:"direct", o:["continuous", "convoluted", "flourish", "interior"], s:"continuous", p:"convoluted"},
+{w:"decent", o:["upright", "unrefined", "despair", "placid"], s:"upright", p:"unrefined"},
+{w:"retrieve", o:["reclaim", "fertile", "relinquish", "approve"], s:"reclaim", p:"relinquish"},
+{w:"adolescent", o:["artful", "yonder", "aged", "juvenile"], s:"juvenile", p:"aged"},
+{w:"produce", o:["procure", "dismantle", "probable", "create"], s:"create", p:"dismantle"},
+{w:"keen", o:["acute", "contrary", "antiquity", "dull"], s:"acute", p:"dull"},
+{w:"relish", o:["eager", "detest", "savour", "present"], s:"savour", p:"detest"},
+{w:"covet", o:["crave", "elect", "seek", "scorn"], s:"crave", p:"scorn"},
+{w:"disarray", o:["despair", "regulated", "peril", "turmoil"], s:"turmoil", p:"regulated"},
+{w:"summit", o:["deposit", "peak", "summon", "nadir"], s:"peak", p:"nadir"},
+{w:"sparse", o:["scanty", "sullen", "spar", "abundant"], s:"scanty", p:"abundant"},
+{w:"stern", o:["stalk", "fragrant", "lenient", "severe"], s:"severe", p:"lenient"},
+{w:"gaudy", o:["lavish", "entire", "austere", "lofty"], s:"lavish", p:"austere"},
+{w:"ramble", o:["upbeat", "saunter", "emerge", "sprint"], s:"saunter", p:"sprint"},
+{w:"urban", o:["domestic", "metropolitan", "endure", "rural"], s:"metropolitan", p:"rural"},
+{w:"banish", o:["exile", "cease", "pledge", "incorporate"], s:"exile", p:"incorporate"},
+{w:"communicate", o:["disclose", "compromise", "dissent", "conceal"], s:"disclose", p:"conceal"},
+{w:"guarantee", o:["pledge", "breach", "innocent", "forlorn"], s:"pledge", p:"breach"},
+{w:"supervise", o:["shuffle", "adept", "manage", "abandon"], s:"manage", p:"abandon"},
+{w:"struggle", o:["strut", "wrestle", "topple", "idleness"], s:"wrestle", p:"idleness"},
+{w:"eccentric", o:["mature", "bizarre", "augment", "customary"], s:"bizarre", p:"customary"},
+{w:"comprehend", o:["perceive", "relate", "overlook", "shabby"], s:"perceive", p:"overlook"},
+{w:"wayward", o:["unruly", "punctual", "compliant", "nasty"], s:"unruly", p:"compliant"},
+{w:"contempt", o:["suspect", "scorn", "scorch", "flattery"], s:"scorn", p:"flattery"},
+{w:"permit", o:["veto", "coarse", "alter", "sanction"], s:"sanction", p:"veto"},
+{w:"acquire", o:["squander", "nimble", "assent", "obtain"], s:"obtain", p:"squander"},
+{w:"earnest", o:["frivolous", "sanitary", "sincere", "elite"], s:"sincere", p:"frivolous"},
+{w:"maim", o:["embrace", "restore", "deplete", "maul"], s:"maul", p:"restore"},
+{w:"obscure", o:["obstinate", "cryptic", "palpable", "optimum"], s:"cryptic", p:"palpable"},
+{w:"commend", o:["inept", "unstable", "applaud", "censure"], s:"applaud", p:"censure"},
+{w:"dismal", o:["jolly", "admission", "bleak", "decline"], s:"bleak", p:"jolly"},
+{w:"revere", o:["regard", "abhor", "rally", "appeal"], s:"regard", p:"abhor"},
+{w:"nominal", o:["misuse", "credit", "significant", "minimal"], s:"minimal", p:"significant"},
+{w:"capability", o:["sacrifice", "flair", "barren", "incapacity"], s:"flair", p:"incapacity"},
+{w:"banal", o:["innovative", "prominent", "compulsory", "trite"], s:"trite", p:"innovative"},
+{w:"wane", o:["decline", "enhance", "accuse", "commence"], s:"decline", p:"enhance"},
+{w:"concur", o:["calamity", "sly", "assent", "clash"], s:"assent", p:"clash"},
+{w:"sincere", o:["benefit", "malady", "genuine", "cunning"], s:"genuine", p:"cunning"},
+{w:"ponder", o:["discount", "examine", "strut", "stall"], s:"examine", p:"discount"},
+{w:"curb", o:["livid", "broaden", "restrict", "restore"], s:"restrict", p:"broaden"},
+{w:"comply", o:["compose", "rebuff", "perceive", "adhere"], s:"adhere", p:"rebuff"},
+{w:"hostile", o:["impartial", "fragile", "congenial", "aggressive"], s:"aggressive", p:"congenial"},
+{w:"accomplishment", o:["success", "incompetence", "possess", "undertake"], s:"success", p:"incompetence"},
+{w:"discernible", o:["dubious", "obtain", "submit", "evident"], s:"evident", p:"dubious"},
+{w:"uncanny", o:["deceit", "eerie", "unremarkable", "mollify"], s:"eerie", p:"unremarkable"},
+{w:"supple", o:["suppress", "lithe", "gregarious", "rigid"], s:"lithe", p:"rigid"},
+{w:"turbulent", o:["balmy", "implore", "tempestuous", "indolent"], s:"tempestuous", p:"balmy"},
+{w:"dumb", o:["vocal", "pompous", "mute", "mature"], s:"mute", p:"vocal"},
+{w:"ancestor", o:["adolescent", "precocious", "predecessor", "descendent"], s:"predecessor", p:"descendent"},
+{w:"validate", o:["stabilise", "repudiate", "confirm", "insert"], s:"confirm", p:"repudiate"},
+{w:"brazen", o:["timid", "bold", "earnest", "superficial"], s:"bold", p:"timid"},
+{w:"frail", o:["decay", "feeble", "hearty", "blunt"], s:"feeble", p:"hearty"},
+{w:"oppose", o:["resist", "yearn", "linger", "bolster"], s:"resist", p:"bolster"},
+{w:"stingy", o:["miserly", "tyrant", "temperate", "lavish"], s:"miserly", p:"lavish"},
+{w:"pristine", o:["implore", "grimy", "dismal", "immaculate"], s:"immaculate", p:"grimy"},
+{w:"coherent", o:["obscure", "logical", "luminous", "copious"], s:"logical", p:"obscure"},
+{w:"feud", o:["accord", "forgo", "futile", "altercation"], s:"altercation", p:"accord"},
+{w:"gleam", o:["waft", "startle", "muted", "sheen"], s:"sheen", p:"muted"},
+{w:"fret", o:["laud", "candid", "carp", "polarity"], s:"carp", p:"laud"},
+{w:"sermon", o:["hinder", "dialogue", "residence", "lecture"], s:"lecture", p:"dialogue"},
+{w:"merge", o:["malign", "oppress", "disjoin", "fuse"], s:"fuse", p:"disjoin"},
+{w:"nauseous", o:["absurd", "thriving", "queasy", "convert"], s:"queasy", p:"thriving"},
+{w:"contest", o:["concede", "suffice", "endeavour", "dispute"], s:"dispute", p:"concede"},
+{w:"myriad", o:["multiple", "abstain", "curb", "sole"], s:"multiple", p:"sole"},
+{w:"kindle", o:["labour", "provoke", "quench", "assistance"], s:"provoke", p:"quench"},
+{w:"idle", o:["diligent", "assault", "ineffective", "fertile"], s:"ineffective", p:"diligent"},
+{w:"sullen", o:["animated", "hygienic", "deliberate", "glum"], s:"glum", p:"animated"},
+{w:"entice", o:["accelerate", "repulse", "appeal", "confer"], s:"appeal", p:"repulse"},
+{w:"tantalising", o:["noted", "humdrum", "titillating", "sturdy"], s:"titillating", p:"humdrum"},
+{w:"endure", o:["yield", "undergo", "approve", "expose"], s:"undergo", p:"yield"},
+{w:"retain", o:["abandon", "intention", "possess", "deform"], s:"possess", p:"abandon"},
+{w:"fragrant", o:["divine", "reluctant", "foul", "aromatic"], s:"aromatic", p:"foul"},
+{w:"cautious", o:["negligent", "wary", "crave", "jubilant"], s:"wary", p:"negligent"},
+{w:"vex", o:["ally", "appease", "imitate", "exasperate"], s:"exasperate", p:"appease"},
+{w:"routine", o:["obscure", "abnormal", "ultimate", "conventional"], s:"conventional", p:"abnormal"},
+{w:"fundamental", o:["complex", "humble", "elementary", "fatal"], s:"elementary", p:"complex"},
+{w:"brief", o:["forbid", "advance", "withhold", "inform"], s:"inform", p:"withhold"},
+{w:"ornamental", o:["unembellished", "ornate", "overt", "occupied"], s:"ornate", p:"unembellished"},
+{w:"colossal", o:["cocky", "diminutive", "conclude", "gargantuan"], s:"gargantuan", p:"diminutive"},
+{w:"astute", o:["futile", "ignorant", "secret", "prudent"], s:"prudent", p:"ignorant"},
+{w:"thwart", o:["foil", "moderate", "assist", "acquire"], s:"foil", p:"assist"},
+{w:"serene", o:["meagre", "poised", "clamorous", "modest"], s:"poised", p:"clamorous"},
+{w:"unkempt", o:["scanty", "dishevelled", "immune", "ordered"], s:"dishevelled", p:"ordered"},
+{w:"elevate", o:["augment", "assemble", "demote", "prohibit"], s:"augment", p:"demote"},
+{w:"uniform", o:["standardised", "variable", "imperial", "coax"], s:"standardised", p:"variable"},
+{w:"stern", id:"stern2", o:["ecstatic", "grave", "antagonise", "despise"], s:"grave", p:"ecstatic"},
+{w:"lean", o:["nimble", "stout", "insolent", "gaunt"], s:"gaunt", p:"stout"},
+{w:"accurate", o:["extend", "precise", "vague", "affirm"], s:"precise", p:"vague"},
+{w:"resentment", o:["enviousness", "vast", "affection", "wretched"], s:"enviousness", p:"affection"},
+{w:"lurch", o:["flounder", "idol", "stabilise", "exterior"], s:"flounder", p:"stabilise"},
+{w:"conserve", o:["cooperate", "preserve", "instigate", "endanger"], s:"preserve", p:"endanger"},
+{w:"examine", o:["understand", "scrutinise", "skim", "crave"], s:"scrutinise", p:"skim"},
+{w:"glisten", o:["glint", "hazy", "twilight", "proportion"], s:"glint", p:"hazy"},
+{w:"deliberate", o:["pierce", "vouch", "calculated", "unforeseen"], s:"calculated", p:"unforeseen"},
+{w:"visible", o:["evident", "ambiguous", "complete", "lenient"], s:"evident", p:"ambiguous"},
+{w:"ascend", o:["decline", "embrace", "scale", "ramble"], s:"scale", p:"decline"},
+{w:"harass", o:["anxiety", "affirm", "assist", "pester"], s:"pester", p:"assist"},
+{w:"surplus", o:["wanting", "gaiter", "excess", "ordeal"], s:"excess", p:"wanting"},
+{w:"nostalgic", o:["indifferent", "anxious", "coy", "wistful"], s:"wistful", p:"indifferent"},
+{w:"inferior", o:["besieged", "prosperous", "mediocre", "exceptional"], s:"mediocre", p:"exceptional"},
+{w:"prevail", o:["overcome", "reflect", "forfeit", "compel"], s:"overcome", p:"forfeit"},
+{w:"propose", o:["imply", "surreal", "genre", "retort"], s:"imply", p:"retort"},
+{w:"deceive", o:["delude", "aid", "crave", "irrational"], s:"delude", p:"aid"},
+{w:"familiar", o:["fresh", "mundane", "insolent", "abnormal"], s:"mundane", p:"abnormal"},
+{w:"rehearse", o:["recite", "achieve", "cease", "alert"], s:"recite", p:"cease"},
+{w:"amend", o:["mar", "modify", "declare", "plunge"], s:"modify", p:"mar"},
+{w:"classify", o:["merge", "allocate", "clatter", "clamour"], s:"allocate", p:"clatter"},
+{w:"enterprise", o:["incision", "helix", "pastime", "venture"], s:"venture", p:"pastime"},
+{w:"fluctuate", o:["linger", "mere", "resolve", "oscillate"], s:"oscillate", p:"linger"},
+{w:"waft", o:["wade", "yield", "drift", "harbour"], s:"drift", p:"wade"},
+{w:"helix", o:["caged", "coil", "wring", "parallel"], s:"coil", p:"parallel"},
+{w:"accustom", o:["acquaint", "suppress", "extract", "atheist"], s:"acquaint", p:"suppress"},
+{w:"allay", o:["insult", "assuage", "impair", "amaze"], s:"assuage", p:"impair"},
+{w:"halt", o:["interval", "prevent", "persist", "preserve"], s:"prevent", p:"persist"},
+{w:"envelop", o:["encompass", "surface", "disappear", "discharge"], s:"encompass", p:"discharge"},
+{w:"discern", o:["reveal", "consider", "confound", "conduct"], s:"consider", p:"confound"},
+{w:"smother", o:["smug", "inhale", "stifle", "porous"], s:"stifle", p:"inhale"},
+{w:"balk", o:["waver", "wander", "endure", "dwelling"], s:"waver", p:"endure"},
+{w:"conquer", o:["discuss", "conclude", "subdue", "yield"], s:"subdue", p:"yield"},
+{w:"refined", o:["sophisticated", "crude", "improve", "abstain"], s:"sophisticated", p:"crude"},
+{w:"hostile", id:"hostile2", o:["adverse", "hospitable", "warp", "soiled"], s:"adverse", p:"hospitable"},
+{w:"prosperous", o:["trivia", "stormy", "affluent", "destitute"], s:"affluent", p:"destitute"},
+{w:"awe", o:["avoid", "reverence", "consult", "apathy"], s:"reverence", p:"apathy"},
+{w:"duplicate", o:["robust", "original", "imitation", "scribe"], s:"imitation", p:"original"},
+{w:"repel", o:["depart", "consider", "repulse", "entice"], s:"repulse", p:"entice"},
+{w:"confide", o:["conflict", "divulge", "avoid", "conceal"], s:"divulge", p:"conceal"},
+{w:"enlarge", o:["insert", "expand", "suspend", "contract"], s:"expand", p:"contract"},
+{w:"thorough", o:["meticulous", "deceit", "berate", "cursory"], s:"meticulous", p:"cursory"},
+{w:"mirage", o:["illusion", "certainty", "vacant", "enrage"], s:"illusion", p:"certainty"},
+{w:"purchase", o:["acquire", "vend", "betray", "deprive"], s:"acquire", p:"vend"},
+{w:"exclude", o:["exhume", "debate", "eliminate", "admit"], s:"eliminate", p:"admit"},
+{w:"opinion", o:["sentiment", "reality", "deprive", "confine"], s:"sentiment", p:"reality"},
+{w:"expert", o:["stubborn", "amateur", "brood", "proficient"], s:"proficient", p:"amateur"},
+{w:"soiled", o:["unblemished", "fickle", "unkempt", "wound"], s:"unkempt", p:"unblemished"},
+{w:"trailing", o:["lagging", "beck", "frontal", "digesting"], s:"lagging", p:"frontal"},
+{w:"gush", o:["surge", "trickle", "soothe", "endure"], s:"surge", p:"trickle"},
+{w:"amuse", o:["irk", "amiable", "regale", "regard"], s:"regale", p:"irk"},
+{w:"exhausted", o:["fatigued", "invigorated", "earnest", "wholly"], s:"fatigued", p:"invigorated"},
+{w:"malleable", o:["tranquil", "pliant", "dismal", "rigid"], s:"pliant", p:"rigid"},
+{w:"affix", o:["context", "detach", "append", "believe"], s:"append", p:"detach"},
+{w:"alluring", o:["cease", "attest", "repulsive", "appealing"], s:"appealing", p:"repulsive"},
+{w:"arrange", o:["segregate", "expose", "align", "displace"], s:"align", p:"displace"},
+{w:"vulgar", o:["condemn", "refined", "detest", "crude"], s:"crude", p:"refined"},
+{w:"despair", o:["contentment", "destined", "parity", "anguish"], s:"anguish", p:"contentment"},
+{w:"humid", o:["dull", "humble", "muggy", "arid"], s:"muggy", p:"arid"},
+{w:"akin", o:["cunning", "comparable", "divergent", "raiment"], s:"comparable", p:"divergent"},
+{w:"hasten", o:["dash", "abundant", "dawdle", "frivolous"], s:"dash", p:"dawdle"},
+{w:"offend", o:["assuage", "aggrieve", "official", "offset"], s:"aggrieve", p:"assuage"},
+{w:"temporary", o:["enduring", "interim", "tempting", "brisk"], s:"interim", p:"enduring"},
+{w:"interrogate", o:["interim", "integrity", "respond", "examine"], s:"examine", p:"respond"},
+{w:"flourish", o:["deter", "wither", "lifeless", "thrive"], s:"thrive", p:"wither"},
+{w:"solace", o:["suppress", "distress", "consolation", "unite"], s:"consolation", p:"distress"},
+{w:"evade", o:["capsize", "encounter", "elude", "permeable"], s:"elude", p:"encounter"},
+{w:"derelict", o:["novel", "inhabited", "pasture", "desolate"], s:"desolate", p:"inhabited"},
+{w:"affirm", o:["refute", "verify", "conquer", "gloat"], s:"verify", p:"refute"},
+{w:"boisterous", o:["plume", "subdued", "rowdy", "distinct"], s:"rowdy", p:"subdued"},
+{w:"ardent", o:["labour", "fortunate", "fervent", "apathetic"], s:"fervent", p:"apathetic"},
+{w:"approach", o:["advance", "depart", "appraise", "hinder"], s:"advance", p:"depart"},
+{w:"humiliate", o:["promote", "abscond", "convey", "shame"], s:"shame", p:"promote"},
+{w:"deprive", o:["stall", "bestow", "commit", "deny"], s:"deny", p:"bestow"},
+{w:"boundary", o:["outskirt", "host", "hub", "restrain"], s:"outskirt", p:"hub"},
+{w:"compete", o:["contend", "cooperate", "component", "occupy"], s:"contend", p:"cooperate"},
+{w:"volatile", o:["placid", "sacred", "erratic", "rogue"], s:"erratic", p:"placid"},
+{w:"confirm", o:["verify", "deny", "calculate", "contemplate"], s:"verify", p:"deny"},
+{w:"oppress", o:["unite", "torment", "operate", "alleviate"], s:"torment", p:"alleviate"},
+{w:"gripe", o:["grumble", "approve", "compassion", "hence"], s:"grumble", p:"approve"},
+{w:"insolent", o:["humble", "remote", "seize", "impudent"], s:"impudent", p:"humble"},
+{w:"blunt", o:["dull", "bliss", "feral", "barbed"], s:"dull", p:"barbed"},
+{w:"terminate", o:["commence", "startle", "abort", "terse"], s:"abort", p:"commence"},
+{w:"provide", o:["punish", "supply", "conceal", "create"], s:"supply", p:"conceal"},
+{w:"incident", o:["episode", "abstain", "inactivity", "include"], s:"episode", p:"inactivity"},
+{w:"truce", o:["segregate", "chaotic", "reprieve", "persistence"], s:"reprieve", p:"persistence"},
+{w:"calculate", o:["suppose", "compute", "debrief", "halt"], s:"compute", p:"suppose"},
+{w:"component", o:["competent", "segment", "origin", "entity"], s:"segment", p:"entity"},
+{w:"grant", o:["bestow", "refrain", "convey", "lucid"], s:"bestow", p:"refrain"},
+{w:"prompt", o:["dissuade", "mention", "develop", "repress"], s:"mention", p:"dissuade"}
+];
+const XW = {"collide": {"m": "To crash into something.", "f": "Two puffins in fog. Bonk."}, "proclaim": {"m": "To announce something loudly and officially.", "f": "A puffin on a rock proclaiming “FISH!”"}, "reconcile": {"m": "To make up and be friends again after a fight.", "f": "Two puffins sharing a fish after an argument."}, "collage": {"m": "A picture made by sticking lots of bits and photos together.", "f": "Looks like collide, but it is arts and crafts. Sneaky."}, "clash": {"m": "To crash or fight, or to disagree strongly.", "f": "Cymbals clash. So do stripes and spots."}, "evaporate": {"m": "When a liquid turns into a gas and floats away.", "f": "Puddles do it on sunny days. Poof."}, "sustain": {"m": "To keep something going.", "f": "A good fish breakfast sustains a puffin all morning."}, "polish": {"m": "To rub something until it shines.", "f": "Cuffin polishes his beak. Daily."}, "dissolve": {"m": "To melt away into a liquid.", "f": "Sugar in tea. Gone, but still there."}, "solidify": {"m": "To turn hard and solid.", "f": "Water in the freezer solidifies into ice."}, "fair": {"m": "Treating everyone the same, in a way that is right.", "f": "Splitting the fish equally is fair."}, "rowdy": {"m": "Noisy and out of control.", "f": "A playground at lunchtime."}, "just": {"m": "Fair and right.", "f": "A just referee blows the whistle for both teams."}, "sleek": {"m": "Smooth, shiny and neat.", "f": "A seal swimming past is sleek."}, "devious": {"m": "Sneaky and dishonest, with a trick up the sleeve.", "f": "A seagull pretending not to want your chips."}, "agitate": {"m": "To stir up or upset.", "f": "Shake a fizzy drink and you agitate it. Do not open it."}, "acquire": {"m": "To get something.", "f": "Acquire one new word a day and you will be unstoppable."}, "descend": {"m": "To go down.", "f": "A puffin descends to the waves."}, "disturb": {"m": "To bother or interrupt.", "f": "Do not disturb a puffin mid-fish."}, "pacify": {"m": "To calm someone down.", "f": "A snack pacifies a grumpy puffin."}, "tranquil": {"m": "Calm and peaceful.", "f": "A still lake at sunrise."}, "errand": {"m": "A short trip to do a job.", "f": "Running to the shop for milk."}, "thorough": {"m": "Careful and complete.", "f": "A thorough tooth-brush gets every tooth."}, "placid": {"m": "Calm and not easily upset.", "f": "A placid cow chewing grass."}, "perturbed": {"m": "Worried and upset.", "f": "The face you pull when the fish has gone."}, "burden": {"m": "A heavy load, or a worry you have to carry.", "f": "A huge rucksack is a burden."}, "punctual": {"m": "On time.", "f": "Punctual puffins never miss the tide."}, "onus": {"m": "The duty that falls on you.", "f": "The onus is on you to tidy your room."}, "advantage": {"m": "Something that helps you do better.", "f": "Being tall is an advantage in basketball."}, "roam": {"m": "To wander around with no fixed plan.", "f": "Puffins roam the open sea."}, "gravitate": {"m": "To be drawn towards something.", "f": "Aaron gravitates to the biscuit tin."}, "drift": {"m": "To move slowly, carried along.", "f": "A leaf drifting down a stream."}, "omen": {"m": "A sign of something that will happen.", "f": "Dark clouds are an omen of rain."}, "consume": {"m": "To eat, drink or use up.", "f": "Puffins consume loads of sand eels."}, "withdraw": {"m": "To take back or move away.", "f": "A snail withdraws into its shell."}, "convey": {"m": "To carry or pass something on.", "f": "A conveyor belt conveys luggage. A message conveys news."}, "transfer": {"m": "To move something from one place to another.", "f": "Transfer the pasta from pan to plate."}, "seize": {"m": "To grab hold of something suddenly.", "f": "A gull seizes a chip. Rude."}, "permit": {"m": "To allow.", "f": "Mum permits two biscuits."}, "command": {"m": "To give an order.", "f": "Captain Cuffin commands the ship."}, "direct": {"m": "Straight, with no detours.", "f": "A direct route has no wiggles."}, "continuous": {"m": "Going on without stopping.", "f": "A continuous line has no gaps."}, "convoluted": {"m": "Twisty and complicated.", "f": "Instructions with 47 steps."}, "flourish": {"m": "To grow or do really well.", "f": "Plants flourish in sunshine."}, "interior": {"m": "The inside of something.", "f": "The interior of a nest is cosy."}, "decent": {"m": "Good, proper and respectable.", "f": "A decent person hands back a lost wallet."}, "upright": {"m": "Honest and doing the right thing.", "f": "An upright puffin never steals fish."}, "unrefined": {"m": "Rough, not polished or fancy.", "f": "A burping contest is unrefined."}, "despair": {"m": "Feeling that all hope is lost.", "f": "The puffin whose fish fell back in the sea."}, "retrieve": {"m": "To get something back.", "f": "A dog retrieves the stick. Good dog."}, "reclaim": {"m": "To take back something that is yours.", "f": "Reclaim your seat after a loo trip."}, "fertile": {"m": "Good for growing things.", "f": "Fertile soil grows giant carrots."}, "relinquish": {"m": "To give something up.", "f": "Relinquish the remote? Never."}, "approve": {"m": "To say yes, that is good.", "f": "Mum approves of this game."}, "artful": {"m": "Clever, often in a sneaky way.", "f": "An artful fox talks its way out of trouble."}, "yonder": {"m": "Over there, in the distance.", "f": "Look, a puffin yonder!"}, "aged": {"m": "Very old.", "f": "An aged tortoise has seen everything."}, "adolescent": {"m": "A young person between a child and a grown-up.", "f": "Basically a teenager."}, "juvenile": {"m": "Young, or childish.", "f": "A juvenile puffin is still learning to fish."}, "produce": {"m": "To make something.", "f": "A hen produces eggs."}, "procure": {"m": "To get something, often with a bit of effort.", "f": "Procure snacks for the journey."}, "dismantle": {"m": "To take something apart, piece by piece.", "f": "Dismantle the Lego tower."}, "probable": {"m": "Likely to happen.", "f": "Rain is probable. This is Britain."}, "create": {"m": "To make something brand new.", "f": "Create a masterpiece."}, "keen": {"m": "Very eager, or sharp.", "f": "Keen eyes spot fish from far away."}, "acute": {"m": "Sharp and strong.", "f": "Acute hearing: you hear the biscuit tin open."}, "contrary": {"m": "Opposite, or against.", "f": "A contrary puffin says no to everything."}, "antiquity": {"m": "Ancient times, a very long time ago.", "f": "The pyramids come from antiquity."}, "dull": {"m": "Boring, or not sharp.", "f": "A dull pencil will not write."}, "relish": {"m": "To really enjoy something.", "f": "Relish every chip."}, "eager": {"m": "Excited and keen to start.", "f": "Eager to begin the game."}, "detest": {"m": "To dislike very, very strongly.", "f": "I detest cold chips."}, "savour": {"m": "To enjoy slowly and properly.", "f": "Savour the last biscuit."}, "present": {"m": "Here, right now.", "f": "\"Present!\" says Aaron at registration."}, "covet": {"m": "To really want something that belongs to someone else.", "f": "Coveting a friend's shiny new bike."}, "crave": {"m": "To want very badly.", "f": "Craving chocolate."}, "elect": {"m": "To choose by voting.", "f": "Elect a class captain."}, "seek": {"m": "To look for.", "f": "Hide and seek."}, "scorn": {"m": "To treat as worthless.", "f": "Scorn is a sneer in word form."}, "regulated": {"m": "Controlled by rules.", "f": "Traffic lights keep the roads regulated."}, "peril": {"m": "Great danger.", "f": "A puffin in peril from a hungry gull."}, "turmoil": {"m": "Wild confusion.", "f": "A bedroom during the great sock hunt is turmoil."}, "deposit": {"m": "To put something down or into a bank.", "f": "Deposit coins in the piggy bank."}, "summit": {"m": "The very top of a mountain.", "f": "Aim for the summit."}, "peak": {"m": "The highest point.", "f": "The peak of the mountain."}, "summon": {"m": "To call someone to come.", "f": "Summon the butler. Ring the bell."}, "nadir": {"m": "The lowest point.", "f": "The nadir of the day: no snacks left."}, "sparse": {"m": "Thinly spread, not much of it.", "f": "Sparse trees on a bare hill."}, "scanty": {"m": "Very small in amount.", "f": "A scanty lunch. Barely a crumb."}, "sullen": {"m": "Gloomy and grumpy, saying very little.", "f": "A sullen puffin glares at the sea."}, "spar": {"m": "To practise a fight or argue playfully.", "f": "Spar with words, not fists."}, "abundant": {"m": "Plenty of it.", "f": "Abundant sand eels. Puffin heaven."}, "stern": {"m": "Serious and strict.", "f": "A stern look from the teacher."}, "stalk": {"m": "To follow quietly (or the stem of a plant).", "f": "A cat stalks a bird."}, "fragrant": {"m": "Smelling lovely.", "f": "Fragrant flowers."}, "lenient": {"m": "Gentle about punishing.", "f": "A lenient teacher forgives forgotten homework."}, "severe": {"m": "Very strict, or very bad.", "f": "A severe storm."}, "gaudy": {"m": "Too bright and showy.", "f": "A gaudy neon jumper."}, "lavish": {"m": "Generous, luxurious, plenty.", "f": "A lavish feast with ten puddings."}, "entire": {"m": "The whole thing.", "f": "The entire cake. Gone."}, "austere": {"m": "Plain and strict, with no frills.", "f": "An austere room: one chair, nothing else."}, "lofty": {"m": "Very high.", "f": "Lofty towers touch the clouds."}, "ramble": {"m": "To walk or talk without hurrying.", "f": "A ramble through the countryside."}, "upbeat": {"m": "Cheerful.", "f": "An upbeat song."}, "saunter": {"m": "To walk slowly and happily.", "f": "Saunter down the lane."}, "emerge": {"m": "To come out.", "f": "Emerge from the burrow."}, "sprint": {"m": "To run very fast.", "f": "Sprint to the finish line."}, "urban": {"m": "To do with towns and cities.", "f": "Urban buses and tall buildings."}, "domestic": {"m": "To do with the home.", "f": "A domestic cat lives at home."}, "metropolitan": {"m": "To do with a big city.", "f": "London is a metropolitan area."}, "endure": {"m": "To put up with something hard.", "f": "Endure a long car journey."}, "rural": {"m": "To do with the countryside.", "f": "Rural fields full of cows."}, "banish": {"m": "To send away for good.", "f": "Banish the dragon from the kingdom."}, "exile": {"m": "Being forced to live away from home.", "f": "A king in exile."}, "cease": {"m": "To stop.", "f": "Cease the noise, please."}, "pledge": {"m": "A serious promise.", "f": "A pledge to tidy my room."}, "incorporate": {"m": "To include as part of something.", "f": "Incorporate carrots into the soup."}, "communicate": {"m": "To share information.", "f": "Puffins communicate with squawks."}, "disclose": {"m": "To reveal a secret.", "f": "Disclose where the biscuits are."}, "compromise": {"m": "Meeting in the middle.", "f": "Half a biscuit each."}, "dissent": {"m": "To disagree.", "f": "One voice of dissent in the meeting."}, "conceal": {"m": "To hide.", "f": "Conceal the presents."}, "guarantee": {"m": "A promise that something will happen.", "f": "Guaranteed to make you smile."}, "breach": {"m": "A break, or breaking a promise.", "f": "A breach in the sandcastle wall."}, "innocent": {"m": "Not guilty.", "f": "Innocent until proven guilty."}, "forlorn": {"m": "Sad and lonely.", "f": "A forlorn sock without its pair."}, "supervise": {"m": "To watch over and guide.", "f": "Supervise the experiment."}, "manage": {"m": "To be in charge of.", "f": "Manage the team."}, "shuffle": {"m": "To mix up, or slide your feet.", "f": "Shuffle the cards."}, "adept": {"m": "Very good at something.", "f": "Adept at puzzles."}, "abandon": {"m": "To leave behind for good.", "f": "Abandon ship!"}, "struggle": {"m": "To try hard against something difficult.", "f": "Struggle with a jam jar lid."}, "wrestle": {"m": "To grapple with.", "f": "Wrestle a stubborn zip."}, "strut": {"m": "To walk proudly.", "f": "A puffin struts along the rock."}, "topple": {"m": "To fall over.", "f": "Topple the tower."}, "idleness": {"m": "Doing nothing at all.", "f": "Idleness on a lazy Sunday."}, "eccentric": {"m": "Unusual and a bit odd.", "f": "An eccentric inventor wears a teapot as a hat."}, "bizarre": {"m": "Very strange.", "f": "A bizarre dream about flying custard."}, "mature": {"m": "Grown up.", "f": "A mature oak tree."}, "augment": {"m": "To make bigger.", "f": "Augment your pocket money by doing chores."}, "customary": {"m": "Usual, by tradition.", "f": "It is customary to say thank you."}, "comprehend": {"m": "To understand.", "f": "Comprehend the lesson."}, "perceive": {"m": "To notice or understand.", "f": "Perceive a change in the weather."}, "relate": {"m": "To tell a story, or to connect.", "f": "Relate the tale of the lost fish."}, "overlook": {"m": "To miss or ignore.", "f": "Overlook a typo."}, "shabby": {"m": "Worn out and scruffy.", "f": "A shabby old coat."}, "wayward": {"m": "Hard to control, going its own way.", "f": "A wayward balloon drifts off."}, "unruly": {"m": "Wild and disobedient.", "f": "Unruly hair."}, "compliant": {"m": "Doing as you are asked.", "f": "Compliant: puts shoes on first time."}, "nasty": {"m": "Unpleasant.", "f": "A nasty smell."}, "contempt": {"m": "A feeling that someone is worthless.", "f": "Looking at it with contempt."}, "suspect": {"m": "To think something may be true.", "f": "Suspect the cat ate the fish."}, "scorch": {"m": "To burn the surface.", "f": "Scorched toast."}, "flattery": {"m": "Over-the-top praise to win a favour.", "f": "Flattery might get you a biscuit."}, "veto": {"m": "To say no, officially.", "f": "The king vetoed the law."}, "coarse": {"m": "Rough.", "f": "Coarse sandpaper."}, "alter": {"m": "To change.", "f": "Alter a recipe."}, "sanction": {"m": "An official okay (it can also mean a punishment).", "f": "Official sanction to play."}, "squander": {"m": "To waste.", "f": "Squander pocket money on sweets."}, "nimble": {"m": "Quick and light on your feet.", "f": "A nimble goat on a cliff."}, "assent": {"m": "To agree.", "f": "Assent with a nod."}, "obtain": {"m": "To get.", "f": "Obtain tickets."}, "earnest": {"m": "Serious and sincere.", "f": "An earnest apology."}, "frivolous": {"m": "Silly and not serious.", "f": "A frivolous hat covered in pom-poms."}, "sanitary": {"m": "Clean and healthy.", "f": "Sanitary hands. Wash them."}, "sincere": {"m": "Honest and meaning it.", "f": "A sincere thank-you."}, "elite": {"m": "The very best of a group.", "f": "The elite squad."}, "maim": {"m": "To badly injure.", "f": "A serious word that means to injure badly."}, "embrace": {"m": "To hug or welcome.", "f": "Embrace your gran."}, "restore": {"m": "To fix and bring back.", "f": "Restore an old painting."}, "deplete": {"m": "To use up.", "f": "Deplete the biscuit supply."}, "maul": {"m": "To attack and hurt roughly.", "f": "A serious word: a bear might maul."}, "obscure": {"m": "Hard to see or know.", "f": "An obscure little path."}, "obstinate": {"m": "Stubborn.", "f": "An obstinate mule will not budge."}, "cryptic": {"m": "Mysterious and hard to understand.", "f": "A cryptic clue."}, "palpable": {"m": "So clear you could almost touch it.", "f": "The excitement was palpable."}, "optimum": {"m": "The best possible.", "f": "The optimum temperature for tea."}, "commend": {"m": "To praise.", "f": "Commended for good work."}, "inept": {"m": "Clumsy and unskilled.", "f": "Inept at juggling."}, "unstable": {"m": "Wobbly.", "f": "An unstable tower."}, "applaud": {"m": "To clap.", "f": "Applaud the show."}, "censure": {"m": "Strong disapproval.", "f": "Censure for being rude."}, "dismal": {"m": "Gloomy and miserable.", "f": "A dismal grey day."}, "jolly": {"m": "Cheerful.", "f": "A jolly snowman."}, "admission": {"m": "Entry, or owning up.", "f": "Admission is free."}, "bleak": {"m": "Cold, empty and cheerless.", "f": "A bleak empty moor."}, "decline": {"m": "To say no, or to go down.", "f": "Decline an invitation."}, "revere": {"m": "To deeply respect.", "f": "Revere a hero."}, "regard": {"m": "To think of with respect.", "f": "Regard highly."}, "abhor": {"m": "To dislike something deeply and strongly.", "f": "Abhor injustice."}, "rally": {"m": "To gather together.", "f": "Rally the team."}, "appeal": {"m": "To ask earnestly, or to attract.", "f": "Appeal for help."}, "nominal": {"m": "Tiny, hardly anything.", "f": "A nominal fee of 1p."}, "misuse": {"m": "To use wrongly.", "f": "Misuse a tool."}, "credit": {"m": "Praise or recognition.", "f": "Credit where it is due."}, "significant": {"m": "Important or large.", "f": "A significant discovery."}, "minimal": {"m": "The smallest amount.", "f": "Minimal mess."}, "capability": {"m": "The ability to do something.", "f": "The capability to fly."}, "sacrifice": {"m": "To give something up for a good reason.", "f": "Sacrifice your last sweet."}, "flair": {"m": "Natural talent.", "f": "A flair for drawing."}, "barren": {"m": "Nothing can grow there.", "f": "A barren desert."}, "incapacity": {"m": "Not being able to do something.", "f": "Incapacity to lift a heavy box."}, "banal": {"m": "Boring and predictable.", "f": "A banal chat about the weather."}, "innovative": {"m": "Full of new ideas.", "f": "An innovative gadget."}, "prominent": {"m": "Easy to see, or well known.", "f": "A prominent nose."}, "compulsory": {"m": "You must do it.", "f": "Compulsory homework. Sorry."}, "trite": {"m": "Said so often it has lost meaning.", "f": "A trite saying."}, "wane": {"m": "To get smaller or weaker.", "f": "The moon wanes."}, "enhance": {"m": "To make better.", "f": "Enhance a photo."}, "accuse": {"m": "To say someone did wrong.", "f": "Accuse the cat."}, "commence": {"m": "To begin.", "f": "Commence the quiz."}, "concur": {"m": "To agree.", "f": "\"I concur,\" said the puffin."}, "calamity": {"m": "A terrible disaster.", "f": "A calamity: the cake fell."}, "sly": {"m": "Clever and sneaky.", "f": "A sly fox."}, "benefit": {"m": "A good result, or help.", "f": "The benefit of sleep."}, "malady": {"m": "An illness (an old-fashioned word).", "f": "A malady is an illness."}, "genuine": {"m": "Real, not fake.", "f": "A genuine smile."}, "cunning": {"m": "Clever at tricking.", "f": "A cunning plan."}, "discount": {"m": "To ignore or treat as not important.", "f": "Discount the rumour."}, "examine": {"m": "To look at closely.", "f": "Examine a bug."}, "ponder": {"m": "To think about carefully.", "f": "Ponder the puzzle."}, "stall": {"m": "To stop or delay.", "f": "The engine stalls."}, "curb": {"m": "To hold back.", "f": "Curb your appetite."}, "livid": {"m": "Furiously angry.", "f": "Livid about the broken toy."}, "broaden": {"m": "To make wider.", "f": "Broaden your mind."}, "restrict": {"m": "To limit.", "f": "Restrict screen time."}, "comply": {"m": "To follow a rule.", "f": "Comply with the rules."}, "compose": {"m": "To write music or put together.", "f": "Compose a song."}, "rebuff": {"m": "To reject sharply.", "f": "Rebuff an offer."}, "adhere": {"m": "To stick to.", "f": "Adhere to the plan."}, "hostile": {"m": "Unfriendly and aggressive.", "f": "A hostile glare."}, "impartial": {"m": "Fair, not taking sides.", "f": "An impartial referee."}, "fragile": {"m": "Easily broken.", "f": "Fragile glass."}, "congenial": {"m": "Pleasant and friendly.", "f": "A congenial host."}, "aggressive": {"m": "Ready to attack.", "f": "An aggressive goose."}, "accomplishment": {"m": "Something you have achieved.", "f": "Winning the race is an accomplishment."}, "success": {"m": "Achieving what you hoped for.", "f": "Success tastes sweet."}, "incompetence": {"m": "Not being able to do the job.", "f": "Making tea with cold water is incompetence."}, "possess": {"m": "To own.", "f": "Possess a bike."}, "undertake": {"m": "To agree to do.", "f": "Undertake a quest."}, "discernible": {"m": "Able to be noticed.", "f": "A discernible smell of pizza."}, "dubious": {"m": "Doubtful.", "f": "A dubious excuse."}, "submit": {"m": "To hand in, or give in.", "f": "Submit your homework."}, "evident": {"m": "Plain to see.", "f": "Evident joy."}, "uncanny": {"m": "Strange in a spooky way.", "f": "An uncanny silence."}, "deceit": {"m": "Lying and tricking.", "f": "Deceit is lying."}, "eerie": {"m": "Spooky.", "f": "An eerie fog."}, "unremarkable": {"m": "Ordinary, nothing special.", "f": "An unremarkable Tuesday."}, "mollify": {"m": "To calm someone down.", "f": "Mollify with a biscuit."}, "supple": {"m": "Bendy and flexible.", "f": "A supple gymnast."}, "suppress": {"m": "To hold back.", "f": "Suppress a giggle."}, "lithe": {"m": "Slim and graceful.", "f": "A lithe cat."}, "gregarious": {"m": "Loves being with others.", "f": "Gregarious as puffins in a colony."}, "rigid": {"m": "Stiff, does not bend.", "f": "A rigid plank."}, "turbulent": {"m": "Rough and stormy.", "f": "Turbulent seas."}, "balmy": {"m": "Warm and pleasant.", "f": "A balmy summer night."}, "implore": {"m": "To beg.", "f": "Implore for another chapter."}, "tempestuous": {"m": "Stormy and wild.", "f": "A tempestuous sea."}, "indolent": {"m": "Lazy.", "f": "An indolent cat naps all day."}, "dumb": {"m": "Unable to speak (this word can also be rude, so be careful).", "f": "Another word for mute."}, "vocal": {"m": "Speaking out loud.", "f": "A vocal crowd."}, "pompous": {"m": "Full of your own importance.", "f": "A pompous peacock."}, "mute": {"m": "Silent.", "f": "Press the mute button."}, "ancestor": {"m": "A relative from long ago.", "f": "Your great-great-grandparent."}, "precocious": {"m": "Grown up for your age.", "f": "A precocious toddler reading a novel."}, "predecessor": {"m": "Someone who came before you.", "f": "The old captain is the new captain's predecessor."}, "descendent": {"m": "Someone who comes after you in a family.", "f": "Your children are your descendents."}, "validate": {"m": "To confirm something is correct.", "f": "Validate a ticket."}, "stabilise": {"m": "To make steady.", "f": "Stabilise the wobbly table."}, "repudiate": {"m": "To reject.", "f": "Repudiate a claim."}, "confirm": {"m": "To say it is true.", "f": "Confirm the booking."}, "insert": {"m": "To put into.", "f": "Insert the coin."}, "brazen": {"m": "Bold and shameless.", "f": "A brazen seagull steals chips."}, "timid": {"m": "Shy and easily scared.", "f": "A timid mouse."}, "bold": {"m": "Brave.", "f": "A bold knight."}, "superficial": {"m": "Only on the surface.", "f": "A superficial scratch."}, "frail": {"m": "Weak and delicate.", "f": "A frail old branch."}, "decay": {"m": "To rot.", "f": "Tooth decay. Brush!"}, "feeble": {"m": "Weak.", "f": "A feeble cry."}, "hearty": {"m": "Strong, healthy and warm.", "f": "A hearty stew."}, "blunt": {"m": "Not sharp, or very direct.", "f": "A blunt knife."}, "oppose": {"m": "To be against.", "f": "Oppose a plan."}, "resist": {"m": "To fight against.", "f": "Resist the cake."}, "yearn": {"m": "To long for.", "f": "Yearn for summer."}, "linger": {"m": "To stay a bit longer.", "f": "Linger over breakfast."}, "bolster": {"m": "To support.", "f": "Bolster the team."}, "stingy": {"m": "Not willing to spend or share.", "f": "A stingy puffin hoards the fish."}, "miserly": {"m": "Hating to spend money.", "f": "A miserly millionaire."}, "tyrant": {"m": "A cruel ruler.", "f": "A tyrant bossing everyone."}, "temperate": {"m": "Mild, not extreme.", "f": "A temperate climate."}, "pristine": {"m": "Perfectly clean and new.", "f": "A pristine white shirt."}, "grimy": {"m": "Dirty.", "f": "Grimy hands."}, "immaculate": {"m": "Perfectly clean and neat.", "f": "An immaculate kitchen."}, "coherent": {"m": "Clear and makes sense.", "f": "A coherent story."}, "logical": {"m": "Makes sense, step by step.", "f": "A logical plan."}, "luminous": {"m": "Glowing.", "f": "Luminous paint glows in the dark."}, "copious": {"m": "Plenty of.", "f": "Copious notes."}, "feud": {"m": "A long, angry quarrel.", "f": "A family feud."}, "accord": {"m": "Agreement.", "f": "In accord."}, "forgo": {"m": "To go without.", "f": "Forgo pudding."}, "futile": {"m": "Pointless.", "f": "A futile attempt to catch the wind."}, "altercation": {"m": "A noisy argument.", "f": "A loud altercation over the last biscuit."}, "gleam": {"m": "A soft shine.", "f": "A gleam in the eye."}, "waft": {"m": "To drift gently through the air.", "f": "The smell of toast wafts upstairs."}, "startle": {"m": "To surprise suddenly.", "f": "A bang startles the puffins."}, "muted": {"m": "Quiet and soft.", "f": "Muted colours."}, "sheen": {"m": "A soft shine.", "f": "The sheen on silk."}, "sermon": {"m": "A talk, often about right and wrong.", "f": "A long sermon."}, "hinder": {"m": "To get in the way.", "f": "Hinder progress."}, "dialogue": {"m": "A conversation.", "f": "A dialogue between two friends."}, "residence": {"m": "A home.", "f": "The king's residence."}, "lecture": {"m": "A long talk.", "f": "A lecture on manners."}, "merge": {"m": "To join together.", "f": "Merge two lanes of traffic."}, "malign": {"m": "To say nasty things about someone.", "f": "Malign a name."}, "oppress": {"m": "To treat harshly.", "f": "Oppress people."}, "disjoin": {"m": "To separate.", "f": "Disjoin the pieces."}, "fuse": {"m": "To join together.", "f": "Fuse two metals."}, "nauseous": {"m": "Feeling sick.", "f": "Nauseous on the boat."}, "absurd": {"m": "Silly and unreasonable.", "f": "An absurd hat."}, "thriving": {"m": "Doing really well.", "f": "A thriving garden."}, "queasy": {"m": "A bit sick.", "f": "Queasy in the car."}, "convert": {"m": "To change into something else.", "f": "Convert pounds into dollars."}, "contest": {"m": "To argue against, or a competition.", "f": "Contest a decision."}, "concede": {"m": "To admit, or give in.", "f": "Concede defeat."}, "suffice": {"m": "To be enough.", "f": "A snack will suffice."}, "endeavour": {"m": "A serious try.", "f": "Best endeavour."}, "dispute": {"m": "An argument.", "f": "A dispute about the rules."}, "myriad": {"m": "A huge number of.", "f": "Myriad stars."}, "multiple": {"m": "Many.", "f": "Multiple choices."}, "abstain": {"m": "To hold yourself back.", "f": "Abstain from sweets."}, "sole": {"m": "Only one.", "f": "The sole survivor."}, "kindle": {"m": "To start a fire or a feeling.", "f": "Kindle a flame."}, "labour": {"m": "Hard work.", "f": "A labour of love."}, "provoke": {"m": "To stir up.", "f": "Provoke a reaction."}, "quench": {"m": "To put out a fire or a thirst.", "f": "Quench your thirst."}, "assistance": {"m": "Help.", "f": "Assistance needed."}, "idle": {"m": "Doing nothing.", "f": "Idle hands."}, "diligent": {"m": "Hard-working and careful.", "f": "A diligent student."}, "assault": {"m": "A violent attack.", "f": "An assault is a violent attack."}, "ineffective": {"m": "Does not work.", "f": "An ineffective umbrella."}, "animated": {"m": "Lively.", "f": "An animated chat."}, "hygienic": {"m": "Clean and healthy.", "f": "A hygienic kitchen."}, "deliberate": {"m": "Done on purpose.", "f": "A deliberate choice."}, "glum": {"m": "Sad and gloomy.", "f": "A glum face."}, "entice": {"m": "To tempt.", "f": "Entice with treats."}, "accelerate": {"m": "To go faster.", "f": "Accelerate the car."}, "repulse": {"m": "To drive back, or disgust.", "f": "Repulse an attack."}, "confer": {"m": "To discuss together, or to give.", "f": "Confer with friends."}, "tantalising": {"m": "Tempting but just out of reach.", "f": "The tantalising smell of cake."}, "noted": {"m": "Well known.", "f": "A noted author."}, "humdrum": {"m": "Dull and ordinary.", "f": "A humdrum day."}, "titillating": {"m": "Exciting and teasing.", "f": "A titillating clue."}, "sturdy": {"m": "Strong.", "f": "Sturdy boots."}, "yield": {"m": "To give way, or to produce.", "f": "Yield to traffic."}, "undergo": {"m": "To go through.", "f": "Undergo training."}, "expose": {"m": "To uncover.", "f": "Expose the truth."}, "retain": {"m": "To keep.", "f": "Retain information."}, "intention": {"m": "A plan or aim.", "f": "Good intentions."}, "deform": {"m": "To change the shape badly.", "f": "Deform the metal."}, "divine": {"m": "Heavenly.", "f": "A divine cake."}, "reluctant": {"m": "Unwilling.", "f": "Reluctant to get up."}, "foul": {"m": "Disgusting.", "f": "A foul smell."}, "aromatic": {"m": "Having a strong, pleasant smell.", "f": "Aromatic herbs."}, "cautious": {"m": "Careful.", "f": "Cautious on the ice."}, "negligent": {"m": "Careless.", "f": "A negligent driver."}, "wary": {"m": "On your guard.", "f": "Wary of strangers."}, "jubilant": {"m": "Overjoyed.", "f": "A jubilant crowd."}, "vex": {"m": "To annoy.", "f": "Vexed by noisy neighbours."}, "ally": {"m": "A friend who helps you.", "f": "An ally in battle."}, "appease": {"m": "To calm by giving in.", "f": "Appease with a snack."}, "imitate": {"m": "To copy.", "f": "Imitate a bird."}, "exasperate": {"m": "To annoy a lot.", "f": "Exasperated by dawdling."}, "routine": {"m": "A regular way of doing things.", "f": "A morning routine."}, "abnormal": {"m": "Not normal.", "f": "Abnormal behaviour."}, "ultimate": {"m": "Final, or the very best.", "f": "The ultimate prize."}, "conventional": {"m": "Traditional.", "f": "Conventional methods."}, "fundamental": {"m": "Basic and essential.", "f": "Fundamental rules."}, "complex": {"m": "Complicated.", "f": "A complex puzzle."}, "humble": {"m": "Modest.", "f": "A humble hero."}, "elementary": {"m": "Basic.", "f": "Elementary maths."}, "fatal": {"m": "Causing death.", "f": "A fatal mistake is a deadly one."}, "brief": {"m": "Short, or to give information.", "f": "A brief chat."}, "forbid": {"m": "To not allow.", "f": "Forbid entry."}, "advance": {"m": "To move forward.", "f": "Advance one step."}, "withhold": {"m": "To hold back.", "f": "Withhold information."}, "inform": {"m": "To tell.", "f": "Inform the class."}, "ornamental": {"m": "Decorative.", "f": "An ornamental garden."}, "unembellished": {"m": "Plain, with no decoration.", "f": "The unembellished truth."}, "ornate": {"m": "Highly decorated.", "f": "An ornate mirror."}, "overt": {"m": "Open, not hidden.", "f": "Overt kindness."}, "occupied": {"m": "Busy, or taken.", "f": "An occupied seat."}, "colossal": {"m": "Enormous.", "f": "A colossal statue."}, "cocky": {"m": "Too sure of yourself.", "f": "A cocky cockerel."}, "diminutive": {"m": "Tiny.", "f": "A diminutive puppy."}, "conclude": {"m": "To finish, or decide.", "f": "Conclude the story."}, "gargantuan": {"m": "Gigantic.", "f": "A gargantuan burger."}, "astute": {"m": "Quick to notice, clever.", "f": "An astute detective."}, "ignorant": {"m": "Not knowing.", "f": "Ignorant of the rules."}, "secret": {"m": "Hidden.", "f": "A secret handshake."}, "prudent": {"m": "Sensible and careful.", "f": "Prudent saving."}, "thwart": {"m": "To stop someone's plan.", "f": "Thwart the villain."}, "foil": {"m": "To stop a plan.", "f": "Foil the plot."}, "moderate": {"m": "Average, not extreme.", "f": "Moderate speed."}, "assist": {"m": "To help.", "f": "Assist a friend."}, "serene": {"m": "Calm and peaceful.", "f": "A serene pond."}, "meagre": {"m": "Very small in amount.", "f": "Meagre rations."}, "poised": {"m": "Calm and balanced.", "f": "A poised dancer."}, "clamorous": {"m": "Loud and noisy.", "f": "A clamorous crowd."}, "modest": {"m": "Humble, or small.", "f": "A modest house."}, "unkempt": {"m": "Messy.", "f": "Unkempt hair."}, "dishevelled": {"m": "Untidy.", "f": "Dishevelled after the storm."}, "immune": {"m": "Protected from.", "f": "Immune to a disease."}, "ordered": {"m": "Neat, in order.", "f": "Ordered books."}, "elevate": {"m": "To raise up.", "f": "Elevate the platform."}, "assemble": {"m": "To put together, or gather.", "f": "Assemble a model."}, "demote": {"m": "To move to a lower rank.", "f": "Demote the captain."}, "prohibit": {"m": "To forbid.", "f": "Swimming prohibited."}, "uniform": {"m": "All the same.", "f": "A school uniform."}, "standardised": {"m": "Made the same way each time.", "f": "Standardised sizes."}, "variable": {"m": "Changing.", "f": "Variable weather."}, "imperial": {"m": "To do with an empire.", "f": "An imperial palace."}, "coax": {"m": "To gently persuade.", "f": "Coax a cat out from under the bed."}, "ecstatic": {"m": "Overjoyed.", "f": "Ecstatic at the news."}, "grave": {"m": "Serious.", "f": "A grave face."}, "antagonise": {"m": "To make someone an enemy.", "f": "Antagonise the dog."}, "despise": {"m": "To dislike very strongly.", "f": "Despise bullying."}, "lean": {"m": "Thin and fit.", "f": "A lean athlete."}, "stout": {"m": "Sturdy and round.", "f": "A stout stick."}, "insolent": {"m": "Rude.", "f": "An insolent reply."}, "gaunt": {"m": "Thin and tired-looking.", "f": "A gaunt face."}, "accurate": {"m": "Exactly right.", "f": "An accurate measurement."}, "extend": {"m": "To stretch out.", "f": "Extend a hand."}, "precise": {"m": "Exact.", "f": "Precise instructions."}, "vague": {"m": "Not clear.", "f": "A vague idea."}, "affirm": {"m": "To say firmly it is true.", "f": "Affirm your support."}, "resentment": {"m": "Bitter anger kept inside.", "f": "Resentment about unfairness."}, "enviousness": {"m": "Wanting what others have.", "f": "Enviousness is jealousy."}, "vast": {"m": "Huge.", "f": "A vast desert."}, "affection": {"m": "Fondness.", "f": "A hug shows affection."}, "wretched": {"m": "Miserable.", "f": "A wretched day."}, "lurch": {"m": "A sudden stagger.", "f": "The bus lurched."}, "flounder": {"m": "To struggle clumsily.", "f": "Flounder in mud."}, "idol": {"m": "A hero you admire.", "f": "A pop idol."}, "exterior": {"m": "The outside.", "f": "The exterior of the house."}, "conserve": {"m": "To save and protect.", "f": "Conserve water."}, "cooperate": {"m": "To work together.", "f": "Cooperate as a team."}, "preserve": {"m": "To keep safe.", "f": "Preserve fruit in jars."}, "instigate": {"m": "To start trouble.", "f": "Instigate an argument."}, "endanger": {"m": "To put in danger.", "f": "Endanger wildlife."}, "understand": {"m": "To get it.", "f": "Understand the question."}, "scrutinise": {"m": "To look at very carefully.", "f": "Scrutinise a map."}, "skim": {"m": "To glance over quickly.", "f": "Skim a page."}, "glisten": {"m": "To sparkle wetly.", "f": "Dew glistens."}, "glint": {"m": "A tiny flash of light.", "f": "A glint in the eye."}, "hazy": {"m": "Not clear.", "f": "A hazy morning."}, "twilight": {"m": "The dim light after sunset.", "f": "A twilight walk."}, "proportion": {"m": "A part of the whole.", "f": "The proportion of boys to girls."}, "calculated": {"m": "Carefully planned.", "f": "A calculated risk."}, "unforeseen": {"m": "Not expected.", "f": "An unforeseen delay."}, "pierce": {"m": "To make a hole.", "f": "Pierce with a pin."}, "vouch": {"m": "To say you know it is true.", "f": "Vouch for a friend."}, "visible": {"m": "Able to be seen.", "f": "Visible from space."}, "ambiguous": {"m": "Could mean two things.", "f": "An ambiguous answer."}, "complete": {"m": "Whole, finished.", "f": "A complete set."}, "ascend": {"m": "To go up.", "f": "Ascend the stairs."}, "scale": {"m": "To climb.", "f": "Scale a wall."}, "harass": {"m": "To bother again and again.", "f": "Harass means repeated annoyance."}, "pester": {"m": "To keep on bothering.", "f": "Pester for sweets."}, "anxiety": {"m": "Worry.", "f": "Anxiety before a test."}, "surplus": {"m": "More than you need.", "f": "Surplus apples."}, "excess": {"m": "Too much.", "f": "Excess baggage."}, "wanting": {"m": "Missing, or not enough.", "f": "Found wanting."}, "gaiter": {"m": "A cover for your lower leg.", "f": "Walking gaiters."}, "ordeal": {"m": "A painful experience.", "f": "An ordeal of a trip."}, "nostalgic": {"m": "Fondly missing the past.", "f": "Nostalgic about when you were little."}, "wistful": {"m": "Sadly longing.", "f": "A wistful sigh."}, "indifferent": {"m": "Not caring.", "f": "Indifferent to the result."}, "anxious": {"m": "Worried.", "f": "Anxious about the exam."}, "coy": {"m": "Pretending to be shy.", "f": "A coy smile."}, "inferior": {"m": "Lower in quality.", "f": "Inferior goods."}, "besieged": {"m": "Surrounded by attackers.", "f": "A castle besieged."}, "prosperous": {"m": "Rich and successful.", "f": "A prosperous town."}, "mediocre": {"m": "Just average.", "f": "A mediocre meal."}, "exceptional": {"m": "Outstanding.", "f": "Exceptional marks."}, "prevail": {"m": "To win, or to be common.", "f": "Good will prevail."}, "overcome": {"m": "To beat.", "f": "Overcome your fear."}, "reflect": {"m": "To bounce back, or to think.", "f": "Reflect on the day."}, "forfeit": {"m": "To lose by breaking a rule.", "f": "Forfeit the match."}, "compel": {"m": "To force.", "f": "Compel to obey."}, "candid": {"m": "Honest and open, even when it is awkward.", "f": "A candid friend tells you if you have spinach in your teeth."}, "carp": {"m": "To complain about small things.", "f": "Carping about the weather again."}, "disarray": {"m": "A messy, muddled state.", "f": "A bedroom in disarray after the great toy hunt."}, "fret": {"m": "To worry.", "f": "Fretting over a spelling test."}, "laud": {"m": "To praise highly.", "f": "Laud the winner with a big cheer."}, "polarity": {"m": "Being at opposite extremes, like the two ends of a magnet.", "f": "The polarity of north and south poles."}, "propose": {"m": "To put forward an idea or plan.", "f": "Propose a picnic by the sea."}, "imply": {"m": "To hint at something without saying it.", "f": "A raised eyebrow implies \"really?\""}, "surreal": {"m": "Dreamlike and very strange.", "f": "A surreal dream where fish fly."}, "genre": {"m": "A type of book, film or music.", "f": "Mystery is Aaron's favourite genre."}, "retort": {"m": "A quick, sharp reply.", "f": "A witty retort."}, "deceive": {"m": "To trick someone into believing something false.", "f": "Deceive with a disguise."}, "delude": {"m": "To fool someone into believing something untrue.", "f": "Delude yourself that it is not bedtime."}, "aid": {"m": "To help.", "f": "Aid a friend in need."}, "irrational": {"m": "Not sensible or based on reason.", "f": "An irrational fear of socks."}, "familiar": {"m": "Well known to you.", "f": "A familiar face."}, "fresh": {"m": "New, clean, not stale.", "f": "Fresh bread."}, "mundane": {"m": "Ordinary and a bit boring.", "f": "A mundane Monday."}, "rehearse": {"m": "To practise before the real thing.", "f": "Rehearse the school play."}, "recite": {"m": "To say aloud from memory.", "f": "Recite a poem."}, "achieve": {"m": "To succeed in doing something.", "f": "Achieve a goal."}, "alert": {"m": "Awake and watchful.", "f": "Alert as a puffin spotting a gull."}, "amend": {"m": "To change something to improve it.", "f": "Amend your essay."}, "mar": {"m": "To spoil.", "f": "A scratch mars the paint."}, "modify": {"m": "To change a little.", "f": "Modify the recipe."}, "declare": {"m": "To announce clearly.", "f": "Declare the winner."}, "plunge": {"m": "To dive or drop suddenly.", "f": "Plunge into the pool."}, "classify": {"m": "To sort into groups.", "f": "Classify animals into mammals and birds."}, "allocate": {"m": "To share out for a purpose.", "f": "Allocate a desk to each pupil."}, "clatter": {"m": "A loud rattling noise.", "f": "The clatter of pans."}, "clamour": {"m": "A loud, confused noise.", "f": "A clamour of voices."}, "enterprise": {"m": "A big project, or a business.", "f": "A bold enterprise."}, "incision": {"m": "A neat cut.", "f": "A surgeon makes an incision."}, "helix": {"m": "A spiral shape, like a coil.", "f": "DNA is a double helix."}, "pastime": {"m": "A hobby you do for fun.", "f": "Chess is a pastime."}, "venture": {"m": "A risky or exciting project.", "f": "A venture into the unknown."}, "fluctuate": {"m": "To keep going up and down.", "f": "Temperatures fluctuate."}, "mere": {"m": "Nothing more than.", "f": "A mere scratch."}, "resolve": {"m": "To settle, or a firm decision.", "f": "Resolve the problem."}, "oscillate": {"m": "To swing back and forth.", "f": "A pendulum oscillates."}, "wade": {"m": "To walk through water or mud with effort.", "f": "Wade across the stream with wet socks."}, "harbour": {"m": "A safe place where boats shelter, or to keep something in your mind.", "f": "Boats rest in the harbour."}, "caged": {"m": "Shut inside a cage.", "f": "A caged bird wants to fly."}, "coil": {"m": "To wind round and round, or the loops themselves.", "f": "A snake coils up for a nap."}, "wring": {"m": "To twist and squeeze, like getting water out of a cloth.", "f": "Wring out the wet towel."}, "parallel": {"m": "Side by side and always the same distance apart, like train tracks.", "f": "Parallel lines never meet."}, "accustom": {"m": "To get used to something.", "f": "Accustom your eyes to the dark."}, "acquaint": {"m": "To make someone familiar with something.", "f": "Acquaint yourself with the rules before you play."}, "extract": {"m": "To pull or take something out.", "f": "Extract a splinter. Gently."}, "atheist": {"m": "Someone who does not believe in any god.", "f": "An atheist is a person, not a thing you do."}, "allay": {"m": "To calm or ease a fear or worry.", "f": "A hug allays a nightmare."}, "assuage": {"m": "To make a feeling less strong, like soothing worry or hunger.", "f": "A biscuit assuages hunger."}, "insult": {"m": "To say something rude to someone.", "f": "Insult is a rude remark. Be kind instead."}, "impair": {"m": "To damage or make weaker.", "f": "A cold can impair your sense of smell."}, "amaze": {"m": "To surprise someone hugely.", "f": "A magician amazes the crowd."}, "halt": {"m": "To stop.", "f": "The guard shouts, \"Halt!\""}, "interval": {"m": "A gap of time or space between two things.", "f": "An interval at the theatre for ice cream."}, "prevent": {"m": "To stop something from happening.", "f": "Prevent a spill by using a lid."}, "persist": {"m": "To keep going and not give up.", "f": "Persist until you can ride the bike."}, "envelop": {"m": "To wrap up or surround completely.", "f": "Fog envelops the harbour."}, "encompass": {"m": "To surround or include.", "f": "The fence encompasses the whole garden."}, "surface": {"m": "To come up into view, or the outside layer.", "f": "A whale surfaces for air."}, "disappear": {"m": "To vanish.", "f": "Biscuits disappear very fast."}, "discharge": {"m": "To release or let go, or to send away.", "f": "Discharge the water from the bath."}, "discern": {"m": "To notice or work out something that is hard to see.", "f": "Discern a puffin on a foggy cliff."}, "reveal": {"m": "To show or tell something that was hidden.", "f": "Reveal the surprise!"}, "consider": {"m": "To think about carefully.", "f": "Consider your answer before you click."}, "confound": {"m": "To confuse or puzzle someone completely.", "f": "A tricky riddle will confound you."}, "conduct": {"m": "To lead or carry out, or how you behave.", "f": "Conduct an orchestra or an experiment."}, "smother": {"m": "To cover so completely that something cannot breathe, or to put out a fire.", "f": "Smother the flames with a blanket."}, "smug": {"m": "Too pleased with yourself.", "f": "A smug grin after winning."}, "inhale": {"m": "To breathe in.", "f": "Inhale the smell of fresh bread."}, "stifle": {"m": "To hold back or smother.", "f": "Stifle a yawn in class."}, "porous": {"m": "Full of tiny holes that let air or water through.", "f": "A sponge is porous."}, "balk": {"m": "To hesitate or refuse to go on with something.", "f": "The horse balked at the jump."}, "waver": {"m": "To be unsure and keep changing your mind.", "f": "Waver between chocolate and vanilla."}, "wander": {"m": "To walk around with no fixed plan.", "f": "Wander along the beach."}, "dwelling": {"m": "A place where someone lives.", "f": "A cosy dwelling by the sea."}, "conquer": {"m": "To beat and take control of.", "f": "Conquer the mountain."}, "subdue": {"m": "To calm down or bring under control.", "f": "Subdue the wild horse."}, "discuss": {"m": "To talk about something together.", "f": "Discuss the plan."}, "sophisticated": {"m": "Fancy, grown-up and refined.", "f": "A sophisticated dinner party."}, "crude": {"m": "Rough and rude, not polished.", "f": "A crude joke."}, "improve": {"m": "To make better.", "f": "Improve your handwriting."}, "refined": {"m": "Polished and elegant.", "f": "Refined manners."}, "adverse": {"m": "Harmful or unfavourable.", "f": "Adverse weather cancelled the trip."}, "hospitable": {"m": "Friendly and welcoming to guests.", "f": "A hospitable host offers tea."}, "warp": {"m": "To bend out of shape.", "f": "Wood warps in the damp."}, "soiled": {"m": "Dirty.", "f": "Soiled laundry."}, "trivia": {"m": "Little facts that are not very important.", "f": "A trivia quiz."}, "stormy": {"m": "Wild and windy with rough weather.", "f": "A stormy night."}, "affluent": {"m": "Rich and comfortable.", "f": "An affluent neighbourhood."}, "destitute": {"m": "Having nothing at all, extremely poor.", "f": "A destitute traveller with no food."}, "avoid": {"m": "To stay away from.", "f": "Avoid the puddle."}, "reverence": {"m": "Deep respect.", "f": "A hush of reverence."}, "consult": {"m": "To ask for advice.", "f": "Consult a doctor."}, "apathy": {"m": "Not caring at all.", "f": "Apathy is a shrug in word form."}, "awe": {"m": "Wonder mixed with respect.", "f": "Awe at the huge waterfall."}, "robust": {"m": "Strong and healthy.", "f": "A robust oak."}, "original": {"m": "The first, or completely new.", "f": "An original idea."}, "imitation": {"m": "A copy.", "f": "An imitation of the real thing."}, "scribe": {"m": "Someone who writes things down.", "f": "A scribe copied books by hand."}, "duplicate": {"m": "An exact copy, or to copy.", "f": "Duplicate the key."}, "depart": {"m": "To leave.", "f": "The train departs at noon."}, "repel": {"m": "To push away.", "f": "Magnets repel each other."}, "conflict": {"m": "A serious disagreement or fight.", "f": "A conflict over the last cookie."}, "divulge": {"m": "To reveal a secret.", "f": "Never divulge the password."}, "confide": {"m": "To tell someone a secret you trust them with.", "f": "Confide in a friend."}, "expand": {"m": "To get bigger.", "f": "Balloons expand when you blow them up."}, "suspend": {"m": "To hang, or to stop for a while.", "f": "Suspend play for rain."}, "contract": {"m": "To shrink, or a written agreement.", "f": "Metal contracts in the cold."}, "enlarge": {"m": "To make bigger.", "f": "Enlarge the photo."}, "meticulous": {"m": "Very careful about every detail.", "f": "A meticulous artist."}, "berate": {"m": "To tell someone off angrily.", "f": "Berate the referee."}, "cursory": {"m": "Quick and not thorough.", "f": "A cursory glance."}, "illusion": {"m": "Something that looks real but is not.", "f": "A magic trick is an illusion."}, "certainty": {"m": "Being completely sure.", "f": "A certainty: the sun will rise."}, "vacant": {"m": "Empty.", "f": "A vacant seat."}, "enrage": {"m": "To make very angry.", "f": "Enrage the bull."}, "mirage": {"m": "A trick of the light, like water in the desert that is not there.", "f": "A mirage in the desert."}, "vend": {"m": "To sell.", "f": "A vending machine vends snacks."}, "betray": {"m": "To let someone down by breaking their trust.", "f": "Betray a friend."}, "purchase": {"m": "To buy.", "f": "Purchase a ticket."}, "exhume": {"m": "To dig up a buried body.", "f": "A rather grim word: to dig up."}, "debate": {"m": "A formal argument, or to argue it out.", "f": "A class debate."}, "eliminate": {"m": "To remove or get rid of.", "f": "Eliminate the mistakes."}, "admit": {"m": "To let in, or to own up.", "f": "Admit the guests."}, "exclude": {"m": "To leave out.", "f": "Exclude no one."}, "sentiment": {"m": "A feeling or opinion.", "f": "A kind sentiment."}, "reality": {"m": "What is actually true.", "f": "The reality is, it is bedtime."}, "confine": {"m": "To keep inside limits.", "f": "Confine the cat to one room."}, "opinion": {"m": "What you think about something.", "f": "In my opinion, pizza wins."}, "stubborn": {"m": "Refusing to change your mind.", "f": "A stubborn mule."}, "amateur": {"m": "Someone who does it for fun, not as a job.", "f": "An amateur footballer."}, "brood": {"m": "To think about something sadly, or to sit on eggs.", "f": "A hen broods on her eggs."}, "proficient": {"m": "Skilled and able.", "f": "Proficient at swimming."}, "expert": {"m": "Someone with great skill or knowledge.", "f": "An expert on puffins."}, "unblemished": {"m": "Spotless, with no marks.", "f": "An unblemished record."}, "fickle": {"m": "Always changing your mind.", "f": "The fickle wind."}, "wound": {"m": "An injury (or the past tense of \"wind\").", "f": "A wound needs a plaster."}, "lagging": {"m": "Falling behind.", "f": "Lagging at the back of the race."}, "beck": {"m": "A small stream (in northern England), or a signal with your hand.", "f": "Always at your beck and call."}, "frontal": {"m": "At the front.", "f": "A frontal attack."}, "digesting": {"m": "Breaking down food in your tummy.", "f": "Digesting your lunch."}, "trailing": {"m": "Following behind.", "f": "Trailing behind the group."}, "surge": {"m": "A sudden strong rush.", "f": "A surge of water."}, "trickle": {"m": "A thin, slow flow.", "f": "A trickle from the tap."}, "soothe": {"m": "To calm and comfort.", "f": "Soothe a crying baby."}, "gush": {"m": "To pour out fast.", "f": "Water gushes from a burst pipe."}, "irk": {"m": "To annoy.", "f": "It irks me when you hum."}, "amiable": {"m": "Friendly and pleasant.", "f": "An amiable neighbour."}, "regale": {"m": "To entertain with stories.", "f": "Regale the table with tales."}, "amuse": {"m": "To make someone smile or laugh.", "f": "Amuse the baby."}, "fatigued": {"m": "Very tired.", "f": "Fatigued after a long hike."}, "invigorated": {"m": "Full of energy again.", "f": "Invigorated by a cold shower."}, "wholly": {"m": "Completely.", "f": "Wholly delicious."}, "exhausted": {"m": "Completely worn out.", "f": "Exhausted after the race."}, "pliant": {"m": "Bends easily.", "f": "A pliant twig."}, "malleable": {"m": "Easy to shape or bend.", "f": "Gold is malleable."}, "context": {"m": "The words or situation around something that explain it.", "f": "Take the quote in context."}, "detach": {"m": "To separate or unfasten.", "f": "Detach the trailer."}, "append": {"m": "To add on at the end.", "f": "Append a note."}, "believe": {"m": "To think something is true.", "f": "Believe in yourself."}, "affix": {"m": "To stick or attach.", "f": "Affix a stamp."}, "attest": {"m": "To swear that something is true.", "f": "Attest to the facts."}, "repulsive": {"m": "Disgusting.", "f": "A repulsive smell."}, "appealing": {"m": "Attractive and tempting.", "f": "An appealing smell of pancakes."}, "alluring": {"m": "Tempting and attractive.", "f": "An alluring display of sweets."}, "align": {"m": "To line up.", "f": "Align the edges."}, "displace": {"m": "To push out of place.", "f": "Displace the water."}, "segregate": {"m": "To keep apart.", "f": "Segregate the recycling."}, "arrange": {"m": "To put in order.", "f": "Arrange the books."}, "condemn": {"m": "To say strongly that something is wrong.", "f": "Condemn bullying."}, "vulgar": {"m": "Rude, rough and lacking manners.", "f": "A vulgar joke is not polite."}, "contentment": {"m": "Quiet happiness.", "f": "A cat purring in contentment."}, "destined": {"m": "Meant to happen, as if by fate.", "f": "Destined for greatness."}, "parity": {"m": "Being equal.", "f": "Parity between teams."}, "anguish": {"m": "Severe pain or sadness.", "f": "A cry of anguish."}, "humid": {"m": "Warm and damp.", "f": "A humid jungle."}, "muggy": {"m": "Warm, damp and sticky.", "f": "A muggy afternoon."}, "arid": {"m": "Very dry.", "f": "An arid desert."}, "akin": {"m": "Similar or related.", "f": "A donkey is akin to a horse."}, "comparable": {"m": "Similar enough to compare.", "f": "Comparable prices."}, "divergent": {"m": "Going in different directions.", "f": "Divergent paths."}, "raiment": {"m": "Clothing (an old-fashioned word).", "f": "Dressed in fine raiment."}, "hasten": {"m": "To hurry.", "f": "Hasten to the door."}, "dash": {"m": "To run quickly.", "f": "Dash for the bus."}, "dawdle": {"m": "To go slowly and waste time.", "f": "Don't dawdle!"}, "offend": {"m": "To upset or insult.", "f": "Offend with a rude joke."}, "aggrieve": {"m": "To make someone feel unfairly treated.", "f": "Aggrieved by the decision."}, "official": {"m": "Formally approved, or a person in charge.", "f": "An official letter."}, "offset": {"m": "To balance or cancel out.", "f": "Offset the cost."}, "temporary": {"m": "Lasting only a short time.", "f": "A temporary fix."}, "enduring": {"m": "Lasting a long time.", "f": "Enduring friendship."}, "interim": {"m": "In the meantime.", "f": "An interim solution."}, "tempting": {"m": "Making you want it.", "f": "A tempting cake."}, "brisk": {"m": "Quick and lively.", "f": "A brisk walk."}, "integrity": {"m": "Being honest and having strong principles.", "f": "A person of integrity."}, "respond": {"m": "To answer.", "f": "Respond to the email."}, "interrogate": {"m": "To question closely.", "f": "Interrogate the suspect."}, "deter": {"m": "To put someone off.", "f": "A fence deters thieves."}, "wither": {"m": "To dry up and shrivel.", "f": "Flowers wither without water."}, "lifeless": {"m": "Without life or energy.", "f": "A lifeless landscape."}, "thrive": {"m": "To grow and do well.", "f": "Plants thrive in sunshine."}, "solace": {"m": "Comfort when you are sad.", "f": "Find solace in a hug."}, "distress": {"m": "Great worry or pain.", "f": "A cry of distress."}, "consolation": {"m": "Comfort, or a small prize for losing.", "f": "A consolation prize."}, "unite": {"m": "To join together.", "f": "Unite the team."}, "evade": {"m": "To dodge or escape from.", "f": "Evade the tag."}, "capsize": {"m": "To tip over in the water.", "f": "The boat capsized."}, "encounter": {"m": "To meet, often by chance.", "f": "Encounter a bear."}, "elude": {"m": "To escape from or avoid.", "f": "The answer eludes me."}, "permeable": {"m": "Allowing liquid to pass through.", "f": "Permeable fabric."}, "derelict": {"m": "Abandoned and falling to pieces.", "f": "A derelict house."}, "novel": {"m": "A long story book, or something new.", "f": "A novel idea."}, "inhabited": {"m": "Lived in.", "f": "An inhabited island."}, "pasture": {"m": "A field where animals graze.", "f": "Cows in the pasture."}, "desolate": {"m": "Empty, lonely and bleak.", "f": "A desolate wasteland."}, "refute": {"m": "To prove something wrong.", "f": "Refute the claim."}, "verify": {"m": "To check that something is true.", "f": "Verify your answer."}, "gloat": {"m": "To show off about winning.", "f": "Do not gloat."}, "boisterous": {"m": "Noisy and full of energy.", "f": "A boisterous party."}, "plume": {"m": "A big feather, or a cloud of smoke.", "f": "A plume of smoke."}, "subdued": {"m": "Quiet and calm.", "f": "A subdued mood."}, "distinct": {"m": "Clearly different, or easy to notice.", "f": "A distinct smell."}, "ardent": {"m": "Very enthusiastic.", "f": "An ardent fan."}, "fortunate": {"m": "Lucky.", "f": "Fortunate to win."}, "fervent": {"m": "Full of strong feeling.", "f": "A fervent prayer."}, "apathetic": {"m": "Not interested or caring.", "f": "An apathetic shrug."}, "approach": {"m": "To come near.", "f": "Approach slowly."}, "appraise": {"m": "To judge the value of something.", "f": "Appraise a painting."}, "humiliate": {"m": "To make someone feel ashamed.", "f": "Never humiliate anyone."}, "promote": {"m": "To lift up or help along.", "f": "Promote a new product."}, "abscond": {"m": "To run away secretly.", "f": "A prisoner absconds."}, "shame": {"m": "A painful feeling of having done wrong.", "f": "Hang your head in shame."}, "deprive": {"m": "To take something away from someone.", "f": "Deprive of sleep."}, "bestow": {"m": "To give something as an honour.", "f": "Bestow a medal."}, "commit": {"m": "To promise yourself to something.", "f": "Commit to practice."}, "deny": {"m": "To say something is not true.", "f": "Deny the claim."}, "boundary": {"m": "The edge of something.", "f": "The boundary of the field."}, "outskirt": {"m": "The edge of a town.", "f": "The outskirts of town."}, "host": {"m": "A person who welcomes guests.", "f": "The host serves tea."}, "hub": {"m": "The centre of activity.", "f": "A bus hub."}, "restrain": {"m": "To hold back.", "f": "Restrain the dog."}, "compete": {"m": "To try to win against others.", "f": "Compete in the race."}, "contend": {"m": "To compete, or to argue.", "f": "Contend for the title."}, "occupy": {"m": "To fill or live in a place.", "f": "Occupy a seat."}, "component": {"m": "One part of a bigger thing.", "f": "A component of the engine."}, "volatile": {"m": "Likely to change suddenly.", "f": "A volatile temper."}, "erratic": {"m": "Unpredictable.", "f": "An erratic driver."}, "sacred": {"m": "Holy and treated with deep respect.", "f": "A sacred place."}, "rogue": {"m": "A cheeky troublemaker.", "f": "A lovable rogue."}, "calculate": {"m": "To work out with numbers.", "f": "Calculate the total."}, "contemplate": {"m": "To think about deeply.", "f": "Contemplate the sea."}, "torment": {"m": "To cause great suffering.", "f": "Tormented by nightmares."}, "operate": {"m": "To work, or to use a machine.", "f": "Operate the machine."}, "alleviate": {"m": "To make pain or a problem less severe.", "f": "Alleviate the pain."}, "gripe": {"m": "A small complaint.", "f": "My gripe is the noise."}, "grumble": {"m": "To complain quietly.", "f": "Grumble about homework."}, "compassion": {"m": "Kindness towards someone who is suffering.", "f": "A hug shows compassion."}, "hence": {"m": "For that reason.", "f": "It was raining, hence the umbrella."}, "impudent": {"m": "Cheeky and disrespectful.", "f": "An impudent grin."}, "remote": {"m": "Far away.", "f": "A remote island."}, "bliss": {"m": "Perfect happiness.", "f": "Pure bliss on a sunny day."}, "feral": {"m": "Wild, living without people.", "f": "A feral cat."}, "barbed": {"m": "Having sharp points, like barbed wire.", "f": "Barbed wire."}, "terminate": {"m": "To end.", "f": "Terminate the contract."}, "terse": {"m": "Short and abrupt.", "f": "A terse reply."}, "abort": {"m": "To stop before finishing.", "f": "Abort the mission."}, "punish": {"m": "To make someone suffer for doing wrong.", "f": "Punish the rule-breaker."}, "supply": {"m": "To provide what is needed.", "f": "Supply the team with water."}, "episode": {"m": "One part of a story or series, or a single event.", "f": "An episode of your favourite show."}, "inactivity": {"m": "Doing nothing, not moving.", "f": "Days of inactivity on the sofa."}, "include": {"m": "To have as part of the whole.", "f": "Include everyone."}, "truce": {"m": "An agreement to stop fighting for a while.", "f": "Both sides agreed a truce."}, "chaotic": {"m": "Totally disorganised and messy.", "f": "A chaotic classroom."}, "reprieve": {"m": "A pause or escape from something bad.", "f": "A reprieve from homework."}, "persistence": {"m": "Keeping going without giving up.", "f": "Persistence wins the race."}, "suppose": {"m": "To guess or assume something is true.", "f": "I suppose it might rain."}, "compute": {"m": "To work out an answer, usually with numbers.", "f": "A computer computes sums."}, "debrief": {"m": "To talk through what happened afterwards.", "f": "Debrief after the mission."}, "provide": {"m": "To give what is needed.", "f": "Provide snacks for the trip."}, "incident": {"m": "Something that happens, often a small event.", "f": "An incident in the playground."}, "competent": {"m": "Able to do something well enough.", "f": "A competent swimmer."}, "origin": {"m": "Where something starts.", "f": "The origin of the river."}, "entity": {"m": "A single complete thing that exists on its own.", "f": "A company is a legal entity."}, "segment": {"m": "One part of a whole.", "f": "A segment of an orange."}, "refrain": {"m": "To hold yourself back from doing something.", "f": "Refrain from shouting."}, "lucid": {"m": "Clear and easy to understand.", "f": "A lucid explanation."}, "dissuade": {"m": "To talk someone out of something.", "f": "Dissuade him from jumping."}, "mention": {"m": "To say something briefly.", "f": "Mention it to your teacher."}, "develop": {"m": "To grow or make something grow.", "f": "Develop a skill."}, "repress": {"m": "To hold back or keep down.", "f": "Repress a giggle."}, "prompt": {"m": "To nudge someone into action, or quick and on time.", "f": "A prompt reply."}, "grant": {"m": "To give or allow.", "f": "Grant a wish."}};
+const put = (el, ...k) => el.replaceChildren(...k.flat(Infinity).filter(x => x != null && x !== false));
+/* ---------- state + storage ---------- */
+const KEY = 'cuffin-word-quest-v1';
+const ARCH = KEY + '-before-race';
+const LSAVES = KEY + '-saves';
+let storageOK = true;
+function sampleWords(){ return SAMPLE.map(([w, m, s]) => ({ w, m, s })); }
+function fresh(){
+  return { v:1, name:'Aaron', bank:'Sample words (58)', words:sampleWords(),
+    prog:{}, points:0, fishV:1, history:[], rounds:[], badges:{}, prizes:[], pin:'', last:'', demo:false,
+    race:{ mf:0, mm:0, ms:0 }, custard:0, book:{ list:[], next:[] }, intro:false, leader:null, lastVisit:null, upd:0, mv:2,
+    settings:{ hints:true, sound:true, music:true },
+    stats:{ answered:0, right:0, spell:0, fixed:0, best:0, rounds:0, perfect:0 } };
+}
+const isBlank = o => !o || ((!o.stats || !o.stats.answered) && !(o.history && o.history.length));
+/* restoring = keep the old progress (a backup code, a save point, the archive); otherwise a pre-race save starts the race from scratch */
+function migrate(o, restoring){
+  const f = fresh();
+  if (!o.fishV){ o.points = Math.round((o.points || 0) / 10); (o.history || []).forEach(x => { x.p = Math.round((x.p || 0) / 10); }); o.fishV = 1; }
+  if (!o.race){
+    if (restoring){
+      const m = Object.values(o.prog || {}).filter(r => r && r.streak >= 3).length;
+      o.race = { mf:Math.max(0, (o.points || 0) - 3), mm:Math.max(0, m - 2), ms:0 };
+      if (o.intro === undefined) o.intro = true;
+    } else {
+      try { if (!localStorage.getItem(ARCH)) localStorage.setItem(ARCH, JSON.stringify(o)); } catch (e) {}
+      const keep = { words:Array.isArray(o.words) && o.words.length ? o.words : f.words, bank:o.bank || f.bank,
+        prizes:(o.prizes || []).map(p => Object.assign({}, p, { announced:false, given:false })), name:o.name || 'Aaron', pin:o.pin || '' };
+      o = Object.assign(fresh(), keep);
+    }
+  }
+  if (o.mv !== 2){ for (const k in (o.prog || {})){ const r = (o.prog || {})[k]; if (r){ r.ty = r.ty || []; r.dy = r.dy || []; r.m = r.streak >= 3 && r.ty.length >= 2 && r.dy.length >= 2 && (!k.startsWith('card:') || r.ty.includes('sim')); } } o.mv = 2; }
+  for (const k in f) if (o[k] === undefined) o[k] = f[k];
+  for (const k in f.stats) if (o.stats[k] === undefined) o.stats[k] = 0;
+  for (const k in f.race) if (o.race[k] === undefined) o.race[k] = 0;
+  for (const k in f.settings) if (o.settings[k] === undefined) o.settings[k] = f.settings[k];
+  const sent = {}; SAMPLE.forEach(([w, m, s]) => { sent[norm(w)] = s; });
+  o.words.forEach(x => { if (!x.s && sent[norm(x.w)]) x.s = sent[norm(x.w)]; });
+  delete o.tomatoes;
+  return o;
+}
+function load(){
+  try {
+    localStorage.setItem(KEY + '-test', '1'); localStorage.removeItem(KEY + '-test');
+    const raw = localStorage.getItem(KEY);
+    if (raw){
+      try { const o = migrate(JSON.parse(raw), false); localStorage.setItem(KEY, JSON.stringify(o)); return o; }
+      catch (e) { try { localStorage.setItem(KEY + '-unreadable-' + Date.now(), raw); } catch (e2) {} }
+    }
+  } catch (e) { storageOK = false; }
+  return fresh();
+}
+function saveLocal(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { storageOK = false; } }
+function save(){ S.upd = Date.now(); saveLocal(); pushSoon(); }
+function archived(){ try { return localStorage.getItem(ARCH); } catch (e) { return null; } }
+let S = load();
+
+/* ---------- family sync + save points ---------- */
+const SYNC = { mode:'local', ready:false, db:null, uid:null, busy:false, again:false, timer:null, pending:null, tries:0 };
+function setSync(m){ SYNC.mode = m; const el = $('#syncchip'); if (el) drawSync(el); }
+function drawSync(el){
+  const map = { local:['This device', ''], cloud:['Family synced', 'ok'], saving:['Saving…', ''], error:['Not synced', ''], check:['Connecting…', ''] };
+  const [t, c] = map[SYNC.mode] || map.local;
+  el.className = 'sync ' + c; put(el, icon(SYNC.mode === 'cloud' ? 'cloud' : SYNC.mode === 'local' ? 'phone' : 'cloud'), t);
+  el.title = SYNC.mode === 'cloud' ? 'Progress is synced with the family, so it is the same on every device.' : SYNC.mode === 'local' ? 'Progress is saved in this browser only.' : '';
+}
+const progRef = () => SYNC.db.doc('data/users/' + SYNC.uid + '/progress');
+const savesCol = () => progRef().collection('saves');
+async function pull(first){
+  try {
+    const snap = await progRef().get();
+    SYNC.ready = true;
+    let remote = null;
+    if (snap.exists){ try { remote = JSON.parse(snap.data().s); } catch (e) {} }
+    SYNC.remoteReal = !!remote && !isBlank(remote);
+    const blankHere = isBlank(S) && !SYNC.allowBlank;
+    if (remote && (((remote.upd || 0) > (S.upd || 0)) || (blankHere && SYNC.remoteReal))){
+      const inRound = R && R.queue && R.queue.length;
+      if (inRound && !blankHere) SYNC.pending = remote; else adopt(remote, first);
+      setSync('cloud');
+    } else if ((!blankHere || !SYNC.remoteReal) && (!remote || (S.upd || 0) > (remote.upd || 0))) push();
+    else setSync('cloud');
+  } catch (e) { if (first) setSync('local'); }
+}
+function adopt(remote, quiet){
+  try { S = migrate(remote, true); raceFix(); saveLocal(); } catch (e) { return; }
+  SYNC.pending = null;
+  if (!quiet) toast('Progress synced from the family');
+  if (['home','progress','trophies','grownups'].includes(screen)) SCREENS[screen]();
+  else if (screen === 'intro' && S.intro){ R = null; SND.stop(); home.recapDone = true; home(); }
+}
+function pushSoon(){ if (!SYNC.ready) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(push, 1500); }
+async function push(){
+  if (!SYNC.ready) return;
+  if (isBlank(S) && SYNC.remoteReal && !SYNC.allowBlank) return;   // never let a fresh start overwrite real progress
+  if (SYNC.busy){ SYNC.again = true; return; }
+  SYNC.busy = true; setSync('saving');
+  try { await progRef().set({ s:JSON.stringify(S), upd:S.upd || Date.now(), fish:S.points, words:masteredCount() }); SYNC.tries = 0; setSync('cloud'); }
+  catch (e){ if (e && e.code === 'unavailable' && SYNC.tries < 2){ SYNC.tries++; setTimeout(push, 1500 + Math.random() * 1500); } else setSync('error'); }
+  SYNC.busy = false;
+  if (SYNC.again){ SYNC.again = false; push(); }
+}
+const stamp = () => { const d = new Date(); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+function localSaves(){ try { return JSON.parse(localStorage.getItem(LSAVES) || '[]'); } catch (e) { return []; } }
+async function listSaves(){
+  if (SYNC.ready){ try { const q = await savesCol().orderBy('at', 'desc').limit(40).get(); return q.docs.map(d => Object.assign({ id:d.id, cloud:true }, d.data())); } catch (e) {} }
+  return localSaves();
+}
+async function addSave(name){
+  const row = { name, at:Date.now(), a:S.points, m:S.race.mf, w:masteredCount(), mw:S.race.mm, s:JSON.stringify(S) };
+  if (SYNC.ready){
+    try { await savesCol().add(row); pruneSaves(); return true; }
+    catch (e){ if (e && e.code === 'quota_exceeded'){ toast('No room for more save points. Delete an old one first.'); return false; } }
+  }
+  try { const arr = localSaves(); arr.unshift(Object.assign({ id:'l' + row.at }, row)); localStorage.setItem(LSAVES, JSON.stringify(arr.slice(0, 12))); return true; }
+  catch (e){ toast('Could not make a save point here.'); return false; }
+}
+async function pruneSaves(){
+  try { const rows = await listSaves(); for (const r of rows.slice(12)) if (r.cloud) await savesCol().doc(r.id).delete(); } catch (e) {}
+}
+async function deleteSave(row){
+  if (row.cloud){ try { await savesCol().doc(row.id).delete(); } catch (e) { toast('Could not delete that save point.'); } }
+  else { try { localStorage.setItem(LSAVES, JSON.stringify(localSaves().filter(x => x.id !== row.id))); } catch (e) {} }
+}
+async function restoreSave(row){
+  await addSave('Before going back · ' + stamp());
+  S = migrate(JSON.parse(row.s), true); raceFix(); save();
+}
+
+/* ---------- dates ---------- */
+const pad = n => String(n).padStart(2,'0');
+const dstr = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+let SIMDAY = null;
+const today = () => SIMDAY || dstr(new Date());
+function parseD(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d, 12); }
+function addDays(s, n){ const d = parseD(s); d.setDate(d.getDate()+n); return dstr(d); }
+function daysSince(s){ if (!s) return 999; return Math.round((parseD(today()) - parseD(s)) / 864e5); }
+function dayStreak(){
+  const days = new Set(S.history.map(x => x.d));
+  let d = today(); if (!days.has(d)) d = addDays(d, -1);
+  let n = 0; while (days.has(d)){ n++; d = addDays(d, -1); }
+  return n;
+}
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const longDate = s => { const d = parseD(s); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); };
+const shortDate = s => { const d = parseD(s); return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+const matchDay = () => { const days = new Set(S.history.map(x => x.d)); days.add(today()); return days.size; };
+
+/* ---------- words, progress and mastery ----------
+   A word becomes MASTERED when the current run of right answers is at least 3 long, came in at least
+   2 different kinds of question, on at least 2 different days, with no hint used. A wrong answer knocks
+   the run back by 2. If the word was mastered, one slip makes it 'wobbly' (one right answer re-secures it);
+   a second slip un-masters it and clears the kinds and days, so it must be earned again. */
+const CARD_ITEMS = CARDS.map(c => ({ w:c.w, m:(XW[c.w] || {}).m || 'Similar and opposite card', card:c }));
+const allItems = () => S.words.concat(CARD_ITEMS);
+const pk = x => x.card ? 'card:' + (x.card.id || norm(x.w)) : norm(x.w);
+function rec(x){ const k = pk(x); return S.prog[k] || (S.prog[k] = { streak:0, seen:0, right:0, miss:0, fixed:0, last:'', ty:[], dy:[] }); }
+const peek = x => S.prog[pk(x)];
+/* cards also need a hint-free, fully right similar & opposite answer in the current run */
+const meetsMastery = (r, card) => r.streak >= 3 && (r.ty || []).length >= 2 && (r.dy || []).length >= 2 && (!card || (r.ty || []).includes('sim'));
+const isMasteredRec = r => !!r && !!r.m && !r.wob;
+const isMastered = x => isMasteredRec(peek(x));
+const masteredCount = () => allItems().filter(isMastered).length;
+function status(x){
+  const r = peek(x);
+  if (!r || !r.seen) return 'new';
+  if (isMasteredRec(r)) return 'mastered';
+  if (r.wob || r.streak >= 3) return 'lock';
+  return 'learning';
+}
+const trickyWords = () => allItems().filter(x => { const r = peek(x); return r && r.miss > 0 && !isMasteredRec(r); })
+  .sort((a,b) => peek(b).miss - peek(a).miss);
+function counts(){ const c = { mastered:0, lock:0, learning:0, new:0 }; for (const x of allItems()) c[status(x)]++; return c; }
+const lockReadyToday = () => allItems().filter(x => { const r = peek(x); return r && !isMasteredRec(r) && (r.wob || (r.streak >= 3 && !(r.dy || []).includes(today()))); }).length;
+function accuracy(){ return S.stats.answered ? Math.round(100 * S.stats.right / S.stats.answered) : 0; }
+const info = w => XW[w] || XW[norm(w)] || { m:'', f:'' };
+const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function gapFor(x){
+  const s = x.card ? (info(x.w).f || '') : (x.s || '');
+  if (!s) return null;
+  const re = new RegExp('\\b' + esc(x.w) + '\\b', 'i'), m = re.exec(s);
+  if (!m) return null;
+  return { before:s.slice(0, m.index), word:m[0], after:s.slice(m.index + m[0].length) };
+}
+
+/* ranks scale with the size of the word bank; Leader needs everything mastered */
+const RANK_NAMES = ['Egg','Hatchling','Fledgling','Beak Cadet','Fish Fetcher','Burrow Boss','Wave Rider','Atlantic Crosser','Puffin Elder','Puffin Legend','Honorary Member of the Puffin Community','Leader of the Puffin Community'];
+const RANK_PCT = [0,.02,.05,.10,.18,.28,.40,.55,.72,.86,.95,1];
+function ranks(){
+  const n = Math.max(1, allItems().length); let prev = -1;
+  return RANK_NAMES.map((name, i) => {
+    let at = i===0 ? 0 : Math.max(prev+1, Math.round(RANK_PCT[i]*n));
+    if (i === RANK_NAMES.length - 1) at = n; else at = Math.min(at, n - (RANK_NAMES.length - 1 - i));
+    prev = at; return {name, at};
+  });
+}
+function rankInfo(m){ const t = ranks(); let i = 0; while (i+1 < t.length && t[i+1].at <= m) i++; return { cur:t[i], next:t[i+1] || null, i, table:t }; }
+
+/* ---------- the race: the Mirror ----------
+   His guesses look random but are steered: more likely right when he is behind, a big catch when he is well behind,
+   never more than LEAD_CAP fish or MAST_CAP words ahead, never every word, and in the last END_ZONE words
+   he must stay strictly behind. Aaron's own scoring is never touched. */
+const LEAD_CAP = 3, MAST_CAP = 1, END_ZONE = 10;
+const MC = { base:.6, slope:.08, catchStart:3, catchStep:3, catchMax:4 };
+function raceCaps(){
+  const T = allItems().length, aM = masteredCount(), A = S.points, end = T - aM <= END_ZONE;
+  return { T, aM, A, end, fishMax: end ? A - 1 : A + LEAD_CAP, mastMax: Math.max(0, Math.min(T - 1, end ? aM - 1 : aM + MAST_CAP)) };
+}
+const mirrorChance = () => { const base = Math.max(.3, Math.min(MC.base, (S.race.ra == null ? .6 : S.race.ra) - .05)); return Math.max(.15, Math.min(.9, base + MC.slope * (S.points - S.race.mf))); };
+function mirrorTry(gain){
+  const c = raceCaps(), r = S.race, d = c.A - r.mf;
+  let ok = Math.random() < mirrorChance();
+  if (ok && d >= MC.catchStart) gain += Math.min(MC.catchMax, 1 + Math.floor((d - MC.catchStart) / MC.catchStep));
+  gain = Math.min(gain, c.fishMax - r.mf);
+  if (gain < 1) ok = false;
+  if (ok){ r.mf += gain; r.ms++; } else r.ms = 0;
+  return { ok, fish: ok ? gain : 0 };
+}
+const mirrorGain = type => 1 + (S.race.ms >= 2 ? 1 : 0) + (type === 'spell' || type === 'scram' ? 1 : 0);
+function mirrorMastery(ok){
+  const r = S.race, c = raceCaps();
+  if (ok && Math.random() < Math.max(.08, Math.min(.9, .3 + .12 * (c.aM - r.mm)))) r.mm++;
+  else if (!ok && r.mm > c.aM && Math.random() < .5) r.mm--;
+  r.mm = Math.max(0, Math.min(r.mm, raceCaps().mastMax));
+}
+function raceFix(){ const c = raceCaps(); if (c.end) S.race.mf = Math.min(S.race.mf, Math.max(0, c.A - 1)); S.race.mm = Math.min(S.race.mm, c.mastMax); }
+const allDone = () => { const T = allItems().length; return T > 0 && masteredCount() >= T; };
+function misspell(w){
+  const s = [...w], V = 'aeiou', tries = [
+    () => { const i = 1 + rnd(Math.max(1, s.length - 2)); if (s[i] === s[i+1] || !s[i+1]) return null; const t = s.slice(); [t[i], t[i+1]] = [t[i+1], t[i]]; return t; },
+    () => { const i = 1 + rnd(Math.max(1, s.length - 1)); if (!/[a-z]/i.test(s[i] || '')) return null; const t = s.slice(); t.splice(i, 0, s[i]); return t; },
+    () => { const i = s.findIndex((c, j) => j > 0 && V.includes(c)); if (i < 0) return null; const t = s.slice(); t[i] = V[(V.indexOf(t[i]) + 1 + rnd(4)) % 5]; return t; },
+    () => { if (s.length < 4) return null; const i = 1 + rnd(s.length - 2); const t = s.slice(); t.splice(i, 1); return t; }
+  ];
+  for (let k = 0; k < 12; k++){ const t = tries[rnd(tries.length)](); if (t && norm(t.join('')) !== norm(w)) return t.join(''); }
+  return w + 'e';
+}
+const raceLine = () => { const d = S.points - S.race.mf; return d > 0 ? 'behind' : d < 0 ? 'ahead' : 'level'; };
+
+/* ---------- badges ---------- */
+const BADGES = [
+  { id:'first',  n:'First Catch',     d:'Get your first answer right.',               ic:'fish',   t:c => c.S.stats.right >= 1 },
+  { id:'s5',     n:'Hot Streak',      d:'5 right in a row.',                          ic:'flame',  t:c => c.S.stats.best >= 5 },
+  { id:'s10',    n:'Unstoppable',     d:'10 right in a row.',                         ic:'bolt',   t:c => c.S.stats.best >= 10 },
+  { id:'perf',   n:'Perfect Match',   d:'A whole round right first time.',            ic:'star',   t:c => c.S.stats.perfect >= 1 },
+  { id:'fix5',   n:'Comeback Kid',    d:'Fix 5 tricky words.',                        ic:'wave',   t:c => c.S.stats.fixed >= 5 },
+  { id:'spell10',n:'Spelling Star',   d:'Spell or unscramble 10 words.',              ic:'pen',    t:c => c.S.stats.spell >= 10 },
+  { id:'m10',    n:'Ten Locked In',   d:'Master 10 words.',                           ic:'book',   t:c => c.m >= 10 },
+  { id:'clear',  n:'Clear Water',     d:'Get 10 fish ahead of the Mirror.',           ic:'fish',   t:c => c.S.points - c.S.race.mf >= 10 },
+  { id:'half',   n:'Half-Way Hero',   d:'Master half of all the words.',              ic:'trophy', t:c => c.total >= 10 && c.m >= c.total/2 },
+  { id:'d3',     n:'Three-Day Flyer', d:'Play 3 days in a row.',                      ic:'wave',   t:c => c.days >= 3 },
+  { id:'d7',     n:'Week of Waves',   d:'Play 7 days in a row.',                      ic:'trophy', t:c => c.days >= 7 },
+  { id:'r10',    n:'Regular',         d:'Finish 10 rounds.',                          ic:'flame',  t:c => c.S.stats.rounds >= 10 },
+  { id:'cust5',  n:'Custard Collector', d:'Win 5 pots of custard.',             ic:'custard', t:c => (c.S.custard || 0) >= 5 },
+  { id:'leader', n:'Crowned',         d:'Beat the Mirror and become Leader.',         ic:'crown',  t:c => !!c.S.leader }
+];
+function checkBadges(){
+  const ctx = { S, m:masteredCount(), days:dayStreak(), total:allItems().length }, got = [];
+  for (const b of BADGES) if (!S.badges[b.id] && b.t(ctx)){ S.badges[b.id] = today(); got.push(b); }
+  return got;
+}
+
+/* ---------- round engine ---------- */
+let R = null, FORCE = null;
+function weight(x){
+  const r = peek(x); let b;
+  if (!r || r.seen === 0) b = 3;
+  else if (r.wob) b = 7;
+  else if (isMasteredRec(r)) b = daysSince(r.last) >= 7 ? 1.5 : 0.35;
+  else if (r.streak >= 3) b = (r.dy || []).includes(today()) && (r.ty || []).length >= 2 ? 0.3 : 6;   // waiting for another day / ready to lock in
+  else if (r.miss > 0 && r.streak === 0) b = 7;
+  else b = 4;
+  return x.card ? b * 1.6 : b;
+}
+function pickWords(n, pool){
+  const left = pool.slice(), out = [];
+  while (out.length < n && left.length){
+    const ws = left.map(weight); const tot = ws.reduce((a,b)=>a+b, 0);
+    let r = Math.random() * tot, i = 0;
+    while (i < left.length - 1 && r >= ws[i]){ r -= ws[i]; i++; }
+    out.push(left.splice(i, 1)[0]);
+  }
+  return out;
+}
+function newRound(picks, kind){
+  return { queue: picks.map(w => ({ w, retry:false, tries:0, lastType:'' })), idx:0, total:picks.length, kind:kind || 'mixed',
+    firstTry:0, points:0, mfish:0, custard:0, book:[], streak:0, best:0, fixed:0, results:[], missed:[], mastered:[], hello:say('start') };
+}
+function startRound(kind){
+  let pool = allItems();
+  if (kind === 'cards') pool = CARD_ITEMS;
+  else if (kind === 'tricky'){ pool = trickyWords(); if (!pool.length){ toast('Nothing tricky yet!'); return home(say('empty')); } }
+  if (!pool.length){ toast('The word bank is empty. Add words in Grown-ups.'); return; }
+  const B = S.book && S.book.next || [], n = Math.min(10, pool.length);
+  const first = kind === 'tricky' ? [] : pool.filter(x => B.includes(pk(x))).slice(0, 4);
+  if (first.length && S.book) S.book.next = B.filter(k => !first.some(x => pk(x) === k));
+  const rest = pickWords(n - first.length, pool.filter(x => !first.includes(x)));
+  R = newRound(shuffle(first).concat(rest), kind);
+  R.rank0 = rankInfo(masteredCount()).i;
+  SND.prime(); SND.fx('whistle'); SND.loop(true);
+  if (Math.random() < .5) setTimeout(() => VOICE.play('c04'), 600);
+  question();
+}
+const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell it', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite' };
+function typesFor(x){
+  const t = x.card ? ['sim', 'w2m', 'scram'] : (S.words.length >= 4 ? ['w2m', 'm2w', 'spell', 'scram'] : ['spell', 'scram']);
+  if (gapFor(x) && (x.card || S.words.length >= 4)) t.push('gap');
+  return t;
+}
+function pickType(item){
+  const x = item.w, r = peek(x);
+  if (FORCE && typesFor(x).includes(FORCE)) return FORCE;
+  if (item.retry && item.lastType) return item.lastType;
+  if (r && x.card && r.streak >= 2 && !(r.ty || []).includes('sim')) return 'sim';   // steer cards towards the similar & opposite test
+  if (!r || !r.seen) return x.card ? (Math.random() < .65 ? 'sim' : 'w2m') : (S.words.length >= 4 ? (Math.random() < .5 ? 'w2m' : 'm2w') : 'spell');
+  const base = { sim:4, w2m:2, m2w:2, spell:2, scram:2, gap:2.5 };
+  const ts = typesFor(x), ws = ts.map(t => base[t] * ((r.streak > 0 && (r.ty || []).includes(t)) ? .35 : 1) * (t === item.lastType ? .2 : 1));
+  let p = Math.random() * ws.reduce((a, b) => a + b, 0), i = 0;
+  while (i < ts.length - 1 && p >= ws[i]){ p -= ws[i]; i++; }
+  return ts[i];
+}
+function makeQuestion(item){
+  const x = item.w, type = pickType(item);
+  const q = { type, w:x, options:null, gap:null };
+  if (type === 'w2m'){
+    if (x.card){
+      const right = info(x.w).m, ban = new Set([x.w, ...x.card.o]);
+      const d = shuffle(CARDS.filter(c => !ban.has(c.w))).map(c => info(c.w).m).filter(m => m && m !== right).slice(0, 3);
+      q.options = shuffle([{ t:right, ok:true }, ...d.map(t => ({ t, ok:false }))]);
+    } else {
+      const d = shuffle(S.words.filter(y => norm(y.w) !== norm(x.w) && y.m !== x.m)).slice(0, 3);
+      q.options = shuffle([{ t:x.m, ok:true }, ...d.map(y => ({ t:y.m, ok:false }))]);
+    }
+  } else if (type === 'm2w'){
+    const others = S.words.filter(y => norm(y.w) !== norm(x.w));
+    const d = shuffle(others.filter(y => y.w[0].toLowerCase() === x.w[0].toLowerCase())).slice(0, 3);
+    if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y)) d.push(y);
+    q.options = shuffle([{ t:x.w, ok:true }, ...d.map(y => ({ t:y.w, ok:false }))]);
+  } else if (type === 'gap'){
+    q.gap = gapFor(x);
+    const pool = x.card ? CARDS.filter(c => c.w !== x.w && !x.card.o.includes(c.w)).map(c => c.w) : S.words.filter(y => norm(y.w) !== norm(x.w)).map(y => y.w);
+    q.options = shuffle([{ t:q.gap.word.toLowerCase() === x.w.toLowerCase() ? x.w : q.gap.word, ok:true }, ...shuffle(pool).slice(0, 3).map(t => ({ t, ok:false }))]);
+  }
+  return q;
+}
+/* Aaron's scoring, shared by the game and the test simulation. fishDone = fish already paid (cards pay per stage). */
+function scoreItem(item, q, ok, fishDone, hinted){
+  const r = rec(q.w); r.seen++; r.last = today(); r.ty = r.ty || []; r.dy = r.dy || [];
+  const was = isMasteredRec(r), spellish = q.type === 'spell' || q.type === 'scram';
+  let pts = 0, note = null, line, lock = null, custard = false;
+  S.stats.answered += 1;
+  S.race.ra = (S.race.ra == null ? .6 : S.race.ra) * .9 + (ok ? .1 : 0);
+  if (ok){
+    S.stats.right++; if (spellish) S.stats.spell++;
+    R.streak++; R.best = Math.max(R.best, R.streak); S.stats.best = Math.max(S.stats.best, R.streak);
+    if (R.streak % 5 === 0){ S.custard = (S.custard || 0) + 1; R.custard = (R.custard || 0) + 1; custard = true; }
+    if (!item.retry) R.firstTry++; else { r.fixed++; R.fixed++; S.stats.fixed++; }
+    if (hinted){ pts = 1; r.hint = (r.hint || 0) + 1; line = say('hinted'); lock = 'hint'; }
+    else {
+      r.right++; r.streak++;
+      if (!r.ty.includes(q.type)) r.ty.push(q.type);
+      if (!r.dy.includes(today())) r.dy.push(today());
+      pts = item.retry ? 1 : 1 + (R.streak >= 3 ? 1 : 0) + (spellish ? 1 : 0);
+      if (r.wob){ r.wob = false; }
+      else if (!r.m && meetsMastery(r, !!q.w.card)) r.m = true;
+      const now = isMasteredRec(r);
+      if (now && !was){ lock = 'mastered'; line = say('mastered'); R.mastered.push(q.w.w); }
+      else if (!now && r.streak >= 3){ lock = (q.w.card && !r.ty.includes('sim')) ? 'needsim' : r.ty.length < 2 ? 'type' : 'day'; line = say(lock === 'day' ? 'lockin' : lock === 'needsim' ? 'needSim' : 'needType'); }
+      else line = (R.streak === 3 || R.streak === 5 || R.streak === 10) ? say('streak', { n:R.streak }) : say(item.retry ? 'fixed' : 'right');
+    }
+    R.results[R.idx] = 'ok';
+  } else {
+    r.miss++; r.streak = Math.max(0, r.streak - 2); R.streak = 0; R.missed.push(q.w.w);
+    if (r.m && !r.wob){ r.wob = true; lock = 'wobble'; }   // one slip on a mastered word: needs one right answer to re-secure
+    else { r.m = false; r.wob = false; r.ty = []; r.dy = []; }
+    line = say('wrong'); R.results[R.idx] = 'bad';
+    if (!item.retry){ queueRetry(item); note = 'We will come back to this one in a moment.'; }
+    else if (item.tries < 2){ queueRetry(item); note = 'One more go at this later.'; }
+    else note = 'It stays on the tricky list for now.';
+  }
+  if (fishDone != null) pts = fishDone; else { R.points += pts; S.points += pts; }
+  if (custard) line = say('custard');
+  return { pts, line, note, lock, custard };
+}
+function queueRetry(item){
+  const pos = Math.min(R.queue.length, R.idx + 3 + rnd(2));
+  R.queue.splice(pos, 0, { w:item.w, retry:true, tries:item.tries + 1, lastType:item.lastType });
+}
+document.addEventListener('keydown', e => {
+  if (R && R.keys && !(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) R.keys(e);
+});
+
+/* ---------- sound: all synthesised with Web Audio, original music ---------- */
+const SND = (() => {
+  let ac = null, out, sfxBus, musBus, piece = null, loopTimer = null, loopAt = 0, loopStep = 0;
+  const wantS = () => !!(S && S.settings && S.settings.sound);
+  const wantM = () => !!(S && S.settings && S.settings.music);
+  function ctx(){
+    if (!ac){
+      const C = window.AudioContext || window.webkitAudioContext; if (!C) return null;
+      try { ac = new C(); } catch (e) { return null; }
+      out = ac.createDynamicsCompressor(); out.threshold.value = -14; out.ratio.value = 4; out.connect(ac.destination);
+      sfxBus = ac.createGain(); sfxBus.gain.value = .6; sfxBus.connect(out);
+      musBus = ac.createGain(); musBus.gain.value = .42; musBus.connect(out);
+    }
+    if (ac.state === 'suspended') ac.resume().catch(() => {});
+    return ac;
+  }
+  const NOTE = s => { const m = /^([A-G])(#|b)?(-?\d)$/.exec(s); const b = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 }[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0); return 440 * Math.pow(2, (12 * (+m[3] + 1) + b - 69) / 12); };
+  function tone(bus, f, t, d, o){
+    o = o || {};
+    const osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = o.type || 'square'; osc.frequency.setValueAtTime(f, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + d);
+    if (o.det) osc.detune.value = o.det;
+    const v = o.vol == null ? .2 : o.vol, a = o.a || .008, r = Math.min(o.r || .08, d * .9);
+    g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(v, t + a);
+    g.gain.setValueAtTime(v, Math.max(t + a, t + d - r)); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    let node = osc;
+    if (o.lp){ const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.setValueAtTime(o.lp, t); if (o.lpTo) fl.frequency.exponentialRampToValueAtTime(o.lpTo, t + Math.min(d, .3)); osc.connect(fl); node = fl; }
+    if (o.vib){ const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = o.vib; lg.gain.value = f * .025; l.connect(lg); lg.connect(osc.frequency); l.start(t); l.stop(t + d); }
+    node.connect(g); g.connect(bus); osc.start(t); osc.stop(t + d + .03);
+  }
+  let nbuf = null;
+  function noise(bus, t, d, o){
+    o = o || {};
+    if (!nbuf){ nbuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const ch = nbuf.getChannelData(0); for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1; }
+    const s = ac.createBufferSource(); s.buffer = nbuf; s.loop = true;
+    const fl = ac.createBiquadFilter(); fl.type = o.type || 'bandpass'; fl.frequency.setValueAtTime(o.f || 1000, t); if (o.fTo) fl.frequency.exponentialRampToValueAtTime(o.fTo, t + d); fl.Q.value = o.q || 1;
+    const g = ac.createGain(), v = o.vol || .2;
+    g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(v, t + (o.a || .005)); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    s.connect(fl); fl.connect(g); g.connect(bus); s.start(t); s.stop(t + d + .05);
+  }
+  /* instruments */
+  const brass = (bus, notes, t, d, vol) => notes.forEach(n => [-8, 8].forEach(det => tone(bus, NOTE(n), t, d, { type:'sawtooth', vol:vol || .05, a:.05, r:.15, lp:700, lpTo:2400, det })));
+  const horn = (bus, n, t, d, vol) => { tone(bus, NOTE(n), t, d, { type:'sawtooth', vol:vol || .09, a:.03, r:.12, lp:1200, lpTo:3200, vib: d > .5 ? 5 : 0 }); tone(bus, NOTE(n), t, d, { type:'square', vol:(vol || .09) * .35, a:.03, r:.12, lp:1800 }); };
+  const timp = (bus, t, n, vol) => { const f = NOTE(n || 'D2'); tone(bus, f, t, .7, { type:'sine', vol:vol || .45, a:.004, r:.5, to:f * .82 }); noise(bus, t, .09, { f:240, vol:.12 }); };
+  const string = (bus, n, t, d, vol) => tone(bus, NOTE(n), t, d, { type:'triangle', vol:vol || .05, a:.25, r:.4, vib:5 });
+  const cym = (bus, t, d, vol) => noise(bus, t, d || 1.2, { type:'highpass', f:6000, vol:vol || .07, a:.002 });
+  const hat = (bus, t, vol) => noise(bus, t, .05, { type:'highpass', f:8000, vol:vol || .05 });
+  const kick = (bus, t, vol) => tone(bus, 120, t, .18, { type:'sine', to:45, vol:vol || .35, a:.002, r:.12 });
+  const snare = (bus, t, vol) => { noise(bus, t, .14, { f:1800, q:.6, vol:vol || .12 }); tone(bus, 190, t, .08, { type:'triangle', vol:.08 }); };
+
+  /* sound effects */
+  const FX = {
+    tap(t){ tone(sfxBus, 1200, t, .04, { type:'triangle', vol:.05 }); },
+    right(t){ ['C5','E5','G5','C6'].forEach((n, i) => tone(sfxBus, NOTE(n), t + i * .065, .14, { type:'square', vol:.07, lp:3500 }));
+      tone(sfxBus, NOTE('E6'), t + .27, .55, { type:'triangle', vol:.12 }); tone(sfxBus, NOTE('G6'), t + .3, .5, { type:'sine', vol:.07 });
+      noise(sfxBus, t + .25, .6, { type:'highpass', f:5000, vol:.04 }); },
+    goal(t){ FX.right(t); noise(sfxBus, t + .1, 1.6, { f:900, q:.4, vol:.12, a:.25 }); for (let i = 0; i < 10; i++) noise(sfxBus, t + .25 + Math.random() * 1.1, .05, { f:2500, q:1.5, vol:.06 }); },
+    wrong(t){ let tt = t; [['G3',.2],['F#3',.2],['F3',.2],['E3',.75]].forEach(([n, d], i) => { tone(sfxBus, NOTE(n), tt, d, { type:'sawtooth', vol:.1, a:.02, lp:600, lpTo:1400, vib: i === 3 ? 7 : 0 }); tt += d; }); },
+    mRight(t){ [['C4',.12],['Eb4',.12],['F#4',.12],['G4',.32]].reduce((tt, [n, d]) => { tone(sfxBus, NOTE(n), tt, d, { type:'triangle', vol:.12, a:.003, r:.06 }); return tt + d + .03; }, t);
+      tone(sfxBus, NOTE('G2'), t + .5, .4, { type:'sawtooth', vol:.07, lp:500 }); },
+    mWrong(t){ tone(sfxBus, 180, t, .22, { type:'sine', to:700, vol:.16 }); tone(sfxBus, 700, t + .22, .4, { type:'sine', to:120, vol:.13 }); },
+    flip(t){ noise(sfxBus, t, .4, { f:300, fTo:5000, q:.9, vol:.12 }); tone(sfxBus, NOTE('A5'), t + .32, .12, { type:'square', vol:.06 }); tone(sfxBus, NOTE('E6'), t + .42, .2, { type:'square', vol:.06 }); },
+    peek(t){ tone(sfxBus, NOTE('E6'), t, .08, { type:'sine', vol:.07 }); tone(sfxBus, NOTE('B6'), t + .06, .12, { type:'sine', vol:.05 }); },
+    tile(t){ tone(sfxBus, 660 + Math.random() * 200, t, .06, { type:'triangle', vol:.07 }); },
+    fish(t){ [0, .08, .16].forEach((d, i) => tone(sfxBus, NOTE(['G5','B5','D6'][i]), t + d, .08, { type:'square', vol:.05 })); },
+    whistle(t){ tone(sfxBus, 2300, t, .5, { type:'sine', vol:.12, vib:28 }); },
+    page(t){ noise(sfxBus, t, .18, { f:1500, fTo:400, q:.8, vol:.08 }); },
+    custard(t){ FX.goal(t); [0, .12, .24, .36].forEach((d, i) => tone(sfxBus, 300 + i * 40, t + .55 + d, .16, { type:'sine', vol:.14, vib:14, to:260 + i * 60 }));
+      ['G5','C6','E6','G6'].forEach((n, i) => tone(sfxBus, NOTE(n), t + 1.1 + i * .08, .3, { type:'triangle', vol:.08 })); },
+    cheer(t){ noise(sfxBus, t, 2.4, { f:1000, q:.35, vol:.16, a:.5 }); for (let i = 0; i < 18; i++) noise(sfxBus, t + .3 + Math.random() * 1.6, .05, { f:2200, q:1.4, vol:.06 }); }
+  };
+
+  /* music: original pieces */
+  const TUNES = {
+    /* the trailer: a big space-opera-style fanfare in D (original) */
+    fanfare(b, t){
+      for (let i = 0; i < 10; i++) timp(b, t + i * .09, 'D2', .12 + i * .025);
+      cym(b, t + .95, 1.6, .06);
+      const q = .38; let x = t + 1;
+      brass(b, ['D3','A3','D4','F#4'], x, .18); brass(b, ['D3','A3','D4','F#4'], x + q * .5, .12); brass(b, ['D3','A3','D4','F#4'], x + q * .75, .12);
+      brass(b, ['D3','A3','D4','F#4','A4'], x + q, q * 3, .06); timp(b, x + q, 'D2');
+      x += q * 4;
+      const mel = [['A4',.5],['D5',.5],['E5',.5],['F#5',1.5],['E5',.5],['D5',.5],['B4',.5],['A4',1.5],['G4',.5],['A4',.5],['B4',.5],['D5',1],['C#5',.5],['D5',2]];
+      const bass = [['D3',2],['D3',1],['B2',1],['G2',2],['A2',2],['D3',2]];
+      let mt = x; mel.forEach(([n, d]) => { horn(b, n, mt, d * q * .98, .085); mt += d * q; });
+      let bt = x; bass.forEach(([n, d]) => { brass(b, [n, n.replace(/\d/, m => +m + 1)], bt, d * q * .95, .045); timp(b, bt, n.replace(/\d/, '2'), .35); bt += d * q; });
+      let st = x; [['F#4','A4'],['D4','G4'],['E4','A4'],['F#4','A4']].forEach(ch => { ch.forEach(n => string(b, n.replace(/\d/, m => +m + 1), st, q * 4, .03)); st += q * 4; });
+      const end = x + 16 * q;
+      brass(b, ['D3','A3','D4','F#4','A4','D5'], end, 1.6, .06); cym(b, end, 2.2, .08); timp(b, end, 'D2', .5); timp(b, end + .2, 'A1', .4);
+      return end + 1.8 - t;
+    },
+    /* the daily report: a TV news sting */
+    news(b, t){
+      const q = .16; [['E5',1],['B4',1],['E5',1],['G#5',2],['F#5',1],['E5',1],['B5',3]].reduce((x, [n, d]) => { tone(b, NOTE(n), x, d * q * .9, { type:'square', vol:.06, lp:3000 }); tone(b, NOTE(n) / 2, x, d * q * .9, { type:'sawtooth', vol:.03, lp:1200 }); return x + d * q; }, t);
+      [0, 2, 4, 6, 8, 10].forEach(i => kick(b, t + i * q, .25)); [1, 3, 5, 7, 9].forEach(i => hat(b, t + i * q, .05));
+      brass(b, ['E3','B3','E4','G#4'], t + 10 * q, .9, .05); cym(b, t + 10 * q, 1, .05);
+      return 10 * q + 1;
+    },
+    /* the crowning: a slow, proud anthem in G (original) */
+    anthem(b, t){
+      const q = .55; const mel = [['D4',1],['G4',1.5],['A4',.5],['B4',1],['D5',1],['C5',1],['B4',1],['A4',2],['B4',1],['C5',1],['D5',1.5],['E5',.5],['D5',1],['G5',1],['F#5',1],['G5',3]];
+      let x = t; mel.forEach(([n, d]) => { horn(b, n, x, d * q * .97, .08); x += d * q; });
+      const ch = [['G2','D3','G3','B3'],['C3','G3','C4','E4'],['G2','D3','G3','B3'],['D3','A3','D4','F#4'],['E3','B3','E4','G4'],['C3','G3','C4','E4'],['D3','A3','D4','F#4'],['G2','D3','G3','B3','D4']];
+      ch.forEach((c, i) => { brass(b, c, t + i * 2 * q, 2 * q * .97, .035); timp(b, t + i * 2 * q, 'G1', .25); });
+      cym(b, t + 14 * q, 2.4, .08);
+      return 17 * q + 1;
+    },
+    win(b, t){ ['G4','C5','E5','G5'].forEach((n, i) => horn(b, n, t + i * .12, i === 3 ? .8 : .14, .08)); brass(b, ['C4','E4','G4','C5'], t + .36, .9, .05); cym(b, t + .36, 1, .05); return 1.4; },
+    lose(b, t){ [['C4',.22],['B3',.22],['Bb3',.22],['A3',.7]].reduce((x, [n, d]) => { horn(b, n, x, d, .07); return x + d; }, t); return 1.4; }
+  };
+  /* the match groove that plays during a round: four bars, C-Am-F-G, quiet */
+  const PROG = [['C3','E4','G4'],['A2','C4','E4'],['F2','A3','C4'],['G2','B3','D4']];
+  function loopTick(){
+    if (!ac) return;
+    const spb = 60 / 116 / 2; // eighth notes
+    while (loopAt < ac.currentTime + .25){
+      const bar = Math.floor(loopStep / 8) % 4, s = loopStep % 8, ch = PROG[bar];
+      if (s === 0 || s === 3 || s === 6) tone(musBus, NOTE(ch[0]), loopAt, spb * .9, { type:'square', vol:.05, lp:500 });
+      if (s % 2 === 1) hat(musBus, loopAt, .025);
+      if (s === 0 || s === 4) kick(musBus, loopAt, .12);
+      if (s === 2 || s === 6){ snare(musBus, loopAt, .04); ch.slice(1).forEach(n => tone(musBus, NOTE(n), loopAt, spb * .8, { type:'triangle', vol:.025 })); }
+      if (loopStep % 32 === 31) noise(musBus, loopAt, .3, { f:500, fTo:3000, vol:.03 });
+      loopAt += spb; loopStep++;
+    }
+  }
+  return {
+    prime(){ return !!ctx(); },
+    duck(on){ if (!ac || !musBus) return; try { musBus.gain.setTargetAtTime(on ? .06 : .42, ac.currentTime, .08); sfxBus.gain.setTargetAtTime(on ? .2 : .6, ac.currentTime, .08); } catch (e) {} },
+    fx(name){ if (!wantS() || !ctx()) return; try { FX[name](ac.currentTime + .01); } catch (e) {} },
+    tune(name){
+      if (!wantM() || !ctx()) return 0;
+      this.stop();
+      try { piece = ac.createGain(); piece.gain.value = 1; piece.connect(musBus); return TUNES[name](piece, ac.currentTime + .05); } catch (e) { return 0; }
+    },
+    stop(){
+      if (piece && ac){ const p = piece; try { p.gain.setTargetAtTime(.0001, ac.currentTime, .15); setTimeout(() => { try { p.disconnect(); } catch (e) {} }, 900); } catch (e) {} }
+      piece = null;
+    },
+    loop(on){
+      if (on && wantM() && ctx()){ if (loopTimer) return; loopAt = ac.currentTime + .1; loopStep = 0; loopTimer = setInterval(loopTick, 60); }
+      else { if (loopTimer){ clearInterval(loopTimer); loopTimer = null; } }
+    },
+    looping(){ return !!loopTimer; }
+  };
+})();
+
+/* ---------- recorded voiceovers (Shaw's recordings) ----------
+   Each id plays audio/<id>.mp3 if that file was built in (HAVE). Missing clips fall back to text silently. */
+const VO = {
+  c01:'I am Cuffin. I have crossed the Atlantic eleven times. Twelve, if you count the one that went wrong.',
+  c02:'Welcome back, Aaron. The puffin community has been expecting you.',
+  c03:'Previously… on Cuffin versus the Mirror.',
+  c04:'Right. Four in. Four hold. Four out. Kick off.',
+  c05:'Correct. I would like that noted.',
+  c06:'Precisely right. The puffin community approves.',
+  c07:'Not quite. Eventually still counts.',
+  c08:'Don’t fight the swell. Look at the answer.',
+  c09:'Custard. There is no custard in the North Atlantic. I have checked. And yet… here it is.',
+  c10:'Locked in. Written down. In ink.',
+  c11:'We’re ahead. Don’t tell the Mirror. He’ll sulk.',
+  c12:'The Mirror’s in front. Don’t panic. We’ll get him.',
+  c13:'Round to us. The Mirror is sulking. Magnificently.',
+  c14:'Hard round. The sea does that. Next time.',
+  c15:'A promotion. The puffin community is murmuring.',
+  c16:'Leader of the Puffin Community. I would like this noted. Officially. Bring out the custard.',
+  c17:'Write that one in your vocabulary book. The puffin community is watching.',
+  c18:'Book check. Have you actually written it down? I am checking. Officially.',
+  c19:'Written down. Good. That is how we beat the Mirror.',
+  m01:'Mwah-ha-ha! Did somebody say CROWN? It’s mine. It matches my feathers.',
+  m02:'Ha! Correct! Obviously.',
+  m03:'Polish my beak and call me Professor!',
+  m04:'WHAT?! That question was rigged!',
+  m05:'Nobody saw that. Cuffin, stop writing it down.',
+  m06:'Custard? CUSTARD? Nobody told ME there was custard!',
+  m07:'I’ve already ordered the crown. Size: magnificent.',
+  m08:'NOOOO! I demand a rematch! Best of five hundred!',
+  m09:'A vocabulary book? I keep all my words in my head. Next to my reflection.',
+  m10:'Writing things down? That’s cheating! …Is it? It looks like it works.'
+};
+const HAVE = new Set(["c01", "c02", "c03", "c04", "c05", "c06", "c07", "c08", "c09", "c10", "c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "m01", "m02", "m03", "m04", "m05", "m06", "m07", "m08", "m09", "m10"]);
+const VOICE = (() => {
+  let cur = null, waiting = null;
+  const can = id => !!(S && S.settings && S.settings.sound && (HAVE.has(id) || window.__voTest));
+  function start(id){
+    if (window.__voTest){ window.__voTest.push(id); return; }
+    try {
+      const a = new Audio('audio/' + id + '.mp3?v=' + APPV); cur = a; SND.duck(true);
+      const done = () => { if (cur !== a) return; cur = null; SND.duck(false); if (waiting){ const w = waiting; waiting = null; start(w); } };
+      a.onended = done; a.onerror = done;
+      const p = a.play(); if (p && p.catch) p.catch(() => { cur = null; SND.duck(false); });
+    } catch (e) { cur = null; }
+  }
+  return {
+    can,
+    play(id){ if (!can(id)) return false; if (cur){ waiting = id; return true; } start(id); return true; },
+    /* pick one of several clips that exist; returns its id or null */
+    pick(...ids){ const ok = ids.filter(can); return ok.length ? ok[rnd(ok.length)] : null; },
+    stop(){ waiting = null; if (cur){ try { cur.pause(); } catch (e) {} cur = null; } SND.duck(false); }
+  };
+})();
+
+/* ---------- family sync through Firebase (app version) ---------- */
+const FIREBASE_CONFIG = {};
+const FB_VER = '10.12.2';
+const FAMKEY = KEY + '-family';
+function familyCode(){ try { return localStorage.getItem(FAMKEY) || ''; } catch (e) { return ''; } }
+const famId = c => String(c || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function setFamily(c){ try { if (c) localStorage.setItem(FAMKEY, c); else localStorage.removeItem(FAMKEY); } catch (e) {} }
+async function fbInit(){
+  const base = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
+  const [appM, authM, fsM] = await Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-firestore.js')]);
+  const app = appM.initializeApp(FIREBASE_CONFIG);
+  await authM.signInAnonymously(authM.getAuth(app));
+  const fs = fsM.getFirestore(app);
+  const mapPath = p => p.replace(/^data\/users\/([^/]+)\/progress/, 'families/$1/state/progress');
+  const docRef = p => { const path = mapPath(p); return {
+    get: async () => { const s = await fsM.getDoc(fsM.doc(fs, path)); return { exists: s.exists(), data: () => s.data() }; },
+    set: d => fsM.setDoc(fsM.doc(fs, path), d),
+    delete: () => fsM.deleteDoc(fsM.doc(fs, path)),
+    collection: c => colRef(p + '/' + c) }; };
+  const colRef = p => { const path = mapPath(p);
+    const run = (ob, lim) => async () => { const parts = []; if (ob) parts.push(fsM.orderBy(ob[0], ob[1])); if (lim) parts.push(fsM.limit(lim));
+      const c = fsM.collection(fs, path); const snap = await fsM.getDocs(parts.length ? fsM.query(c, ...parts) : c);
+      return { docs: snap.docs.map(d => ({ id:d.id, data:() => d.data() })) }; };
+    return { add: d => fsM.addDoc(fsM.collection(fs, path), d), doc: id => docRef(p + '/' + id), get: run(),
+      orderBy: (f, dir) => ({ get: run([f, dir || 'asc']), limit: n => ({ get: run([f, dir || 'asc'], n) }) }) }; };
+  return { doc: docRef, collection: colRef };
+}
+async function syncStart(){
+  setSync('check');
+  const fam = famId(familyCode());
+  if (!fam || !FIREBASE_CONFIG.apiKey){ setSync('local'); return; }
+  let db = null;
+  try { db = await fbInit(); } catch (e) { db = null; }
+  if (!db){ setSync('local'); return; }
+  SYNC.db = db; SYNC.uid = fam;
+  await pull(true);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && SYNC.ready) pull(false); });
+  setInterval(() => { if (SYNC.ready && document.visibilityState === 'visible' && !(R && R.queue && R.queue.length)) pull(false); }, 60000);
+}
+/* first launch on a device: join the family */
+function familyScreen(done){
+  const inp = h('input', { class:'fld', id:'famin', type:'text', autocomplete:'off', autocapitalize:'characters', autocorrect:'off', spellcheck:'false', placeholder:'PUFFIN-XXXX-XXXX', 'aria-label':'Family code', style:'font:800 1.3rem var(--font-body);text-align:center;letter-spacing:.06em' });
+  const msg = h('p', { class:'small', 'aria-live':'polite' });
+  const go = h('button', { class:'btn kick', type:'submit' }, 'JOIN THE RACE');
+  mount([h('div', { class:'boot' },
+    cimg(IMG.hello, 'float', 130, 'Cuffin'),
+    h('h2', { class:'center', text:'Welcome to Cuffin’s Word Quest' }),
+    h('p', { class:'center muted', style:'max-width:30ch', text:'Ask a grown-up to type the family code. Then everyone’s progress stays in sync on every phone and iPad.' }),
+    h('form', { style:'display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px', onsubmit:ev => {
+      ev.preventDefault(); const c = inp.value.trim().toUpperCase();
+      if (famId(c).length < 12){ msg.style.color = 'var(--miss)'; msg.textContent = 'That doesn’t look like a family code. It looks like PUFFIN-XXXX-XXXX.'; return; }
+      setFamily(c); SND.prime(); done(); } }, inp, go, msg),
+    h('button', { class:'linkbtn', type:'button', onclick:() => { setFamily('LOCAL'); done(); } }, 'Play on this device only'))], null);
+  setTimeout(() => inp.focus(), 60);
+}
+
+/* ---------- shared UI ---------- */
+const root = $('#root');
+let screen = 'home';
+const SCREENS = {};
+let sheetEl = null;
+function closeSheet(){ if (sheetEl){ sheetEl.forEach(e => e.remove()); sheetEl = null; } const a = root.querySelector('.app'); if (a) a.style.paddingBottom = ''; }
+function mount(nodes, tab){
+  closeSheet();
+  put(root, h('div', { class:'app' }, nodes));
+  const bar = $('#tabbar'); bar.hidden = !tab;
+  bar.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-current', b.dataset.t === tab ? 'page' : 'false'));
+}
+/* a bottom sheet; withScrim for menus, without for the answer panel (the question stays visible above it) */
+function openSheet(kids, withScrim, pad){
+  closeSheet();
+  const sh = h('div', { class:'sheet', role:'dialog', 'aria-modal': withScrim ? 'true' : 'false', 'aria-label': withScrim ? 'Menu' : 'Result' }, h('div', { class:'grab', 'aria-hidden':'true' }), kids);
+  const els = [sh];
+  if (withScrim){ const sc = h('div', { class:'scrim', onclick:closeSheet }); els.unshift(sc); }
+  document.body.append(...els); sheetEl = els;
+  if (pad) requestAnimationFrame(() => { const a = root.querySelector('.app'); if (a) a.style.paddingBottom = (sh.offsetHeight + 8) + 'px'; });
+  return sh;
+}
+function toast(t){ const e = h('div', { class:'toast', role:'status', text:t }); put($('#toastbox'), e); setTimeout(() => { if (e.parentNode) e.remove(); }, 2600); }
+const cimg = (src, cls, size, alt) => h('img', { class:cls || '', src, alt:alt || '', width:size, height:size, decoding:'async' });
+function toggleBtn(kind){
+  const lab = kind === 'sound' ? 'All sounds' : 'Music';
+  const ic = () => icon(kind === 'sound' ? (S.settings.sound ? 'sound' : 'mute') : (S.settings.music ? 'music' : 'nomusic'));
+  const b = h('button', { class:'tbtn', type:'button', 'aria-pressed':String(S.settings[kind]), 'aria-label':lab + (S.settings[kind] ? ' on' : ' off'), title:lab,
+    onclick:() => {
+      S.settings[kind] = !S.settings[kind];
+      if (kind === 'sound' && !S.settings.sound) VOICE.stop();
+      if (kind === 'sound' && !S.settings.sound) S.settings.music = false;    // the speaker button silences everything
+      if (kind === 'music' && S.settings.music) S.settings.sound = true;
+      save();
+      document.querySelectorAll('.tbtn[data-k]').forEach(x => x.refresh());
+      if (!S.settings.music){ SND.stop(); SND.loop(false); } else if (R && R.queue && R.queue.length) SND.loop(true);
+      if (S.settings[kind]){ SND.prime(); SND.fx('tap'); }
+      toast(kind === 'sound' ? (S.settings.sound ? 'Sounds on' : 'All sounds off') : (S.settings.music ? 'Music on' : 'Music off'));
+    } }, ic());
+  b.dataset.k = kind;
+  b.refresh = () => { b.setAttribute('aria-pressed', String(S.settings[kind])); b.setAttribute('aria-label', lab + (S.settings[kind] ? ' on' : ' off')); put(b, ic()); };
+  return b;
+}
+const soundBtns = () => [toggleBtn('sound'), toggleBtn('music')];
+function topbar(){
+  const chip = h('span', { class:'sync', id:'syncchip', 'aria-live':'polite' }); drawSync(chip);
+  return h('div', { class:'topbar' },
+    h('div', { class:'brand' }, cimg(IMG.hello, '', 30, ''), h('span', {}, 'CUFFIN ', h('b', { class:'v', text:'v' }), ' ', h('b', { class:'m', text:'MIRROR' }))),
+    h('div', { class:'tools' }, chip, soundBtns()));
+}
+function sayBlock(kind, line, img){
+  const nm = kind === 'rival' ? 'The Mirror' : kind === 'kid' ? S.name : 'Cuffin';
+  return h('div', { class:'say ' + kind },
+    kind === 'kid' ? h('div', { class:'kidface', 'aria-hidden':'true', text:(S.name || 'A')[0].toUpperCase() }) : cimg(img || (kind === 'rival' ? MIMG.ask : IMG.hello), '', 52, kind === 'rival' ? 'The Mirror' : 'Cuffin'),
+    h('div', { class:'bub' }, h('div', { class:'nm', text:nm }), h('p', { class:'tx' + (screen === 'chapter' || screen === 'intro' || screen === 'ceremony' ? '' : ' clamp2'), text:line })));
+}
+function crownSvg(cls){
+  const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', cls || ''); s.setAttribute('aria-hidden', 'true'); s.setAttribute('viewBox', '0 0 24 24');
+  const u = document.createElementNS(SVGNS, 'use'); u.setAttribute('href', '#i-crown'); s.append(u); return s;
+}
+/* the LED scoreboard */
+let lastBoard = null;
+function led(mini, label){
+  const T = allItems().length, aM = masteredCount(), A = S.points, M = S.race.mf, mm = S.race.mm, d = A - M;
+  const segs = m => h('div', { class:'segs', 'aria-hidden':'true' }, Array.from({ length:10 }, (_, i) => h('i', { class: i < Math.max(m > 0 ? 1 : 0, Math.round(10 * m / Math.max(1, T))) ? 'on' : '' })));
+  const bumpA = lastBoard && lastBoard.A !== A, bumpM = lastBoard && lastBoard.M !== M;
+  const side = (who, img, name, fish, m, bump) => {
+    const dg = h('div', { class:'digits' + (bump ? ' bump' : '') }, String(fish), h('small', { text:'🐟' }));
+    const wc = h('div', { class:'wc', text: m + '/' + T + ' words' });
+    return h('div', { class:'lside ' + who }, mini ? [cimg(img, 'ava', 38, ''), h('div', { class:'lcol' }, dg, segs(m), wc)] : [h('div', { class:'who', text:name }), cimg(img, 'ava', 82, ''), dg, segs(m), wc]);
+  };
+  lastBoard = { A, M };
+  const lead = d > 0 ? 'CUFFIN +' + d : d < 0 ? 'MIRROR +' + (-d) : 'LEVEL';
+  const pots = h('span', { class:'pots', title:'Pots of custard' }, '🍮 ' + (S.custard || 0));
+  return h('div', { class:'led' + (mini ? ' mini' : ''), role:'group', 'aria-label':'Scoreboard: Cuffin and ' + S.name + ' ' + A + ' fish, ' + aM + ' words, ' + (S.custard || 0) + ' pots of custard. The Mirror ' + M + ' fish, ' + mm + ' words.' },
+    mini ? null : h('div', { class:'lhead' }, h('span', { class:'live' }, h('i'), 'CHAPTER ' + matchDay()), pots, h('b', { text:label || 'RACE FOR LEADER' })),
+    h('div', { class:'lgrid' },
+      side('me', d >= 0 ? IMG.right : IMG.ask, 'CUFFIN', A, aM, bumpA),
+      h('div', { class:'lmid' }, h('div', { class:'vs', text:'VS' }), h('div', { class:'lead', text:lead }), mini ? (label ? h('div', { class:'lead', text:label }) : pots) : null),
+      side('mir', d < 0 ? MIMG.smug : d > 3 ? MIMG.sad : MIMG.ask, 'MIRROR', M, mm, bumpM)));
+}
+
+/* ---------- a question ---------- */
+function question(){
+  if (R.idx >= R.queue.length) return finishRound();
+  screen = 'round';
+  const item = R.queue[R.idx];
+  const q = makeQuestion(item); item.lastType = q.type;
+  const hintsOn = !!S.settings.hints;
+  let done = false, hinted = false;
+  const boardBox = h('div', { style:'flex:none' });
+  const pipsEl = h('div', { class:'pips', 'aria-hidden':'true' });
+  const qn = h('span', { class:'qn' });
+  const body = h('div', { class:'pbody' });
+  const strip = h('div', { class:'strip' });
+  const refresh = () => { save(); put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length)); drawPips(); };
+  function drawPips(){
+    put(pipsEl, R.queue.map((it, i) => h('i', { class: i === R.idx ? 'now' : R.results[i] === 'ok' ? 'ok' : R.results[i] === 'bad' ? 'no' : '' })));
+    qn.textContent = (R.idx + 1) + '/' + R.queue.length;
+  }
+  const setStrip = (cls, label) => put(strip, h('span', { text:label }), hintsOn ? null : h('span', { class:'tm', text:'TEST MODE' }), item.retry ? h('span', { class:'tm', text:'SECOND GO' }) : null) || (strip.className = 'strip ' + (cls || ''));
+  const cue = line => h('div', { class:'cue' }, cimg(IMG.ask, '', 30, ''), h('span', { class:'clamp2', text:line }));
+  const goNext = () => { closeSheet(); R.idx++; question(); };
+  const lastQ = () => R.idx >= R.queue.length - 1;
+  const mtag = () => h('span', { class:'mtag', text:'MIRROR' });
+  const hintBtn = (label, fn) => hintsOn ? h('button', { class:'hintbtn', type:'button', onclick:e => { if (done) return; hinted = true; SND.fx('peek'); e.currentTarget.remove(); fn(); } }, icon('bulb'), label) : null;
+  function mirrorTurn(guessFor){
+    if (item.retry) return { sat:true };
+    const t = mirrorTry(mirrorGain(q.type)); R.mfish += t.fish; mirrorMastery(t.ok);
+    return { ok:t.ok, fish:t.fish, guess:guessFor(t.ok) };
+  }
+  function mirrorLine(mir){ if (mir.sat) return msay('sitout'); if (Math.random() < .25) return msay(raceLine()); return msay(mir.ok ? 'right' : 'wrong'); }
+  function noteFor(lock, custard){
+    const n = [];
+    if (custard) n.push(h('div', { class:'note custard' }, h('span', { class:'wobble', style:'font-size:1.3rem', text:'🍮' }), h('span', { text:'Five in a row! A pot of custard for the team.' })));
+    const txt = { mastered:q.w.w + ' is MASTERED. Locked in.', day:'3 in a row! Get it right on another day to lock it in.', type:'3 in a row! Now get it right in a different kind of question.',
+      needsim:'3 in a row! Beat this card in a similar & opposite question to master it.', wobble:'Was mastered. Get it right next time to keep it.', hint:'Hint used: fish yes, mastery no.' }[lock];
+    if (txt) n.push(h('div', { class:'note' }, icon(lock === 'hint' ? 'bulb' : 'lock'), h('span', { text:txt })));
+    return n;
+  }
+  /* the answer sheet */
+  function resultSheet(o){
+    if (o.ok) SND.fx(o.custard ? 'custard' : 'goal'); else SND.fx('wrong');
+    const mir = o.mir;
+    let cv = null, mv = null;
+    if (o.custard) cv = VOICE.pick('c09');
+    else if (o.lock === 'mastered') cv = VOICE.pick('c10');
+    else if (Math.random() < 1 / 3) cv = o.ok ? VOICE.pick('c05', 'c06') : VOICE.pick('c07', 'c08');
+    if (mir && !mir.sat){
+      if (o.custard && Math.random() < .5) mv = VOICE.pick('m06');
+      else if (!cv && Math.random() < .25) mv = mir.ok ? VOICE.pick('m02', 'm03') : VOICE.pick('m04', 'm05');
+    }
+    if (cv){ o.line = VO[cv]; setTimeout(() => VOICE.play(cv), 1000); }
+    if (mv) setTimeout(() => VOICE.play(mv), cv ? 1200 : 1000);
+    if (mir && !mir.sat && !mv) setTimeout(() => SND.fx(mir.ok ? 'mRight' : 'mWrong'), 900);
+    const nb = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); o.next(); } }, o.nextLabel);
+    openSheet([
+      h('div', { class:'res ' + (o.ok ? 'ok' : 'no'), role:'status' }, o.ok ? h('span', { style:'font-size:2rem', 'aria-hidden':'true', text:'⚽' }) : h('span', { class:'plate', 'aria-hidden':'true', text:'🍽️' }),
+        h('div', {}, h('div', { class:'big', text: o.ok ? 'GOAL!' : 'OFF THE POST' }), h('div', { class:'small muted', text: o.ok ? 'Fresh fish!' : 'No fish this time. Eventually still counts.' })),
+        h('div', { class:'fish', text:'+' + (o.fish || 0) + ' 🐟' })),
+      o.answer || null,
+      o.book ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📓' }), h('b', { text:'Next: write it in your vocabulary book.' })) : null,
+      o.line ? h('p', { class:'line clamp2', text:o.line }) : null,
+      noteFor(o.lock, o.custard),
+      mir ? h('div', { class:'mline' }, cimg(mir.sat || !mir.ok ? MIMG.sad : MIMG.smug, '', 34, 'The Mirror'),
+        h('div', { style:'min-width:0' }, mir.sat ? h('b', { text:'Mirror sits this one out. ' }) : h('span', {}, h('b', { text:'Mirror: ' }), '“' + mir.guess + '” ' + (mir.ok ? '✓ +' + mir.fish + ' 🐟 ' : '✗ ')),
+          h('span', { class:'q', text: mv ? VO[mv] : o.custard && !mir.sat ? pickOne(MCUSTARD) : mirrorLine(mir) }))) : null,
+      nb], false);
+    setTimeout(() => nb.focus({ preventScroll:true }), 60);
+    R.keys = e => { if (e.key === 'Enter' && document.activeElement !== nb) nb.click(); };
+  }
+  function finalize(ok, mir, answer){
+    if (done) return; done = true;
+    const res = scoreItem(item, q, ok, null, hinted && ok);
+    body.querySelectorAll('.hintbtn').forEach(e => e.remove());
+    const bk = ok ? null : bookAdd(q.w);
+    refresh();
+    resultSheet({ ok, fish:res.pts, mir, answer, book:bk, line:res.line, lock:res.lock, custard:res.custard, nextLabel: bk ? '📓 Book time' : lastQ() ? 'Full time ⚽' : 'Next question', next: bk ? () => { closeSheet(); bookStop(bk, goNext); } : goNext });
+  }
+  const meanOf = () => q.w.card ? info(q.w.w).m : q.w.m;
+  function choiceQ(){
+    const btns = q.options.map((o, i) => h('button', { class:'ans', type:'button', 'data-t':o.t, onclick:() => choose(o, i) },
+      h('span', { class:'l', text:'ABCD'[i] }), h('span', { class:'t', text:o.t }), h('span', { class:'mk' })));
+    function choose(o, i){
+      if (done) return;
+      btns.forEach((b, j) => { b.disabled = true; if (q.options[j].ok) b.classList.add('correct'); });
+      if (!o.ok) btns[i].classList.add('wrong');
+      const mir = mirrorTurn(okM => { const wr = q.options.filter(x => !x.ok); return okM ? q.options.find(x => x.ok).t : wr[rnd(wr.length)].t; });
+      if (!mir.sat) btns.forEach(b => { if (b.dataset.t === mir.guess) b.querySelector('.mk').before(mtag()); });
+      const answer = q.type === 'gap' ? h('p', { class:'sentence', style:'font-size:1rem' }, q.gap.before, h('span', { class:'fill', text:q.gap.word }), q.gap.after)
+        : h('p', { class:'line' }, h('b', { text:q.w.w }), ' = ' + meanOf());
+      finalize(o.ok, mir, answer);
+    }
+    R.keys = e => { if (done) return; const i = '1234'.indexOf(e.key); if (i > -1 && btns[i] && !btns[i].disabled) btns[i].click(); };
+    return [h('div', { class:'answers' }, btns), hintBtn('Knock one out', () => { const wr = btns.filter((b, j) => !q.options[j].ok && !b.disabled); const b = wr[rnd(wr.length)]; if (b){ b.disabled = true; b.classList.add('gone'); } })];
+  }
+  function spellQ(){
+    const input = h('input', { id:'spellin', type:'text', autocomplete:'off', autocapitalize:'none', autocorrect:'off', spellcheck:'false', 'aria-label':'Type the word' });
+    const boxes = h('div', { class:'boxes', 'aria-label':'The word has ' + q.w.w.length + ' letters' }, [...q.w.w].map(() => h('b')));
+    const go = h('button', { class:'btn', type:'submit' }, 'Check');
+    const form = h('form', { class:'spell', onsubmit:e => {
+      e.preventDefault(); const v = input.value.trim(); if (!v || done) return;
+      input.disabled = true; go.disabled = true; input.blur();
+      const ok = norm(v) === norm(q.w.w);
+      const mir = mirrorTurn(okM => okM ? q.w.w : misspell(q.w.w));
+      finalize(ok, mir, h('div', { class:'letters', 'aria-label':'Correct spelling: ' + q.w.w }, [...q.w.w].map((c, i) => h('span', { class: ok || (v[i] && v[i].toLowerCase() === c.toLowerCase()) ? 'ok' : 'bad', text:c }))));
+    } }, input, go);
+    setTimeout(() => input.focus({ preventScroll:true }), 60);
+    R.keys = null;
+    return [boxes, form, hintBtn('Show the first letter', () => { const b = boxes.firstChild; b.textContent = q.w.w[0]; b.classList.add('f'); })];
+  }
+  function scramQ(){
+    const word = q.w.w, letters = [...word];
+    let order; do { order = shuffle(letters.map((c, i) => i)); } while (letters.length > 1 && order.every((v, i) => letters[v] === letters[i]));
+    const picked = []; let locked = 0;
+    const slots = h('div', { class:'slots', 'aria-live':'polite', 'aria-label':'Your word' });
+    const tileBtns = order.map(i => h('button', { class:'tile', type:'button', 'aria-label':'Letter ' + letters[i], text:letters[i], onclick:e => { if (done) return; SND.fx('tile'); picked.push({ i, b:e.currentTarget }); e.currentTarget.disabled = true; draw(); } }));
+    function draw(){
+      put(slots, letters.map((_, k) => { const p = picked[k];
+        return h('button', { class:'slot' + (p ? ' full' : '') + (k < locked ? ' lock' : ''), type:'button', disabled:!p || k < locked || done, 'aria-label': p ? 'Remove ' + letters[p.i] : 'Empty', text: p ? letters[p.i] : '',
+          onclick:() => { if (done || k < locked) return; picked.splice(k).forEach(o => { o.b.disabled = false; }); draw(); } }); }));
+      if (picked.length === letters.length && !done) check();
+    }
+    function check(){
+      const guess = picked.map(p => letters[p.i]).join(''), ok = norm(guess) === norm(word);
+      tileBtns.forEach(b => { b.disabled = true; });
+      const mir = mirrorTurn(okM => okM ? word : misspell(word));
+      finalize(ok, mir, h('p', { class:'line' }, h('b', { text:word }), ' = ' + meanOf()));
+      draw();
+    }
+    const clear = h('button', { class:'btn alt small', type:'button', onclick:() => { if (done) return; picked.splice(locked).forEach(o => { o.b.disabled = false; }); draw(); } }, 'Clear');
+    const hint = hintBtn('Place the first letter', () => {
+      picked.splice(0).forEach(o => { o.b.disabled = false; });
+      const bi = tileBtns.findIndex((b, j) => letters[order[j]].toLowerCase() === word[0].toLowerCase());
+      picked.push({ i:order[bi], b:tileBtns[bi] }); tileBtns[bi].disabled = true; locked = 1; draw();
+    });
+    draw();
+    R.keys = e => { if (done) return; const k = e.key.toLowerCase(); if (k === 'backspace'){ if (picked.length > locked){ const o = picked.pop(); o.b.disabled = false; draw(); } return; }
+      const b = tileBtns.find((x, j) => !x.disabled && letters[order[j]].toLowerCase() === k); if (b) b.click(); };
+    return [slots, h('div', { class:'tiles' }, tileBtns), h('div', { class:'row', style:'justify-content:space-between' }, clear, hint)];
+  }
+
+  /* similar & opposite cards: know it? → similar → (sheet) → opposite, 3 choices → (sheet) → review */
+  function cardFlow(){
+    const c = q.w.card, opts4 = shuffle(c.o.slice());
+    const g = { ps:null, po:null, s:false, o:false }; let fishN = 0, mS = false, mO = false;
+    const track = phase => h('div', { class:'track', 'aria-hidden':'true' },
+      hintsOn ? h('span', { class: phase === 0 ? 'on0' : 'done', text: phase === 0 ? 'KNOW IT?' : '✓ KNOW IT' }) : null,
+      h('span', { class: phase === 1 ? 'on1' : phase > 1 ? 'done' : '', text: phase > 1 ? '✓ SIMILAR' : '1 SIMILAR' }),
+      h('span', { class: phase === 2 ? 'on2' : phase > 2 ? 'done' : '', text: phase > 2 ? '✓ OPPOSITE' : '2 OPPOSITE' }));
+    const word = () => h('div', { class:'word', text:c.w });
+    function know(){
+      setStrip('', 'SIMILAR & OPPOSITE CARD');
+      const yes = h('button', { class:'kbtn yes', type:'button', onclick:() => { SND.fx('tap'); stage(1); } }, h('span', { class:'em', 'aria-hidden':'true', text:'👍' }), 'I KNOW IT');
+      const no = h('button', { class:'kbtn no', type:'button', onclick:explain }, h('span', { class:'em', 'aria-hidden':'true', text:'🤔' }), 'NOT SURE');
+      put(body, cue(item.retry ? say('retry') : say('know')), track(0), word(), h('div', { class:'grow' }), h('div', { class:'know' }, yes, no), h('p', { class:'small muted', text:'No fish lost either way.' }));
+      R.keys = e => { if (e.key === '1') yes.click(); if (e.key === '2') no.click(); };
+    }
+    function explain(){
+      hinted = true; SND.fx('peek');
+      const t = info(c.w);
+      const bk = bookAdd(q.w);
+      const go = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); if (bk) bookStop(bk, () => stage(1)); else stage(1); } }, bk ? '📓 Book time' : 'Got it · Part 1 🤝');
+      put(body, cue(say('explain')), track(0), h('div', { class:'explain' }, word(), h('p', { class:'meaning', text:t.m || 'A word from the card box.' }), t.f ? h('p', { class:'muted', style:'font-style:italic', text:t.f }) : null),
+        bk ? h('div', { class:'book slim' }, h('div', { class:'bk' }, h('span', { 'aria-hidden':'true', text:'📓' }), 'WRITE ' + c.w.toUpperCase() + ' AND ITS MEANING IN YOUR VOCABULARY BOOK')) : null, h('div', { class:'grow' }), go);
+      R.keys = null;
+    }
+    function optRow(wd, i, onPick){
+      const x = info(wd), mean = h('small', { text:x.m || 'No meaning on file.', hidden:true });
+      const b = h('button', { class:'ans', type:'button', 'data-t':wd, onclick:() => onPick(wd, b) }, h('span', { class:'l', text:'ABCD'[i] }), h('span', { class:'t' }, h('span', { text:wd }), mean), h('span', { class:'mk' }));
+      if (!hintsOn) return { row:b, b };
+      const ib = h('button', { class:'peek', type:'button', 'aria-pressed':'false', 'aria-label':'Peek: what does ' + wd + ' mean?', title:'What does ' + wd + ' mean?', text:'i',
+        onclick:() => { const o = mean.hidden; mean.hidden = !o; ib.setAttribute('aria-pressed', String(o)); if (o && !done){ hinted = true; SND.fx('peek'); } } });
+      if (matchMedia('(hover:hover)').matches){ b.addEventListener('mouseenter', () => { if (ib.getAttribute('aria-pressed') !== 'true') b.title = x.m || ''; }); }
+      return { row:h('div', { class:'orow' }, b, ib), b };
+    }
+    function stage(n){
+      const s2 = n === 2, list = s2 ? opts4.filter(w => w !== c.s) : opts4;
+      setStrip(s2 ? 'opp' : 'sim', s2 ? 'PART 2 · OPPOSITE' : 'PART 1 · SIMILAR');
+      if (s2) SND.fx('flip');
+      const rows = list.map((wd, i) => optRow(wd, i, (w, b) => pick(n, w, b, rows, list)));
+      put(body, track(n),
+        h('div', { class:'banner ' + (s2 ? 's2' : 's1'), role:'status' }, h('span', { class:'em', 'aria-hidden':'true', text: s2 ? '🔄' : '🤝' }), h('span', { text: s2 ? 'FLIP IT! The OPPOSITE of' : 'The SIMILAR word to' })),
+        word(), h('div', { class:'answers ' + (s2 ? 's2' : 's1') }, rows.map(r => r.row)),
+        hintsOn ? h('p', { class:'small muted', text: s2 ? 'Only 3 choices: the similar word has gone. Tap i to peek.' : 'Tap i to peek at a word. Peeking doesn’t pick it.' }) : null);
+      R.keys = e => { const i = '1234'.indexOf(e.key); if (i > -1 && rows[i] && !rows[i].b.disabled) rows[i].b.click(); };
+    }
+    function pick(n, wd, btn, rows, list){
+      if (rows[0].b.disabled) return;
+      const right = n === 1 ? c.s : c.p, ok = wd === right;
+      if (n === 1){ g.ps = wd; g.s = ok; } else { g.po = wd; g.o = ok; }
+      if (ok){ S.points += 1; R.points += 1; fishN++; }
+      let mir;
+      if (!item.retry){
+        const t = mirrorTry(1); R.mfish += t.fish; if (n === 1) mS = t.ok; else mO = t.ok;
+        const wr = list.filter(x => x !== right);
+        mir = { ok:t.ok, fish:t.fish, guess: t.ok ? right : wr[rnd(wr.length)] };
+      } else mir = { sat:true };
+      rows.forEach(r => { r.b.disabled = true; if (r.b.dataset.t === right) r.b.classList.add('correct'); if (!mir.sat && r.b.dataset.t === mir.guess) r.b.querySelector('.mk').before(mtag()); });
+      if (!ok) btn.classList.add('wrong');
+      refresh();
+      const x = info(right);
+      resultSheet({ ok, fish: ok ? 1 : 0, mir, line: ok ? say('right') : null,
+        answer:h('p', { class:'line' }, h('span', { class:'role ' + (n === 1 ? 'sim' : 'opp'), style:'margin-right:6px', text: n === 1 ? 'SIMILAR' : 'OPPOSITE' }), h('b', { text:right }), ' = ' + x.m),
+        nextLabel: n === 1 ? 'Part 2: Opposite 🔄' : 'See the whole card', next: n === 1 ? () => { closeSheet(); stage(2); } : () => { closeSheet(); review(); } });
+    }
+    function review(){
+      if (done) return; done = true;
+      const ok = g.s && g.o;
+      const res = scoreItem(item, q, ok, fishN, hinted && ok);
+      if (!item.retry) mirrorMastery(mS && mO);
+      refresh();
+      setStrip('', 'CARD REVIEW');
+      const roles = {}; roles[c.s] = 'sim'; roles[c.p] = 'opp';
+      const order = [c.s, c.p].concat(c.o.filter(w => w !== c.s && w !== c.p));
+      put(body, h('div', { class:'banner ' + (ok ? 's1' : 's2'), text: fishN === 2 ? '🐟🐟 Both parts right!' : fishN === 1 ? '🐟 One part right' : '🍽️ No fish this time' }),
+        h('div', { class:'review' },
+          h('div', { class:'rv' }, h('span', { class:'role', text:'THE WORD' }), h('div', { style:'min-width:0' }, h('div', { class:'w', text:c.w }), h('div', { class:'m', text:info(c.w).m })), h('span')),
+          order.map(w => { const right = roles[w], picked = g.ps === w ? 'sim' : g.po === w ? 'opp' : null, good = picked && picked === right, bad = picked && picked !== right;
+            return h('div', { class:'rv ' + (good ? 'rv-good' : bad ? 'rv-bad' : '') }, h('span', { class:'role ' + (right || 'no'), text: right === 'sim' ? 'SIMILAR' : right === 'opp' ? 'OPPOSITE' : '—' }),
+              h('div', { style:'min-width:0' }, h('div', { class:'w', text:w }), h('div', { class:'m', text:info(w).m })),
+              h('span', { class:'you', text: picked ? (good ? '✅ you' : '❌ you') : '' })); })),
+        h('p', { class:'small muted', text: ok ? 'Both parts right: this card counts.' : 'Cards count only when both parts are right. It will come back.' }));
+      SND.fx(ok ? 'goal' : 'page');
+      { const v = res.custard ? VOICE.pick('c09') : res.lock === 'mastered' ? VOICE.pick('c10') : null; if (v) setTimeout(() => VOICE.play(v), 600); }
+      const bk = ok ? null : bookAdd(q.w, true);
+      openSheet([bk ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📓' }), h('b', { text:'Next: write it in your vocabulary book.' })) : null, noteFor(res.lock, res.custard),
+        (() => { const nb = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); if (bk){ closeSheet(); bookStop(bk, goNext); } else goNext(); } }, bk ? '📓 Book time' : lastQ() ? 'Full time ⚽' : 'Next question'); setTimeout(() => nb.focus({ preventScroll:true }), 60); return nb; })()], false, true);
+      R.keys = null;
+    }
+    if (hintsOn) know(); else stage(1);
+  }
+
+  if (q.type === 'sim') cardFlow();
+  else {
+    setStrip(q.type === 'gap' ? 'gap' : q.type === 'scram' ? 'scram' : '', TYPE_LABEL[q.type].toUpperCase());
+    const lead = item.retry ? say('retry') : R.idx === 0 ? R.hello : pickOne(['Your question.', 'Here it comes.', 'The Mirror is watching.', 'Take your time.', 'Concentrate. Floppy, warm, like custard.']);
+    const top = q.type === 'w2m' ? [h('p', { class:'muted', text:'What does this word mean?' }), h('div', { class:'word', text:q.w.w })]
+      : q.type === 'm2w' ? [h('p', { class:'muted', text:'Which word means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
+      : q.type === 'gap' ? [h('p', { class:'muted', text:'Which word fills the gap?' }), h('p', { class:'sentence' }, q.gap.before, h('span', { class:'blank', 'aria-label':'gap' }), q.gap.after)]
+      : q.type === 'scram' ? [h('p', { class:'muted', text:'Unscramble the word that means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
+      : [h('p', { class:'muted', text:'Spell the word that means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })];
+    const kids = q.type === 'spell' ? spellQ() : q.type === 'scram' ? scramQ() : choiceQ();
+    put(body, cue(lead), top, kids);
+  }
+  const quit = h('button', { class:'quit', type:'button', 'aria-label':'Quit this match', onclick:() => { SND.loop(false); R = null; home(say('quit')); } }, icon('x'));
+  put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length));
+  const keepSheet = sheetEl; sheetEl = null;
+  mount([h('div', { class:'qbar' }, quit, pipsEl, qn, h('div', { class:'tools' }, soundBtns())), boardBox, h('div', { class:'pitch' }, strip, body)], null);
+  if (keepSheet) keepSheet.forEach(e => e.remove());
+  drawPips();
+}
+
+function snapshot(){
+  const row = { d:today(), m:masteredCount(), p:S.points, mf:S.race.mf, mm:S.race.mm };
+  const last = S.history[S.history.length - 1];
+  if (last && last.d === row.d) S.history[S.history.length - 1] = row; else S.history.push(row);
+  if (S.history.length > 400) S.history.shift();
+}
+function finishRound(){
+  SND.loop(false); closeSheet();
+  if (R.book && R.book.length && !R.bookDone){ R.bookDone = true; return bookCheck(R.book, finishRound); }
+  const acc = R.firstTry / R.total;
+  let bonus = 0;
+  if (R.firstTry === R.total && R.total >= 5){ bonus = 3; R.points += bonus; S.points += bonus; S.stats.perfect++; }
+  raceFix();
+  const stars = acc >= 1 ? 3 : acc >= .8 ? 2 : acc >= .5 ? 1 : 0;
+  S.stats.rounds++;
+  S.rounds.push({ d:today(), r:R.firstTry, n:R.total, a:R.points, m:R.mfish }); if (S.rounds.length > 200) S.rounds.shift();
+  S.last = today(); snapshot();
+  const crowned = !S.leader && allDone() && S.points > S.race.mf;
+  if (crowned) S.leader = { d:today(), a:S.points, m:S.race.mf };
+  const badges = checkBadges(), prizes = [], m = masteredCount();
+  for (const p of S.prizes) if (!p.announced && m >= p.at){ p.announced = true; prizes.push(p); }
+  save();
+  const x = { acc, stars, bonus, badges, prizes, round:R };
+  R = null;
+  if (SYNC.pending) adopt(SYNC.pending, true);
+  if (crowned) ceremony(false, () => summary(x)); else summary(x);
+}
+function summary(x){
+  screen = 'summary';
+  const r = x.round, mirWon = r.mfish > r.points, tie = r.mfish === r.points;
+  const key = x.stars === 3 ? 'end3' : x.stars === 2 ? 'end2' : x.stars === 1 ? 'end1' : 'end0';
+  SND.tune(mirWon ? 'lose' : 'win');
+  const rankUp = r.rank0 != null && rankInfo(masteredCount()).i > r.rank0;
+  { const v = rankUp ? VOICE.pick('c15') : mirWon || tie ? VOICE.pick('c14') : VOICE.pick('c13'); const v2 = mirWon && Math.random() < .5 ? VOICE.pick('m07') : null;
+    if (v) setTimeout(() => VOICE.play(v), 1500); if (v2) setTimeout(() => VOICE.play(v2), 1700); }
+  const missed = [...new Set(r.missed)];
+  const extra = [x.badges.length ? '🏅 New badge: ' + x.badges.map(b => b.n).join(', ') : null, x.prizes.length ? '🎁 Prize unlocked: ' + x.prizes.map(p => p.text || 'a surprise').join(', ') + '. Ask a grown-up!' : null].filter(Boolean);
+  mount([
+    topbar(),
+    h('div', { class:'led', role:'group', 'aria-label':'Full time' },
+      h('div', { class:'lhead' }, h('span', { class:'live' }, h('i'), 'FULL TIME'), h('b', { text: mirWon ? 'MIRROR TAKES THE ROUND' : tie ? 'ROUND DRAWN' : 'ROUND TO CUFFIN' })),
+      h('div', { class:'lgrid' },
+        h('div', { class:'lside me' }, cimg(IMG.right, 'ava', 82, ''), h('div', { class:'digits' }, '+' + r.points, h('small', { text:'🐟' }))),
+        h('div', { class:'lmid' }, h('div', { class:'vs', text:'VS' }), h('div', { class:'lead', text:'TOTAL ' + S.points + '–' + S.race.mf })),
+        h('div', { class:'lside mir' }, cimg(mirWon ? MIMG.smug : MIMG.sad, 'ava', 82, ''), h('div', { class:'digits' }, '+' + r.mfish, h('small', { text:'🐟' }))))),
+    h('div', { class:'stat4' },
+      h('div', { class:'st' }, h('div', { class:'k', text:'RIGHT FIRST TIME' }), h('div', { class:'v', text:r.firstTry + '/' + r.total }), h('div', { class:'d', text:'⭐'.repeat(x.stars) || 'Keep going' })),
+      h('div', { class:'st cus' }, h('div', { class:'k', text:'CUSTARD POTS' }), h('div', { class:'v', text:'🍮 ' + (r.custard || 0) }), h('div', { class:'d', style:'color:var(--muted)', text:'1 pot for every 5 in a row' })),
+      h('div', { class:'st' }, h('div', { class:'k', text:'LOCKED IN' }), h('div', { class:'v', text:String(r.mastered.length) }), h('div', { class:'d', text:r.mastered.slice(0, 2).join(', ') })),
+      h('div', { class:'st' }, h('div', { class:'k', text:'TO LOOK AT AGAIN' }), h('div', { class:'v', text:String(missed.length) }), h('div', { class:'d', style:'color:var(--miss)', text:missed.slice(0, 2).join(', ') }))),
+    extra.length ? h('div', { class:'note' }, h('span', { text:extra.join(' · ') })) : sayBlock(mirWon ? 'rival' : 'com', mirWon ? msay('roundWin') : (r.custard ? say('custard') : say(key)), mirWon ? MIMG.smug : IMG.right),
+    h('div', { class:'grow' }),
+    h('button', { class:'btn kick', type:'button', onclick:() => startRound('mixed') }, 'PLAY AGAIN'),
+    h('div', { class:'homerow' }, h('button', { class:'btn alt small', type:'button', onclick:() => home() }, 'Home'), h('button', { class:'btn alt small', type:'button', onclick:() => progress() }, 'See the charts'))
+  ], 'home');
+}
+
+/* ---------- the vocabulary book ----------
+   A miss or a 'not sure' asks Aaron to write the word in his real vocabulary book before carrying on.
+   At full time Cuffin runs a Book check: he shows the meaning and Aaron types the word from his book. */
+function bookStore(){ if (!S.book || !Array.isArray(S.book.list)) S.book = { list:[], next:[] }; return S.book; }
+function bookAdd(x, withPair){
+  if (!R || !R.book) return null;
+  const k = pk(x), c = x.card;
+  let e = R.book.find(b => b.k === k);
+  if (e){ if (withPair && c && !e.s){ e.s = c.s; e.o = c.p; e.again = true; return e; } return null; }
+  e = { k, w:x.w, m: c ? info(x.w).m : x.m, s: withPair && c ? c.s : null, o: withPair && c ? c.p : null, d:today(), ok:false };
+  R.book.push(e);
+  const B = bookStore(); B.list = B.list.filter(b => b.k !== k); B.list.unshift(Object.assign({}, e)); B.list = B.list.slice(0, 200);
+  if (!B.next.includes(k)) B.next.push(k); B.next = B.next.slice(-20);
+  return e;
+}
+function bookBox(e){
+  return h('div', { class:'book', role:'note' },
+    h('div', { class:'bk' }, h('span', { 'aria-hidden':'true', text:'📓' }), e.again ? 'ADD THE SIMILAR AND OPPOSITE TO YOUR BOOK' : 'WRITE IT IN YOUR VOCABULARY BOOK'),
+    h('div', { class:'bw', text:e.w }),
+    e.m ? h('div', { class:'bm', text:e.m }) : null,
+    e.s ? h('div', { class:'bp' }, h('span', { class:'role sim', text:'SIMILAR' }), ' ' + e.s + '  ', h('span', { class:'role opp', text:'OPPOSITE' }), ' ' + e.o) : null);
+}
+const BOOK_SAY = ['Write that one in your vocabulary book. The puffin community is watching.', 'Into the book it goes. That is how we beat the Mirror.', 'Book. Pencil. Now. The Mirror does not own a book. That is his weakness.'];
+function bookCheck(list, done){
+  screen = 'bookcheck';
+  const items = list.slice(0, 5);
+  let i = 0, tries = 0, right = 0;
+  const out = h('div', { class:'stack', style:'display:flex;flex-direction:column;gap:8px' });
+  const cue2 = h('div', { class:'say' }, cimg(IMG.ask, '', 52, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx' })));
+  const setCue = t => { cue2.querySelector('.tx').textContent = t; };
+  const body2 = h('div', { class:'pbody' });
+  const strip2 = h('div', { class:'strip', style:'background:#6B4E16' });
+  if (!VOICE.play('c18')) SND.fx('whistle');
+  if (Math.random() < .5) setTimeout(() => VOICE.play('m09'), 400);
+  setCue(VOICE.can('c18') ? VO.c18 : 'Book check. Have you actually written them down? I am checking. Officially. The puffin community is watching.');
+  function show(){
+    if (i >= items.length) return finish();
+    const e = items[i]; tries = 0;
+    put(strip2, h('span', { text:'📓 BOOK CHECK' }), h('span', { class:'tm', text:(i + 1) + ' OF ' + items.length }));
+    const input = h('input', { id:'bookin', type:'text', autocomplete:'off', autocapitalize:'none', autocorrect:'off', spellcheck:'false', 'aria-label':'Type the word from your book' });
+    const go = h('button', { class:'btn', type:'submit' }, 'Check');
+    const fb = h('div', { 'aria-live':'polite' });
+    const next = h('div');
+    const form = h('form', { class:'spell', onsubmit:ev => {
+      ev.preventDefault(); const v = input.value.trim(); if (!v) return;
+      if (norm(v) === norm(e.w)){
+        input.disabled = true; go.disabled = true; right++; e.ok = true; markBook(e.k, true);
+        S.points += 1; R.points += 1; save();
+        SND.fx('goal'); if (!VOICE.play('c19')) {}
+        put(fb, h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'✅' }), h('span', { text:'It’s in the book. +1 bonus fish!' })));
+        nextBtn();
+      } else {
+        tries++; SND.fx('wrong');
+        if (tries < 2){ put(fb, h('div', { class:'note' }, h('span', { 'aria-hidden':'true', text:'👀' }), h('span', { text:'Not quite. Look again in your book, carefully.' }))); input.select(); }
+        else { input.disabled = true; go.disabled = true; markBook(e.k, false);
+          put(fb, h('div', { class:'note' }, h('span', { 'aria-hidden':'true', text:'✏️' }), h('span', {}, 'It’s ', h('b', { text:e.w }), '. Write it in your book again, carefully. It will come back next match.')));
+          nextBtn(); }
+      }
+    } }, input, go);
+    function nextBtn(){ const b = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); i++; show(); } }, i >= items.length - 1 ? 'Done ✓' : 'Next word'); put(next, b); setTimeout(() => b.focus({ preventScroll:true }), 60); }
+    put(body2, h('p', { class:'muted', text:'Look in your vocabulary book. Which word means…' }), h('p', { class:'meaning', text:'“' + (e.m || '') + '”' }),
+      h('div', { class:'boxes', 'aria-label':'The word has ' + e.w.length + ' letters' }, [...e.w].map((ch, j) => h('b', { class: j === 0 ? 'f' : '', text: j === 0 ? ch : '' }))),
+      form, fb, h('div', { class:'grow' }), next);
+    setTimeout(() => input.focus({ preventScroll:true }), 60);
+  }
+  function finish(){
+    const all = right === items.length;
+    if (all && Math.random() < .6) VOICE.play('m10');
+    put(strip2, h('span', { text:'📓 BOOK CHECK DONE' }));
+    setCue(all ? 'Every word is in the book. The puffin community has inspected it. Officially impressed.' : 'Good. Some words need writing again. Do that now, then we carry on.');
+    const b = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); done(); } }, 'Full time ⚽');
+    put(body2, h('div', { class:'stat4' },
+      h('div', { class:'st' }, h('div', { class:'k', text:'IN THE BOOK' }), h('div', { class:'v', text:right + '/' + items.length })),
+      h('div', { class:'st cus' }, h('div', { class:'k', text:'BONUS FISH' }), h('div', { class:'v', text:'+' + right + ' 🐟' }))),
+      h('div', { class:'mline' }, cimg(all ? MIMG.sad : MIMG.smug, '', 34, 'The Mirror'), h('span', { class:'q', text: all ? (VOICE.can('m10') ? VO.m10 : 'Writing things down? That’s cheating! …Is it? It looks like it works.') : 'Ha! Not in the book! I keep all my words in my head. Next to my reflection.' })),
+      h('div', { class:'grow' }), b);
+    setTimeout(() => b.focus({ preventScroll:true }), 60);
+  }
+  mount([h('div', { class:'qbar' }, h('span', { class:'qn', text:'FULL TIME · BOOK CHECK' }), h('div', { class:'tools' }, soundBtns())), led(true, 'BOOK'), cue2, h('div', { class:'pitch' }, strip2, body2)], null);
+  show();
+}
+function markBook(k, ok){ const e = bookStore().list.find(b => b.k === k); if (e) e.ok = ok; }
+
+/* the big STOP card: full screen, Cuffin, the word, and a pencil timer before he can carry on */
+const BOOK_SECS = 15;
+function bookStop(e, next){
+  closeSheet();
+  const secs = window.__fastBook ? 1 : BOOK_SECS;
+  let left = secs, timer = null;
+  const num = h('span', { class:'num', text:String(left) });
+  const ring = h('div', { class:'ring', role:'timer', 'aria-label':'Writing time' }, h('span', { class:'pen', 'aria-hidden':'true', text:'✏️' }), num);
+  const go = h('button', { class:'btn kick', type:'button', disabled:true, onclick:() => { if (go.disabled) return; clearInterval(timer); SND.fx('fish'); VOICE.stop(); ov.remove(); R && (R.keys = prevKeys); next(); } }, '✍️ Keep writing…');
+  const ov = h('div', { class:'stopov', role:'dialog', 'aria-modal':'true', 'aria-labelledby':'stoph' },
+    h('div', { class:'stopin' },
+      h('div', { class:'stoptop' }, cimg(IMG.hello, 'stopimg', 150, 'Cuffin'), h('div', {}, h('h2', { id:'stoph', text:'STOP!' }), h('p', { class:'stopsub', text:'Write it in your vocabulary book.' }))),
+      bookBox(e),
+      h('p', { class:'stopline', text: (VOICE.can('c17') ? VO.c17 : pickOne(BOOK_SAY)) + ' I will check at full time.' }),
+      h('div', { class:'stopgo' }, ring, go)));
+  document.body.append(ov);
+  const prevKeys = R ? R.keys : null; if (R) R.keys = null;
+  if (!VOICE.play('c17')) SND.fx('whistle');
+  const tick = () => {
+    left--; num.textContent = String(Math.max(0, left));
+    ring.style.setProperty('--p', String(1 - left / secs));
+    if (left <= 0){ clearInterval(timer); ring.classList.add('done'); num.textContent = '✓'; go.disabled = false; put(go, '✍️ I’ve written it'); SND.fx('tile'); setTimeout(() => go.focus({ preventScroll:true }), 30); }
+  };
+  ring.style.setProperty('--p', '0');
+  timer = setInterval(tick, 1000);
+}
+
+/* ---------- Home: the scoreboard and one big button ---------- */
+function homeLine(){
+  const now = new Date();
+  if (now.getMonth() === 8 && now.getDate() === 12) return say('birthday');
+  if (S.leader) return say('leaderHome');
+  if (!S.stats.answered) return 'Giles is retiring. Win the most fish, master every word, and the crown is ours. Press Kick Off.';
+  const l = raceLine();
+  if (Math.random() < .2) return pickOne(SAY.custard);
+  return say(l === 'behind' ? 'aheadHome' : l === 'ahead' ? 'behindHome' : 'levelHome');
+}
+function mission(){
+  const T = allItems().length, aM = masteredCount(), d = S.points - S.race.mf, lock = lockReadyToday();
+  if (S.leader) return 'Keep your crown shiny: play a match to keep the words fresh.';
+  if (lock >= 3) return 'Lock in ' + lock + ' words you got right 3 in a row on another day.';
+  if (d < 0) return 'Catch the Mirror. He is ' + (-d) + ' fish ahead.';
+  if (d <= 3) return 'Break away: finish today ' + Math.max(5, d + 5) + ' fish ahead of the Mirror.';
+  return 'Win a pot of custard: get 5 in a row. ' + (T - aM) + ' words to the crown.';
+}
+const visitSnap = () => ({ d:today(), a:S.points, m:S.race.mf, w:masteredCount(), mw:S.race.mm, c:S.custard || 0, r:rankInfo(masteredCount()).i });
+function home(greeting){
+  screen = 'home';
+  SND.loop(false);
+  if (!S.intro) return intro(() => { S.intro = true; S.lastVisit = visitSnap(); save(); home(); });
+  if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); home(); }); }
+  if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
+  let greet = greeting || null;
+  if (!home.greeted && S.stats.answered){ home.greeted = true; if (VOICE.play('c02')) greet = VO.c02.replace('Aaron', S.name); }
+  const saveBtn = h('button', { class:'btn alt small', type:'button', onclick:async () => { saveBtn.disabled = true; const ok = await addSave(S.name + '’s save · ' + stamp()); saveBtn.disabled = false; if (ok){ SND.fx('fish'); toast(SYNC.ready ? 'Saved for the family' : 'Saved on this device'); } } }, icon('save'), 'Save');
+  mount([
+    topbar(),
+    S.leader ? h('div', { class:'leaderbox', role:'status' }, crownSvg(''), h('div', { style:'min-width:0' }, h('b', { text:'Leaders of the Puffin Community' }), h('div', { class:'small', text:'Crowned ' + longDate(S.leader.d) }))) : null,
+    led(false),
+    h('div', { class:'homemid' },
+      sayBlock('com', greet || homeLine(), S.leader ? IMG.right : IMG.hello),
+      h('button', { class:'btn kick', type:'button', onclick:() => startRound('mixed') }, '⚽ KICK OFF'),
+      h('div', { class:'homerow' }, h('button', { class:'btn alt small', type:'button', onclick:moreSheet }, icon('more'), 'More matches'), saveBtn))
+  ], 'home');
+}
+SCREENS.home = () => home();
+function moreSheet(){
+  const tricky = trickyWords().length;
+  const item = (em, t, sub, fn, dis) => h('button', { class:'mitem', type:'button', disabled:!!dis, onclick:() => { closeSheet(); fn(); } }, h('span', { class:'em', 'aria-hidden':'true', text:em }), h('span', {}, t, h('small', { text:sub })));
+  openSheet([h('h2', { text:'More matches' }), h('div', { class:'mlist' },
+    item('🤝', 'Cards match', 'Just the similar & opposite cards', () => startRound('cards')),
+    item('🎯', 'Training', tricky ? tricky + ' tricky words to fix' : 'No tricky words yet', () => startRound('tricky'), !tricky),
+    item('📺', 'Today’s chapter', 'Watch the match report again', () => chapter(() => home())),
+    item('🎬', 'The story from the start', 'Giles, the crown and the Mirror', () => intro(() => home()))),
+    h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Close')], true);
+}
+
+/* ---------- broadcast slideshows ---------- */
+function reel(slides, finish, opts){
+  opts = opts || {};
+  let i = -1;
+  const box = h('div', { class:'bcast', role:'region', 'aria-roledescription':'slideshow', 'aria-label':opts.label || 'Story' });
+  const dots = h('div', { class:'dots', 'aria-hidden':'true' });
+  const back = h('button', { class:'back', type:'button', onclick:() => go(i - 1) }, '← BACK');
+  const next = h('button', { class:'next', type:'button', onclick:() => go(i + 1) }, 'NEXT →');
+  const live = h('span', { class:'small', 'aria-live':'polite', style:'color:#9AA6D6' });
+  const top = h('div', { class:'btop' }, h('span', { class:'onair' }, h('i'), opts.tag || 'ON AIR'), h('div', { class:'tools' }, soundBtns(), h('button', { class:'skip', type:'button', onclick:end }, opts.skip || 'Skip')));
+  const nav = h('div', { class:'bnav' }, back, h('div', { style:'display:flex;flex-direction:column;align-items:center;gap:4px' }, dots, live), next);
+  function end(){ SND.stop(); VOICE.stop(); R = null; finish(); }
+  function go(n){
+    if (n >= slides.length) return end();
+    const fwd = n > i; i = Math.max(0, n);
+    if (fwd && i > 0) SND.fx('page');
+    const s = slides[i](end);
+    s.classList.add('slide', 'in');
+    s.addEventListener('click', e => { if (!e.target.closest('button')) go(i + 1); });
+    put(box, top, s, opts.ticker ? h('div', { class:'ticker', 'aria-hidden':'true' }, h('span', { text:opts.ticker })) : null, nav);
+    put(dots, slides.map((_, k) => h('i', { class: k === i ? 'on' : '' })));
+    live.textContent = (i + 1) + ' of ' + slides.length;
+    back.disabled = i === 0; next.hidden = i === slides.length - 1;
+    const cta = s.querySelector('.cta'); setTimeout(() => (cta || next).focus({ preventScroll:true }), 40);
+  }
+  function start(){ SND.prime(); if (opts.tune) SND.tune(opts.tune); go(0); }
+  mount([box], null);
+  R = { keys:e => { if (i < 0) return; if (e.key === 'ArrowRight') go(i + 1); if (e.key === 'ArrowLeft') go(i - 1); }, queue:[] };
+  if (opts.splash && (S.settings.sound || S.settings.music)){
+    const b = h('button', { class:'ball', type:'button', onclick:start }, 'TAP TO', h('br'), 'START');
+    put(box, top, h('div', { class:'slide in' }, h('div', { class:'splash' }, opts.splash, b, h('p', { class:'small', text:'Sound on? Turn it up. Or tap the speaker to turn it off.' }))), nav);
+    back.disabled = true; next.hidden = true; setTimeout(() => b.focus({ preventScroll:true }), 40);
+  } else start();
+}
+const photo = (src, alt, cls) => cimg(src, 'hero ' + (cls || ''), 210, alt);
+const duoFig = (a, b, ca, cb) => h('div', { class:'duo' },
+  h('figure', { class:'c' }, cimg(a || IMG.right, '', 140, 'Cuffin'), h('figcaption', { text:ca || 'CUFFIN & ' + S.name.toUpperCase() })),
+  h('span', { class:'vsb', text:'VS' }),
+  h('figure', { class:'m' }, cimg(b || MIMG.ask, '', 140, 'The Mirror'), h('figcaption', { text:cb || 'THE MIRROR' })));
+const lower = (k, v, cls) => h('div', { class:'lower' }, h('span', { class:'k ' + (cls || ''), text:k }), h('span', { class:'v', text:v }));
+function intro(finish){
+  screen = 'intro';
+  const sl = (...kids) => () => h('div', {}, ...kids);
+  reel([
+    sl(crownSvg('bigcrown float'), h('h2', {}, 'BREAKING: ', h('em', { text:'Giles is retiring!' })),
+      h('p', { class:'big', text:'Giles has led the Puffin Community for 41 years. His knees creak. He would like to sit on a rock and eat sprats.' }), h('p', { class:'tap', text:'Tap anywhere to keep going' })),
+    () => { VOICE.play('c01'); return h('div', {}, photo(IMG.right, 'Cuffin', 'float'), h('h2', {}, 'Candidate 1: ', h('em', { text:'CUFFIN' })),
+      h('p', { text:'Scruffy. Wise. Has crossed the Atlantic eleven times. Twelve, if you count the one that went wrong. Has never found custard in the North Atlantic. Has looked.' })); },
+    () => { VOICE.play('m01'); return h('div', {}, photo(MIMG.smug, 'The Mirror', 'swoop'), h('h2', {}, 'Candidate 2: ', h('em', { style:'color:#C6A1FF', text:'THE MIRROR' })),
+      h('p', { text:'Fluffy. Gleaming. Has never crossed anything wider than a bath.' }), sayBlock('rival', VO.m01, MIMG.ask)); },
+    sl(h('h2', {}, 'How the new ', h('em', { text:'Leader' }), ' is chosen'),
+      h('div', { class:'rules' }, h('div', { class:'rule' }, h('span', { class:'n', text:'1' }), 'Master ALL the words'), h('div', { class:'rule' }, h('span', { class:'n', text:'2' }), 'Win the most fresh fish'), h('div', { class:'rule' }, h('span', { class:'n', text:'3' }), 'Get there first')),
+      lower('GILES', 'I wrote the rules on a rock. It is a very old rock. It smells faintly of custard. Nobody knows why.')),
+    sl(photo(IMG.hello, 'Cuffin'), h('h2', {}, S.name + ', you’re ', h('em', { text:'Cuffin’s helper' })),
+      sayBlock('com', 'I have the feathers. You have the brain. You answer, I take the credit. Shared credit. Mostly shared.', IMG.hello)),
+    sl(h('h2', {}, 'How to ', h('em', { text:'play' })),
+      h('div', { class:'rules' }, h('div', { class:'rule' }, h('span', { class:'n', text:'🐟' }), 'Right answers win fresh fish. GOAL!'), h('div', { class:'rule' }, h('span', { class:'n', text:'🍮' }), '5 in a row wins a pot of custard.'),
+        h('div', { class:'rule' }, h('span', { class:'n', text:'🪞' }), 'The Mirror guesses every question too.'), h('div', { class:'rule' }, h('span', { class:'n', text:'🔒' }), 'Get a word right lots of times, on different days, to master it.'))),
+    end => h('div', {}, h('h2', {}, 'It’s ', h('em', { text:'matchday' })), duoFig(), h('button', { class:'cta', type:'button', onclick:() => { SND.fx('whistle'); end(); } }, 'Help Cuffin win! 🐟'))
+  ], finish, { label:'The story', skip:'Skip', tune:'fanfare', splash:h('div', { class:'chapter', text:'THE RACE FOR LEADER' }), ticker:'BREAKING NEWS · GILES TO RETIRE · TWO PUFFINS, ONE CROWN · STILL NO CUSTARD IN THE NORTH ATLANTIC · ' });
+}
+/* the daily chapter: shows itself on the first visit of a new day */
+function chapter(finish){
+  screen = 'chapter';
+  const v = S.lastVisit || visitSnap(), n = matchDay(), title = CHAPTERS[(n - 1) % CHAPTERS.length];
+  const da = S.points - (v.a || 0), dm = S.race.mf - (v.m || 0), d = S.points - S.race.mf, T = allItems().length, aM = masteredCount();
+  const ri = rankInfo(aM), sinceKey = da > dm ? 'won' : da < dm ? 'lost' : 'level';
+  const rows = chartRows();
+  const plus = x => x > 0 ? '+' + x + ' since last time' : 'same as last time';
+  const sl = (...kids) => () => h('div', {}, ...kids);
+  reel([
+    () => { VOICE.play('c03'); return h('div', {}, h('div', { class:'chapter', text:'CHAPTER ' + n + ' · ' + shortDate(today()).toUpperCase() }), h('h2', {}, h('em', { text:title })),
+      led(true, 'SO FAR'), Math.random() < .5 ? lower('GILES', pickOne(GCUSTARD), 'cus') : lower('GILES', pickOne(GILES))); },
+    () => { const lv = d > 0 ? 'c11' : d < 0 ? 'c12' : null; const said = lv && VOICE.play(lv); return h('div', {}, h('h2', {}, 'The race ', h('em', { text:'so far' })), h('div', { class:'chartbox' }, raceChart(rows, 'p', 'mf', 'Fresh fish over time')), legend(),
+      h('p', { class:'big', text: d > 0 ? 'Cuffin leads by ' + d + ' fish. ' : d < 0 ? 'The Mirror leads by ' + (-d) + ' fish. ' : 'Dead level. ' }), sayBlock('com', said ? VO[lv] : pickOne(SAY.since[sinceKey]), IMG.hello)); },
+    sl(h('h2', {}, 'Your ', h('em', { text:'stats' })),
+      h('div', { class:'stat4' },
+        h('div', { class:'st' }, h('div', { class:'k', text:'WORDS MASTERED' }), h('div', { class:'v', text:aM + '/' + T }), h('div', { class:'d', text:plus(aM - (v.w || 0)) })),
+        h('div', { class:'st' }, h('div', { class:'k', text:'FRESH FISH' }), h('div', { class:'v', text:'🐟 ' + S.points }), h('div', { class:'d', text:plus(da) })),
+        h('div', { class:'st cus' }, h('div', { class:'k', text:'POTS OF CUSTARD' }), h('div', { class:'v', text:'🍮 ' + (S.custard || 0) }), h('div', { class:'d', text:plus((S.custard || 0) - (v.c || 0)) })),
+        h('div', { class:'st' }, h('div', { class:'k', text:'RANK' }), h('div', { class:'v', style:'font-size:1rem', text:ri.cur.name }), h('div', { class:'d', text: ri.next ? (ri.next.at - aM) + ' words to ' + ri.next.name : 'Top rank!' }))),
+      lower('CUFFIN', 'Still no custard in the North Atlantic. Still winning pots of it here. The universe is strange.', 'cus')),
+    end => h('div', {}, h('h2', {}, 'Pre-match ', h('em', { text:'talk' })),
+      sayBlock('rival', Math.random() < .35 ? pickOne(MCUSTARD) : pickOne(PRE), MIMG.smug), sayBlock('kid', pickOne(ASAY)),
+      lower('MISSION', mission()),
+      h('button', { class:'cta', type:'button', onclick:() => { SND.fx('whistle'); end(); } }, 'KICK OFF ⚽'))
+  ], finish, { label:'Chapter ' + n, tag:'CHAPTER ' + n, tune:'news', splash:h('div', { style:'display:flex;flex-direction:column;align-items:center;gap:6px' }, h('div', { class:'chapter', text:'CHAPTER ' + n }), h('h2', { text:title })),
+    ticker:'CHAPTER ' + n + ' · CUFFIN ' + S.points + ' – ' + S.race.mf + ' MIRROR · ' + aM + ' WORDS MASTERED · ' + (S.custard || 0) + ' POTS OF CUSTARD · ' });
+}
+function confetti(n){
+  const box = h('div', { class:'confetti', 'aria-hidden':'true' }), cols = ['#FCD116', '#1D5BD8', '#D7263D', '#FFC83D', '#3DDC84', '#B48BFF'];
+  for (let k = 0; k < (n || 46); k++) box.append(h('i', { style:'left:' + rnd(100) + '%;background:' + cols[k % cols.length] + ';animation-delay:' + (Math.random() * 1.6).toFixed(2) + 's' }));
+  return box;
+}
+function ceremony(preview, finish){
+  screen = 'ceremony';
+  const L = S.leader || { d:today(), a:S.points, m:S.race.mf }, tant = shuffle(MSAY.defeat);
+  reel([
+    () => h('div', {}, confetti(), h('h2', {}, 'Every word ', h('em', { text:'MASTERED!' })), h('p', { text:'The whole Puffin Community has gathered on the big rock. Final score:' }), duoFig(IMG.right, MIMG.ask, '🐟 ' + L.a, '🐟 ' + L.m)),
+    () => h('div', {}, crownSvg('bigcrown float'), h('h2', {}, 'Giles ', h('em', { text:'clears his throat' })),
+      h('p', { class:'big', text:'“By the power of the rock, the fish and the very old rules… the new Leader of the Puffin Community is… CUFFIN! With his helper, ' + S.name.toUpperCase() + '!”' })),
+    () => { const said = VOICE.play('m08'); return h('div', {}, h('h2', {}, 'Meanwhile… ', h('em', { style:'color:#C6A1FF', text:'the Mirror' })), photo(MIMG.sad, 'The Mirror, flat on the floor', 'tantrum'), sayBlock('rival', said ? VO.m08 : tant[0], MIMG.sad), sayBlock('rival', tant[1], MIMG.smug)); },
+    () => { SND.fx('cheer'); setTimeout(() => VOICE.play('c16'), 1200); return h('div', {}, confetti(60), h('div', { class:'crownwrap' }, photo(IMG.hello, 'Cuffin wearing the crown'), crownSvg('crowndrop')),
+      h('h2', {}, h('em', { text:'Leader' }), ' of the Puffin Community'), sayBlock('com', VOICE.can('c16') ? VO.c16 : 'I would like this noted. Officially. In the literature. And bring out the custard. All of it.', IMG.right)); },
+    end => h('div', {}, h('div', { class:'cert' }, h('div', { class:'eyebrow', text:'Certificate of the Puffin Community' }), h('div', { class:'t', text:'Cuffin & ' + S.name }),
+        h('p', { text:'are crowned Leaders of the Puffin Community, having mastered every word, won ' + (S.custard || 0) + ' pots of custard and beaten the Mirror by ' + Math.max(1, L.a - L.m) + ' fresh fish.' }),
+        h('p', { class:'small', style:'color:#55648A', text:'Crowned ' + longDate(L.d) + ' on the big rock. Witnessed by Giles, several gulls and one sulking Mirror.' })),
+      h('button', { class:'cta', type:'button', onclick:end }, preview ? 'Done' : 'Hooray! 🐟'))
+  ], finish, { label:'The crowning', tag:'LIVE · THE BIG ROCK', tune:'anthem', ticker:'NEW LEADER OF THE PUFFIN COMMUNITY · CUFFIN & ' + S.name.toUpperCase() + ' · THE MIRROR IS SULKING · CUSTARD FOR EVERYONE · ' });
+}
+
+/* ---------- charts ---------- */
+function niceMax(v){ const s = [4,8,12,20,40,60,80,100,150,200,300,400,600,800,1000,1500,2000]; return s.find(n => n >= v) || Math.ceil(v / 500) * 500; }
+function raceChart(rows, ka, kb, label){
+  if (!rows.length) return h('div', { class:'notice', style:'margin:auto', text:'Play a match and the race appears here.' });
+  const W = 640, H = 300, m = { l:46, r:66, t:18, b:34 };
+  const svg = sv('svg', { class:'chart', viewBox:'0 0 ' + W + ' ' + H, preserveAspectRatio:'xMidYMid meet', role:'img', 'aria-label':label + ': Cuffin and ' + S.name + ' ' + rows[rows.length-1][ka] + ', the Mirror ' + rows[rows.length-1][kb] });
+  const maxV = niceMax(Math.max(4, ...rows.map(r => Math.max(r[ka] || 0, r[kb] || 0)))), iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const X = i => rows.length === 1 ? m.l + iw / 2 : m.l + i * iw / (rows.length - 1), Y = v => m.t + ih - (v / maxV) * ih;
+  for (let k = 0; k <= 4; k++){ const v = maxV * k / 4, y = Y(v); svg.append(sv('line', { class: k === 0 ? 'axis' : 'grid', x1:m.l, x2:W - m.r, y1:y, y2:y }), sv('text', { x:m.l - 8, y:y + 5, 'text-anchor':'end' }, v)); }
+  const ends = [];
+  [[ka, '#FF4D5E', ''], [kb, '#9C6BFF', '8 6']].forEach(([k, col, dash], si) => {
+    const pts = rows.map((r, i) => [X(i), Y(r[k] || 0)]);
+    if (si === 0 && pts.length > 1) svg.append(sv('path', { d:'M' + pts[0][0] + ',' + Y(0) + ' ' + pts.map(p => 'L' + p[0] + ',' + p[1]).join(' ') + ' L' + pts[pts.length-1][0] + ',' + Y(0) + ' Z', fill:col, opacity:.14 }));
+    if (pts.length > 1) svg.append(sv('path', { d:pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ',' + p[1]).join(' '), fill:'none', stroke:col, 'stroke-width':5, 'stroke-linejoin':'round', 'stroke-linecap':'round', 'stroke-dasharray':dash }));
+    const lp = pts[pts.length - 1];
+    svg.append(sv('circle', { cx:lp[0], cy:lp[1], r:8, fill:col, stroke:'#fff', 'stroke-width':3 }));
+    ends.push({ x:lp[0], y:lp[1], col, t:String(rows[rows.length-1][k] || 0) });
+  });
+  if (Math.abs(ends[0].y - ends[1].y) < 22){ const mid = (ends[0].y + ends[1].y) / 2, up = ends[0].y <= ends[1].y ? 0 : 1; ends[up].y = mid - 12; ends[1 - up].y = mid + 12; }
+  ends.forEach(e => svg.append(sv('text', { x:e.x + 14, y:e.y + 6, style:'fill:' + e.col + ';font-weight:800;font-size:19px' }, e.t)));
+  const idxs = rows.length >= 5 ? [0, Math.floor((rows.length - 1) / 2), rows.length - 1] : rows.map((_, i) => i);
+  idxs.forEach(i => svg.append(sv('text', { x:X(i), y:H - 10, 'text-anchor': i === 0 && rows.length > 1 ? 'start' : (i === rows.length - 1 && rows.length > 1 ? 'end' : 'middle') }, shortDate(rows[i].d))));
+  return svg;
+}
+const legend = () => h('div', { class:'legend' }, h('span', {}, h('i', { style:'background:#FF4D5E' }), 'Cuffin & ' + S.name), h('span', {}, h('i', { style:'background:repeating-linear-gradient(90deg,#9C6BFF 0 6px,transparent 6px 10px)' }), 'The Mirror'));
+function chartRows(){
+  const rows = S.history.filter(r => r.mf != null).slice(-14).map(r => Object.assign({}, r));
+  const now = { d:today(), m:masteredCount(), p:S.points, mf:S.race.mf, mm:S.race.mm };
+  if (rows.length && rows[rows.length - 1].d === now.d) rows[rows.length - 1] = now; else if (S.stats.answered) rows.push(now);
+  return rows;
+}
+
+/* ---------- Progress: one chart, flip between fish and words ---------- */
+let progView = 'fish';
+function progress(){
+  screen = 'progress';
+  const c = counts(), T = allItems().length, rows = chartRows();
+  const seg = [['mastered','var(--win)','Mastered'],['lock','var(--gold)','Nearly there'],['learning','var(--sim)','Learning'],['new','var(--line)','Not seen yet']];
+  const pick = v => h('button', { type:'button', 'aria-pressed':String(progView === v), onclick:() => { progView = v; SND.fx('tap'); progress(); } }, v === 'fish' ? '🐟 FRESH FISH' : '🔒 WORDS MASTERED');
+  mount([
+    topbar(),
+    h('h2', { text:'The race so far' }),
+    h('div', { class:'seg', role:'group', 'aria-label':'Choose chart' }, pick('fish'), pick('words')),
+    h('div', { class:'panel grow' }, legend(), h('div', { class:'chartbox' }, raceChart(rows, progView === 'fish' ? 'p' : 'm', progView === 'fish' ? 'mf' : 'mm', progView === 'fish' ? 'Fresh fish over time' : 'Words mastered over time'))),
+    h('div', { class:'panel', style:'flex:none' }, h('div', { class:'row', style:'justify-content:space-between' }, h('b', { text:'My ' + T + ' words' }), h('span', { class:'pots', style:'color:var(--ink);background:var(--custard-soft);border-color:var(--custard)', text:'🍮 ' + (S.custard || 0) + ' pots' })),
+      h('div', { class:'stackbar', role:'img', 'aria-label':seg.map(s => c[s[0]] + ' ' + s[2].toLowerCase()).join(', ') }, seg.map(s => c[s[0]] ? h('i', { style:'width:' + (100 * c[s[0]] / T) + '%;background:' + s[1] }) : null)),
+      h('div', { class:'keys' }, seg.map(s => h('span', {}, h('i', { style:'background:' + s[1] }), h('b', { text:String(c[s[0]]) }), ' ' + s[2]))))
+  ], 'progress');
+}
+SCREENS.progress = progress;
+
+/* ---------- the trophy cabinet: one original football trophy per rank ---------- */
+const TROPHY_NAMES = ['Kick-off Medal','First Goal Medal','Silver Medal','Gold Medal','Club Shield','League Shield','County Cup','Silver Cup','Golden Cup','Grand Final Cup','Golden Ball','The Puffin Crown Cup'];
+const SHORT_RANK = { 'Honorary Member of the Puffin Community':'Honorary Member', 'Leader of the Puffin Community':'Leader' };
+const METAL = { b:['#E79A57','#A65F28'], s:['#E6ECF7','#97A4BF'], g:['#FFD34D','#C99400'] };
+const TMETAL = ['b','b','s','g','s','g','s','s','g','g','g','g'];
+const F = k => 'style="fill:var(--' + k + ')"';
+const BALL = (x, y, r) => '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" ' + F('w') + '/><path d="M' + x + ' ' + (y - r * .55) + 'l' + (r * .52) + ' ' + (r * .38) + 'l-' + (r * .2) + ' ' + (r * .6) + 'h-' + (r * .64) + 'l-' + (r * .2) + '-' + (r * .6) + 'z" ' + F('d') + '/>';
+const STAR = (x, y, s) => '<path transform="translate(' + x + ' ' + y + ') scale(' + s + ')" d="M0-8l2.4 5 5.4.6-4 3.7 1.1 5.3L0 3.9l-4.9 2.7 1.1-5.3-4-3.7 5.4-.6z" ' + F('w') + '/>';
+const SHINE = '<path d="M22 12h4v8c0 5 2 9 5 11-6-1-9-6-9-12z" fill="#fff" opacity=".35"/>';
+const medal = sym => '<path d="M21 2h10l4 20H25z" ' + F('r1') + '/><path d="M33 2h10l-4 20H29z" ' + F('r2') + '/><circle cx="32" cy="41" r="17" ' + F('d') + '/><circle cx="32" cy="41" r="14" ' + F('m') + '/><circle cx="32" cy="41" r="10" ' + F('d') + ' opacity=".25"/>' + sym;
+const handles = (y, w) => '<path d="M18 ' + y + 'h-' + w + 'c0 9 4 13 10 14M46 ' + y + 'h' + w + 'c0 9-4 13-10 14" fill="none" stroke-width="4" stroke-linecap="round" style="stroke:var(--m)"/>';
+const cupBody = '<path d="M18 10h28v9c0 11-6 17-14 17s-14-6-14-17z" ' + F('m') + '/>' + SHINE + '<rect x="29" y="35" width="6" height="7" ' + F('d') + '/><path d="M22 42h20l2 6H20z" ' + F('m') + '/>';
+const TROPHY_SVG = [
+  medal(BALL(32, 41, 6.5)),
+  medal(STAR(32, 41, 1)),
+  medal('<path d="M23 41c3-4 7-5 10-5 3 0 5 2 6 4l3-3v8l-3-3c-1 2-3 4-6 4-3 0-7-1-10-5z" ' + F('w') + '/>'),
+  medal('<path d="M24 46l-1-9 5 4 4-6 4 6 5-4-1 9z" ' + F('w') + '/>'),
+  '<path d="M14 6h36v21c0 16-9 25-18 31C23 52 14 43 14 27z" ' + F('d') + '/><path d="M18 10h28v17c0 13-7 20-14 25-7-5-14-12-14-25z" ' + F('m') + '/>' + BALL(32, 27, 8),
+  '<path d="M14 4h36v21c0 16-9 23-18 29C23 48 14 41 14 25z" ' + F('d') + '/><path d="M18 8h28v17c0 13-7 18-14 23-7-5-14-10-14-23z" ' + F('m') + '/>' + BALL(32, 25, 7) + '<path d="M8 46h48l-4 6 4 6H8l4-6z" ' + F('r1') + '/>' + STAR(22, 51, .45) + STAR(32, 51, .45) + STAR(42, 51, .45),
+  handles(13, 6) + cupBody + '<rect x="16" y="48" width="32" height="10" rx="2" ' + F('d') + '/>',
+  handles(13, 6) + cupBody + '<rect x="14" y="48" width="36" height="14" rx="2" ' + F('d') + '/><rect x="23" y="52" width="18" height="5" rx="1" ' + F('w') + ' opacity=".7"/>' + '<path d="M26 22c2-3 5-3 7-3 2 0 3 1 4 2l2-2v5l-2-2c-1 1-2 2-4 2-2 0-5 0-7-2z" ' + F('w') + '/>',
+  '<circle cx="32" cy="4" r="3" ' + F('m') + '/><path d="M18 14c0-5 6-8 14-8s14 3 14 8z" ' + F('d') + '/>' + handles(17, 6) + '<path d="M18 14h28v8c0 10-6 15-14 15s-14-5-14-15z" ' + F('m') + '/><path d="M22 16h4v7c0 5 2 8 5 10-6-1-9-5-9-11z" fill="#fff" opacity=".35"/><rect x="29" y="37" width="6" height="6" ' + F('d') + '/><path d="M21 43h22l2 5H19z" ' + F('m') + '/><rect x="14" y="48" width="36" height="14" rx="2" ' + F('d') + '/>' + STAR(32, 25, .7),
+  '<path d="M20 10c-9 0-9 14 2 16M44 10c9 0 9 14-2 16" fill="none" stroke-width="4" stroke-linecap="round" style="stroke:var(--m)"/><path d="M19 4h26l-2 17c-1 9-5 14-11 14s-10-5-11-14z" ' + F('m') + '/><path d="M23 7h4l1 12c0 6 2 10 4 12-5-1-8-5-8-11z" fill="#fff" opacity=".35"/>' + STAR(32, 17, .8) + '<path d="M29 35h6l1 9h-8z" ' + F('d') + '/><path d="M21 44h22l2 5H19z" ' + F('m') + '/><rect x="16" y="49" width="32" height="6" rx="1" ' + F('d') + '/><rect x="12" y="55" width="40" height="7" rx="2" ' + F('m') + '/>',
+  '<circle cx="32" cy="22" r="16" ' + F('m') + '/><path d="M32 14l6 4.4-2.3 7h-7.4l-2.3-7z" ' + F('d') + '/><path d="M32 6v8M38 18.4l8.5-2.8M35.7 25.4l5.2 7M28.3 25.4l-5.2 7M26 18.4l-8.5-2.8" fill="none" stroke-width="2" style="stroke:var(--d)"/><circle cx="26" cy="15" r="4" fill="#fff" opacity=".35"/><path d="M25 38h14l-2 8H27z" ' + F('d') + '/><rect x="14" y="46" width="36" height="16" rx="2" ' + F('m') + '/><rect x="22" y="51" width="20" height="5" rx="1" ' + F('d') + ' opacity=".6"/>',
+  '<path d="M20 13l-2-10 7 5 7-7 7 7 7-5-2 10z" ' + F('m') + '/><circle cx="25" cy="9" r="1.6" ' + F('r1') + '/><circle cx="32" cy="7" r="1.8" ' + F('r2') + '/><circle cx="39" cy="9" r="1.6" ' + F('r1') + '/>' + '<path d="M14 18H7c0 11 5 15 12 16M50 18h7c0 11-5 15-12 16" fill="none" stroke-width="4" stroke-linecap="round" style="stroke:var(--m)"/><path d="M14 14h36v10c0 13-8 21-18 21s-18-8-18-21z" ' + F('m') + '/><path d="M18 17h4v8c0 7 3 12 7 15-8-1-11-8-11-15z" fill="#fff" opacity=".35"/>' + BALL(32, 27, 6.5) + '<rect x="28" y="45" width="8" height="5" ' + F('d') + '/><path d="M20 50h24l2 4H18z" ' + F('m') + '/><rect x="12" y="54" width="40" height="9" rx="2" ' + F('d') + '/><rect x="22" y="56.5" width="20" height="4" rx="1" ' + F('m') + '/>'
+];
+function trophyEl(i, state){
+  const s = h('span', { class:'tsv', 'aria-hidden':'true' });
+  const [m, d] = METAL[TMETAL[i]];
+  const vars = state === 'locked' ? '' : '--m:' + m + ';--d:' + d + ';--w:#FFFFFF;--r1:#D7263D;--r2:#1D5BD8';
+  s.innerHTML = '<svg viewBox="0 0 64 64" style="' + vars + '">' + TROPHY_SVG[i] + '</svg>';   // constant markup, no user text
+  return s;
+}
+function trophies(){
+  screen = 'trophies';
+  const m = masteredCount(), ri = rankInfo(m), t = ri.table;
+  const pct = ri.next ? Math.round(100 * (m - ri.cur.at) / Math.max(1, ri.next.at - ri.cur.at)) : 100;
+  const def = ri.next ? (ri.next.at - m) + ' more words to win the ' + TROPHY_NAMES[ri.i + 1] : 'Every trophy won. Leader of the Puffin Community!';
+  const sub = h('div', { class:'small muted', 'aria-live':'polite', text:def });
+  const cells = t.map((r, i) => {
+    const state = i <= ri.i ? 'won' : i === ri.i + 1 ? 'next' : 'locked';
+    const label = SHORT_RANK[r.name] || r.name;
+    const b = h('button', { class:'tr ' + state + (i === ri.i ? ' now' : '') + (i === t.length - 1 ? ' top' : ''), type:'button',
+      'aria-label':TROPHY_NAMES[i] + ', ' + r.name + ', ' + (i === t.length - 1 ? 'every word' : r.at + ' words') + (state === 'won' ? ', won' : ', not won yet'),
+      onclick:() => { SND.fx('tap'); cab.querySelectorAll('.tr').forEach(x => x.classList.remove('sel')); b.classList.add('sel');
+        sub.textContent = TROPHY_NAMES[i] + ' · ' + r.name + ' · ' + (i === t.length - 1 ? 'master every word' : r.at + ' words') + (state === 'won' ? ' · WON!' : ''); } },
+      trophyEl(i, state), state === 'next' ? h('span', { class:'lk', 'aria-hidden':'true' }, icon('lock')) : null,
+      h('span', { class:'n', text:label }), h('span', { class:'w', text: state === 'won' ? '✓ won' : (i === t.length - 1 ? 'every word' : r.at + ' words') }));
+    return b;
+  });
+  const cab = h('div', { class:'cabinet' }, cells);
+  const badgesN = Object.keys(S.badges).length;
+  mount([
+    topbar(),
+    h('div', { class:'row', style:'justify-content:space-between;flex:none' }, h('h2', { text:'Trophy cabinet' }), h('span', { class:'pots', style:'color:var(--ink);background:var(--gold-soft);border-color:var(--gold)', text:'🏆 ' + (ri.i + 1) + ' of ' + t.length })),
+    h('div', { class:'panel', style:'flex:none;gap:5px' }, h('div', { class:'row', style:'justify-content:space-between' }, h('span', { class:'rankname', text:ri.cur.name }), h('span', { class:'small muted', text:m + ' words' })),
+      h('div', { class:'bar', role:'progressbar', 'aria-label':'Progress to the next trophy', 'aria-valuenow':pct, 'aria-valuemin':0, 'aria-valuemax':100 }, h('i', { style:'width:' + pct + '%' })), sub),
+    cab,
+    h('div', { class:'homerow', style:'flex:none' }, h('button', { class:'btn alt small', type:'button', onclick:badgeSheet }, '🏅 Badges ' + badgesN + '/' + BADGES.length), h('button', { class:'btn alt small', type:'button', onclick:prizeSheet }, '🎁 Prizes'))
+  ], 'trophies');
+}
+SCREENS.trophies = trophies;
+function badgeSheet(){
+  const info2 = h('p', { class:'binfo', 'aria-live':'polite', text:'Tap a badge to see what it is for.' });
+  const grid = h('div', { class:'bgrid' }, BADGES.map(b => { const got = !!S.badges[b.id];
+    const el = h('button', { class:'bdg' + (got ? '' : ' locked'), type:'button', 'aria-pressed':'false', 'aria-label':b.n + (got ? ', won' : ', not won yet'), onclick:() => {
+      grid.querySelectorAll('.bdg').forEach(x => x.setAttribute('aria-pressed', 'false')); el.setAttribute('aria-pressed', 'true'); SND.fx('tap');
+      put(info2, h('b', { text:b.n }), ' · ' + b.d + (got ? ' Won!' : '')); } }, icon(got ? b.ic : 'lock')); return el; }));
+  openSheet([h('h2', { text:'Badges' }), grid, info2, h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Close')], true);
+}
+function prizeSheet(){
+  const m = masteredCount(), list = S.prizes.slice().sort((a, b) => a.at - b.at);
+  openSheet([h('h2', { text:'Prizes from Mum and Dad' }),
+    list.length ? h('div', { class:'mlist' }, list.map(p => h('div', { class:'mitem' }, h('span', { class:'em', 'aria-hidden':'true', text: p.given ? '✅' : m >= p.at ? '🎁' : '🔒' }),
+      h('span', {}, p.text || 'A surprise', h('small', { text: p.at + ' words mastered' + (p.given ? ' · received' : m >= p.at ? ' · earned! Ask a grown-up' : '') }))))) :
+      h('p', { class:'muted', text:'No prizes set yet. A grown-up can add some in Grown-ups.' }),
+    h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Close')], true);
+}
+
+/* ---------- Grown-ups: one section at a time ---------- */
+let parentOK = false, gTab = 'play';
+function sw(id, on, label, sub, fn){
+  const b = h('button', { class:'switch', id, type:'button', role:'switch', 'aria-checked':String(on), 'aria-label':label, onclick:() => { const v = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', String(v)); fn(v); } });
+  return h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:label }), h('span', { class:'small muted', text:sub })), b);
+}
+function grownups(){
+  screen = 'grownups';
+  if (S.pin && !parentOK){
+    const inp = h('input', { class:'fld', id:'pinin', type:'password', inputmode:'numeric', autocomplete:'off', 'aria-label':'PIN', style:'max-width:200px' });
+    const msg = h('p', { class:'small', style:'color:var(--miss)' });
+    mount([topbar(), h('div', { class:'panel' }, h('h2', { text:'Grown-ups' }), h('p', { class:'muted', text:'Enter the PIN to continue.' }),
+      h('form', { class:'row', onsubmit:e => { e.preventDefault(); if (inp.value === S.pin){ parentOK = true; grownups(); } else { msg.textContent = 'That is not the PIN.'; inp.value = ''; } } }, inp, h('button', { class:'btn small', type:'submit' }, 'Unlock')), msg)], 'grownups');
+    setTimeout(() => inp.focus(), 30); return;
+  }
+  const tabs = [['play','Play'],['book','Book'],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
+  const bar = h('div', { class:'subtabs', role:'group', 'aria-label':'Grown-ups sections' }, tabs.map(([id, t]) => h('button', { type:'button', 'aria-pressed':String(gTab === id), onclick:() => { gTab = id; grownups(); } }, t)));
+  const panel = h('div', { class:'panel grow', style:'overflow-y:auto' });
+  const c = counts(), T = allItems().length;
+  if (gTab === 'play'){
+    put(panel,
+      sw('sw-hints', S.settings.hints, 'Hints', S.settings.hints ? 'On: “not sure” explanations, peeks and hint buttons.' : 'Off (test mode): no hints, every answer is ' + S.name + '’s own.', v => { S.settings.hints = v; save(); grownups(); }),
+      sw('sw-sound', S.settings.sound, 'All sounds', 'Goals, misses, the Mirror and music. ' + S.name + ' can also switch this with the speaker button.', v => { S.settings.sound = v; if (!v){ S.settings.music = false; SND.stop(); SND.loop(false); } save(); grownups(); if (v){ SND.prime(); SND.fx('goal'); } }),
+      sw('sw-music', S.settings.music, 'Music', 'Story fanfare, chapter sting, crowning anthem, match groove.', v => { S.settings.music = v; if (v) S.settings.sound = true; save(); grownups(); if (!v){ SND.stop(); SND.loop(false); } else { SND.prime(); SND.tune('win'); } }),
+      h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:'Previews' }), h('span', { class:'small muted', text:'These do not change any progress.' }))),
+      h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => intro(() => grownups()) }, 'The story'), h('button', { class:'btn alt small', type:'button', onclick:() => chapter(() => grownups()) }, 'Today’s chapter'), h('button', { class:'btn alt small', type:'button', onclick:() => ceremony(true, () => grownups()) }, 'The crowning')));
+  } else if (gTab === 'book'){
+    const L = bookStore().list.slice(0, 60);
+    put(panel, h('p', { class:'small muted', text:'Words ' + S.name + ' was asked to write in his vocabulary book (newest first). ✓ = typed it correctly from the book at the Book check.' }),
+      L.length ? h('div', { class:'saves grow' }, L.map(e => h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:e.w }), h('span', { class:'muted', text:(e.m || '') + (e.s ? ' · similar ' + e.s + ', opposite ' + e.o : '') })),
+        h('span', { class:'you', title: e.ok ? 'Checked' : 'Not checked yet', text:(e.ok ? '✓ ' : '… ') + shortDate(e.d) })))) : h('p', { class:'muted', text:'Nothing written yet.' }));
+  } else if (gTab === 'saves'){
+    const list = h('div', { class:'saves grow' }, h('p', { class:'muted', text:'Loading…' }));
+    const drawSaves = async () => {
+      const rows = await listSaves();
+      if (!rows.length) return put(list, h('p', { class:'muted', text:'No save points yet.' }));
+      put(list, rows.map(r => { const conf = h('div');
+        const go = h('button', { class:'btn alt small', type:'button', onclick:() => put(conf, h('div', { class:'confirm' }, h('span', { text:'Go back to this? Today’s progress is saved first, so you can undo.' }),
+          h('div', { class:'row' }, h('button', { class:'btn small', type:'button', onclick:async () => { await restoreSave(r); toast('Went back to ' + r.name); grownups(); } }, 'Yes, go back'), h('button', { class:'btn alt small', type:'button', onclick:() => put(conf) }, 'Cancel')))) }, 'Go back');
+        return h('div', {}, h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:r.name || 'Save point' }), h('span', { class:'muted', text:new Date(r.at).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) + ' · ' + r.a + '–' + r.m + ' fish · ' + r.w + ' words' })),
+          h('div', { class:'row', style:'gap:2px;flex-wrap:nowrap' }, go, h('button', { class:'linkbtn', type:'button', 'aria-label':'Delete ' + (r.name || 'save point'), onclick:async () => { await deleteSave(r); drawSaves(); } }, '✕'))), conf); }));
+    };
+    const rst = h('input', { class:'fld', id:'rstin', type:'text', placeholder:'Type RESTART', 'aria-label':'Type RESTART to confirm', style:'max-width:150px' });
+    const rbtn = h('button', { class:'btn alt small', type:'button', disabled:true, onclick:async () => {
+      await addSave('Before restart · ' + stamp());
+      const keep = { words:S.words, bank:S.bank, prizes:S.prizes.map(p => Object.assign({}, p, { announced:false, given:false })), name:S.name, pin:S.pin, settings:S.settings };
+      S = Object.assign(fresh(), keep); SYNC.allowBlank = true; home.recapDone = true; save(); toast('Restarted. Tap Home to see the story.'); grownups(); } }, 'Restart from scratch');
+    rst.addEventListener('input', () => { rbtn.disabled = rst.value.trim().toUpperCase() !== 'RESTART'; });
+    put(panel, h('p', { class:'small muted', text: SYNC.ready ? 'Progress syncs to the family after every answer, on every device with the family code. Save points are snapshots to go back to.' : 'Progress is saved in this browser. Save points are snapshots to go back to.' }),
+      h('button', { class:'btn small', type:'button', style:'align-self:flex-start', onclick:async () => { if (await addSave('Grown-up save · ' + stamp())){ toast('Save point made'); drawSaves(); } } }, icon('save'), 'Make a save point'),
+      list, h('div', { class:'notice' }, h('b', { text:'Restart from scratch. ' }), 'Clears fish, words, custard, badges, the race and the crown; the story plays again. A save point is made first.', h('div', { class:'row', style:'margin-top:6px' }, rst, rbtn)));
+    drawSaves();
+  } else if (gTab === 'words'){
+    const ta = h('textarea', { id:'bankin', placeholder:'word, meaning | example sentence\nilluminate, To light something up | The torch will illuminate the cave.', 'aria-label':'Words and meanings' });
+    const mode = h('select', { class:'fld', id:'bankmode', 'aria-label':'Import mode' }, h('option', { value:'replace', text:'Replace the word bank' }), h('option', { value:'add', text:'Add to the word bank' }));
+    const msg = h('p', { class:'small', 'aria-live':'polite' });
+    const file = h('input', { type:'file', accept:'.csv,.txt,.tsv,text/plain,text/csv', id:'bankfile', 'aria-label':'Choose a word file' });
+    file.addEventListener('change', () => { const f = file.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => { ta.value = String(fr.result); msg.textContent = 'File loaded. Check it, then Import.'; }; fr.readAsText(f); });
+    put(panel, h('b', { text:'Word bank: ' + S.bank }), h('p', { class:'small muted', text:'One per line: word, meaning. Add “|” and a sentence containing the word for Fill the gap. The ' + CARDS.length + ' cards are always included.' }),
+      file, ta, h('div', { class:'row' }, h('div', { style:'flex:1;min-width:140px' }, mode), h('button', { class:'btn small', type:'button', onclick:() => importWords(ta.value, mode.value, msg) }, 'Import')), msg);
+  } else if (gTab === 'prizes'){
+    const list = h('div', { style:'display:flex;flex-direction:column;gap:6px' });
+    const drawPrizes = () => {
+      put(list, S.prizes.slice().sort((a, b) => a.at - b.at).map((p, i) => h('div', { class:'prize-row' },
+        h('input', { class:'fld', id:'prz-at-' + i, type:'number', min:1, value:p.at, 'aria-label':'Words mastered', onchange:e => { p.at = Math.max(1, parseInt(e.target.value, 10) || 1); p.announced = masteredCount() >= p.at ? p.announced : false; save(); drawPrizes(); } }),
+        h('input', { class:'fld', id:'prz-tx-' + i, type:'text', value:p.text, placeholder:'e.g. Film night', 'aria-label':'Prize', onchange:e => { p.text = e.target.value; save(); } }),
+        h('label', { class:'chk' }, h('input', { type:'checkbox', checked:p.given, onchange:e => { p.given = e.target.checked; save(); } }), 'Given'),
+        h('button', { class:'linkbtn', type:'button', 'aria-label':'Remove prize', onclick:() => { S.prizes = S.prizes.filter(x => x !== p); save(); drawPrizes(); } }, '✕'))));
+      if (!S.prizes.length) list.append(h('p', { class:'muted small', text:'No prizes yet. For example: 25 words mastered, ice cream trip.' }));
+    };
+    drawPrizes();
+    put(panel, h('p', { class:'small muted', text:'Words mastered to earn each prize. The game announces it after the match where he reaches it.' }), list,
+      h('button', { class:'btn small', type:'button', style:'align-self:flex-start', onclick:() => { const base = Math.max(0, ...S.prizes.map(p => p.at)); S.prizes.push({ at:base + 10, text:'', announced:false, given:false }); save(); drawPrizes(); } }, 'Add a prize'));
+  } else if (gTab === 'how'){
+    put(panel, h('div', { class:'prose' },
+      h('div', { class:'row', style:'gap:6px' }, h('span', { class:'chip', text:'Mastered ' + c.mastered + '/' + T }), h('span', { class:'chip', text:'Nearly there ' + c.lock }), h('span', { class:'chip', text:'Accuracy ' + (S.stats.answered ? accuracy() + '%' : '–') })),
+      h('p', {}, h('b', { text:'Mastered: ' }), '3 right in a row, in 2 question types, on 2 different days, no hints. A miss knocks the run back by 2.'),
+      h('p', {}, h('b', { text:'Cards: ' }), 'must also include a fully right similar & opposite answer. After 2 right, the game steers the card to that test.'),
+      h('p', {}, h('b', { text:'Wobbly: ' }), 'a mastered word that is missed stops counting until he gets it right again; two misses and it must be re-earned.'),
+      h('p', {}, h('b', { text:'Vocabulary book: ' }), 'a miss or “not sure” asks him to write the word down before carrying on. At full time a Book check shows the meaning and he types the word from his book (+1 fish each). Written words come first in the next match.'),
+      h('p', {}, h('b', { text:'Custard: ' }), 'a pot for every 5 in a row. Just for fun.'),
+      h('p', {}, h('b', { text:'The Mirror: ' }), 'guesses every question, steered so he is never more than ' + LEAD_CAP + ' fish or ' + MAST_CAP + ' word ahead and always loses at the end. ' + S.name + '’s score is never adjusted.'),
+      h('p', { class:'muted', text:'For a final check, switch hints off in Play.' })));
+  } else {
+    const nameIn = h('input', { class:'fld', id:'namein', type:'text', value:S.name, style:'max-width:180px', onchange:e => { S.name = e.target.value.trim() || 'Aaron'; save(); toast('Name saved'); } });
+    const pinIn = h('input', { class:'fld', id:'newpin', type:'text', inputmode:'numeric', maxlength:8, placeholder:S.pin ? 'PIN is set' : 'New PIN', 'aria-label':'New PIN', style:'max-width:130px' });
+    const code = h('textarea', { id:'bkcode', readonly:true, 'aria-label':'Backup code', style:'min-height:56px' });
+    const bmsg = h('p', { class:'small', 'aria-live':'polite' });
+    const arch = archived();
+    put(panel,
+      h('div', { class:'row' }, h('label', { for:'namein', text:'Name' }), nameIn),
+      h('div', { class:'notice' }, h('b', { text:'Family code: ' }), (familyCode() && familyCode() !== 'LOCAL') ? familyCode() : 'not set (this device only)', ' ',
+        h('button', { class:'linkbtn', type:'button', onclick:() => { setFamily(''); location.reload(); } }, 'Change')),
+      h('div', { class:'row' }, pinIn, h('button', { class:'btn small', type:'button', onclick:() => { if (pinIn.value.trim()){ S.pin = pinIn.value.trim(); save(); toast('PIN saved'); grownups(); } } }, 'Set PIN'), S.pin ? h('button', { class:'linkbtn', type:'button', onclick:() => { S.pin = ''; save(); grownups(); } }, 'Remove') : null),
+      h('p', { class:'small muted', text:'The PIN keeps ' + S.name + ' out of Grown-ups (including restart). It is a child-lock, not real security.' }),
+      h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => { code.value = exportCode(); code.select(); } }, 'Show backup code'), h('button', { class:'btn alt small', type:'button', onclick:() => { if (!code.value) code.value = exportCode(); copyText(code); } }, 'Copy'),
+        h('button', { class:'btn alt small', type:'button', onclick:() => { try { S = migrate(importCode(code.value), true); raceFix(); save(); toast('Progress restored'); grownups(); } catch (e) { bmsg.style.color = 'var(--miss)'; bmsg.textContent = 'Paste a full backup code in the box first.'; } } }, 'Restore')),
+      code, bmsg,
+      h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => { loadDemo(); toast('Demo data loaded'); grownups(); } }, 'Load demo progress'),
+        arch ? h('button', { class:'btn alt small', type:'button', onclick:() => { try { S = migrate(JSON.parse(arch), true); raceFix(); save(); toast('Pre-race progress restored'); grownups(); } catch (e) {} } }, 'Pre-race progress') : null));
+  }
+  mount([topbar(), h('h2', { text:'Grown-ups' }), bar, panel], 'grownups');
+}
+SCREENS.grownups = grownups;
+
+function copyText(el){
+  el.select(); const ok = () => toast('Copied');
+  const fb = () => { try { document.execCommand('copy'); ok(); } catch (e) { toast('Select the text and copy it'); } };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(el.value).then(ok, fb); else fb();
+}
+function exportCode(){ return btoa(unescape(encodeURIComponent(JSON.stringify(S)))); }
+function importCode(t){ const o = JSON.parse(decodeURIComponent(escape(atob(t.trim())))); if (!o || o.v !== 1 || !Array.isArray(o.words)) throw new Error('bad'); return o; }
+function importWords(text, mode, msg){
+  const lines = String(text).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const out = []; let skipped = 0;
+  lines.forEach((l, i) => {
+    if (i === 0 && /^"?word"?\s*[,\t;]/i.test(l)) return;
+    let idx = l.indexOf('\t'); if (idx < 0) idx = l.indexOf(',');
+    if (idx < 1){ skipped++; return; }
+    const w = l.slice(0, idx).trim().replace(/^"|"$/g, '');
+    let rest = l.slice(idx + 1).trim(), s = '';
+    const bar = rest.indexOf('|'); if (bar > -1){ s = rest.slice(bar + 1).trim(); rest = rest.slice(0, bar).trim(); }
+    const m = rest.replace(/^"|"$/g, '');
+    if (!w || !m){ skipped++; return; }
+    out.push(s ? { w, m, s } : { w, m });
+  });
+  if (!out.length){ msg.style.color = 'var(--miss)'; msg.textContent = 'No words found. Each line needs a word, a comma, then the meaning.'; return; }
+  const seen = new Map();
+  (mode === 'add' ? S.words.concat(out) : out).forEach(x => seen.set(norm(x.w), x));
+  const bank = [...seen.values()];
+  if (mode !== 'add' && bank.length < 4){ msg.style.color = 'var(--miss)'; msg.textContent = 'Please add at least 4 words.'; return; }
+  S.words = bank; S.bank = (mode === 'add' ? 'Custom bank' : 'Custom list') + ' (' + bank.length + ')';
+  const keys = new Set(bank.map(x => norm(x.w)));
+  for (const k of Object.keys(S.prog)) if (!keys.has(k) && !k.startsWith('card:')) delete S.prog[k];
+  raceFix(); S.demo = false; save();
+  msg.style.color = 'var(--win)'; msg.textContent = 'Imported ' + out.length + ' words. The bank now has ' + bank.length + '.' + (skipped ? ' ' + skipped + ' skipped.' : '');
+  toast('Word bank updated');
+}
+function loadDemo(){
+  const ws = shuffle(allItems()), n = ws.length, target = Math.max(3, Math.round(n * 0.3)), days = 12, t0 = today(), y = addDays(t0, -1);
+  S.prog = {}; S.history = []; S.rounds = []; S.badges = {}; S.points = 0; S.leader = null; S.custard = 6;
+  S.stats = { answered:0, right:0, spell:0, fixed:0, best:0, rounds:0, perfect:0 };
+  for (let i = 0; i < days; i++){
+    const d = addDays(t0, -(days - 1 - i)), m = Math.round(target * Math.pow((i + 1) / days, 1.3)), p = Math.round(9 * (i + 1) * 1.6);
+    S.history.push({ d, m, p, mf:Math.max(0, p - 2 - rnd(4) + (i % 4 === 1 ? 4 : 0)), mm:Math.max(0, m - rnd(2)) });
+    const r = 5 + Math.min(5, Math.floor(i * 0.5) + rnd(2));
+    S.rounds.push({ d, r:Math.min(10, r), n:10 }); S.stats.answered += 10; S.stats.right += Math.min(10, r);
+  }
+  S.stats.rounds = days; S.points = S.history[days - 1].p; S.stats.best = 6; S.stats.spell = 12; S.stats.fixed = 7;
+  ws.forEach((x, i) => {
+    const r = rec(x);
+    if (i < target) Object.assign(r, { streak:3, seen:4, right:4, last:y, ty:['sim','w2m'], dy:[addDays(t0, -3), y], m:true });
+    else if (i < target + 8) Object.assign(r, { streak:3, seen:3, right:3, last:y, ty:['sim','gap'], dy:[y] });
+    else if (i < target + 14) Object.assign(r, { streak:0, seen:3, right:1, miss:2, last:t0, ty:[], dy:[] });
+    else if (i < target + 20) Object.assign(r, { streak:1, seen:2, right:2, last:t0, ty:['w2m'], dy:[t0] });
+  });
+  S.race = { mf:S.points - 2, mm:Math.max(0, masteredCount() - 1), ms:0 };
+  Object.assign(S.history[days - 1], { mf:S.race.mf, mm:S.race.mm, m:masteredCount() });
+  S.last = y; S.demo = true; S.intro = true; S.lastVisit = { d:y, a:S.points - 14, m:S.race.mf - 11, w:Math.max(0, masteredCount() - 3), mw:Math.max(0, S.race.mm - 2), c:4, r:0 };
+  checkBadges(); save();
+}
+
+/* ---------- test hooks (only with #test in the address) ---------- */
+if (location.hash === '#test'){
+  window.__cwq = {
+    S: () => S, home: () => { home.recapDone = true; home(); }, ceremony: () => ceremony(true, () => home()), intro: () => intro(() => home()), chapter: () => chapter(() => home()),
+    reset: () => { S = fresh(); S.intro = true; S.lastVisit = visitSnap(); save(); home.recapDone = true; home(); },
+    demo: () => { loadDemo(); home.recapDone = true; home(); },
+    round: kind => startRound(kind || 'mixed'), forceType: t => { FORCE = t || null; },
+    lastVisitYesterday: () => { S.lastVisit = Object.assign(visitSnap(), { d:addDays(today(), -1), a:Math.max(0, S.points - 12), m:Math.max(0, S.race.mf - 9), w:Math.max(0, masteredCount() - 2), c:Math.max(0, (S.custard || 0) - 2) }); saveLocal(); home.recapDone = false; home(); },
+    nearEnd: n => { const xs = allItems(); xs.forEach((x, i) => { Object.assign(rec(x), { seen:4, right:4, streak: i < xs.length - n ? 3 : 2, last:today(), ty:['w2m','sim'], dy:['2026-01-01', today()], m: i < xs.length - n }); });
+      S.points = 400; S.race = { mf:398, mm:xs.length - n - 1, ms:0 }; S.intro = true; S.leader = null; save(); home.recapDone = true; home(); },
+    endRound: () => { R = newRound([], 'mixed'); R.total = 1; finishRound(); },
+    sim: (games, skill, maxQ, daysPer) => {
+      const out = { games, questions:0, mirrorWins:0, maxFishLead:-1e9, maxMastLead:-1e9, finished:0, finishedAhead:0, simShare:0 };
+      const keep = S; let close = 0, ahead = 0, total = 0, gap = 0, mgap = 0, sims = 0;
+      for (let g = 0; g < games; g++){
+        S = fresh(); S.intro = true; let q = 0, day = 0;
+        while (q < (maxQ || 8000) && !allDone()){
+          if (q % (daysPer || 40) === 0) day++;
+          SIMDAY = '2027-' + pad(1 + Math.floor(day / 28) % 12) + '-' + pad(1 + day % 28);
+          R = newRound(pickWords(10, allItems()), 'mixed');
+          while (R.idx < R.queue.length){
+            const item = R.queue[R.idx], qq = makeQuestion(item); item.lastType = qq.type;
+            const r0 = peek(item.w), p = Math.min(.97, skill + (r0 ? r0.streak * .05 : 0));
+            if (qq.type === 'sim'){
+              sims++;
+              let f = 0, ms = 0; const s1 = Math.random() < p, s2 = Math.random() < Math.min(.98, p + .08);
+              [s1, s2].forEach(ok => { if (ok){ S.points++; R.points++; f++; } if (!item.retry){ const t = mirrorTry(1); if (t.ok) ms++; } });
+              scoreItem(item, qq, s1 && s2, f, false); if (!item.retry) mirrorMastery(ms === 2);
+            } else {
+              const ok = Math.random() < p; scoreItem(item, qq, ok, null, false);
+              if (!item.retry){ const t = mirrorTry(mirrorGain(qq.type)); mirrorMastery(t.ok); }
+            }
+            const d = S.race.mf - S.points, dm = S.race.mm - masteredCount();
+            out.maxFishLead = Math.max(out.maxFishLead, d); out.maxMastLead = Math.max(out.maxMastLead, dm);
+            total++; gap -= d; mgap -= dm; if (d >= -5) close++; if (d > 0) ahead++;
+            R.idx++; q++;
+          }
+          if (R.firstTry === R.total && R.total >= 5) S.points += 3;
+          raceFix();
+        }
+        out.questions += q;
+        if (allDone()){ out.finished++; if (S.points > S.race.mf && masteredCount() > S.race.mm) out.finishedAhead++; else out.mirrorWins++; }
+      }
+      SIMDAY = null;
+      Object.assign(out, { meanGap:+(gap / total).toFixed(1), meanMastGap:+(mgap / total).toFixed(1), closeShare:+(close / total).toFixed(3), aheadShare:+(ahead / total).toFixed(3), simShare:+(sims / total).toFixed(2) });
+      S = keep; R = null; saveLocal();
+      return out;
+    }
+  };
+}
+
+/* ---------- boot ---------- */
+$('#tabbar').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; SND.fx('tap'); ({ home:() => { home.recapDone = true; home(); }, progress, trophies, grownups })[b.dataset.t](); });
+raceFix();
+(async () => {
+  if (!familyCode()) await new Promise(r => familyScreen(r));
+  if (famId(familyCode()).length >= 12 && FIREBASE_CONFIG.apiKey){
+    mount([h('div', { class:'boot', role:'status' }, cimg(IMG.hello, 'float', 140, 'Cuffin'), h('div', { class:'eyebrow', text:'Loading your progress…' }))], null);
+    await Promise.race([syncStart(), new Promise(r => setTimeout(r, 7000))]);
+  } else syncStart();
+  home();
+})();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+})();
