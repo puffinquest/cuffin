@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "864fc1a389";
+const APPV = "b83d244fa2";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -1322,7 +1322,7 @@ function sayBlock(kind, line, img){
   const nm = kind === 'rival' ? 'The Mirror' : kind === 'kid' ? S.name : 'Cuffin';
   return h('div', { class:'say ' + kind },
     kind === 'kid' ? h('div', { class:'kidface', 'aria-hidden':'true', text:(S.name || 'A')[0].toUpperCase() }) : cimg(img || (kind === 'rival' ? MIMG.ask : IMG.hello), '', 52, kind === 'rival' ? 'The Mirror' : 'Cuffin'),
-    h('div', { class:'bub' }, h('div', { class:'nm', text:nm }), h('p', { class:'tx' + (screen === 'chapter' || screen === 'intro' || screen === 'ceremony' ? '' : ' clamp2'), text:line })));
+    h('div', { class:'bub' }, h('div', { class:'nm', text:nm }), h('p', { class:'tx', text:line })));
 }
 function crownSvg(cls){
   const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', cls || ''); s.setAttribute('aria-hidden', 'true'); s.setAttribute('viewBox', '0 0 24 24');
@@ -1369,7 +1369,7 @@ function question(){
     qn.textContent = (R.idx + 1) + '/' + R.queue.length;
   }
   const setStrip = (cls, label) => put(strip, h('span', { text:label }), hintsOn ? null : h('span', { class:'tm', text:'TEST MODE' }), item.retry ? h('span', { class:'tm', text:'SECOND GO' }) : null) || (strip.className = 'strip ' + (cls || ''));
-  const cue = line => h('div', { class:'cue' }, cimg(IMG.ask, '', 30, ''), h('span', { class:'clamp2', text:line }));
+  const cue = line => h('div', { class:'cue' }, cimg(IMG.ask, '', 30, ''), h('span', { text:line }));
   const goNext = () => { closeSheet(); R.idx++; question(); };
   const lastQ = () => R.idx >= R.queue.length - 1;
   const mtag = () => h('span', { class:'mtag', text:'MIRROR' });
@@ -1414,7 +1414,7 @@ function question(){
       drama ? h('div', { class:'news', role:'status' }, h('b', { text:drama.title }), h('span', { text:drama.text })) : null,
       o.answer || null,
       o.book ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📓' }), h('b', { text:'Next: write it in your vocabulary book.' })) : null,
-      o.line ? h('p', { class:'line clamp2', text:o.line }) : null,
+      o.line ? h('p', { class:'line', text:o.line }) : null,
       noteFor(o.lock, o.custard),
       mir ? h('div', { class:'mline' }, cimg(mir.sat || !mir.ok ? MIMG.sad : MIMG.smug, '', 34, 'The Mirror'),
         h('div', { style:'min-width:0' }, mir.sat ? h('b', { text:'Mirror sits this one out. ' }) : h('span', {}, h('b', { text:'Mirror: ' }), '“' + mir.guess + '” ' + (mir.ok ? '✓ +' + mir.fish + ' 🐟 ' : '✗ ')),
@@ -1423,6 +1423,8 @@ function question(){
     setTimeout(() => nb.focus({ preventScroll:true }), 60);
     R.keys = e => { if (e.key === 'Enter' && document.activeElement !== nb) nb.click(); };
   }
+  /* "I'm stuck": counts as a miss, shows the answer, then on to the book */
+  function stuckBtn(fn){ return h('button', { class:'stuck', type:'button', onclick:() => { if (done) return; SND.fx('page'); fn(); } }, '🤷 I’m stuck, show me'); }
   function finalize(ok, mir, answer){
     if (done) return; done = true;
     const res = scoreItem(item, q, ok, null, hinted && ok);
@@ -1461,7 +1463,10 @@ function question(){
     } }, input, go);
     setTimeout(() => input.focus({ preventScroll:true }), 60);
     R.keys = null;
-    return [boxes, form, hintBtn('Show the first letter', () => { const b = boxes.firstChild; b.textContent = q.w.w[0]; b.classList.add('f'); })];
+    const stuck = stuckBtn(() => { input.disabled = true; go.disabled = true; input.blur();
+      const mir = mirrorTurn(okM => okM ? q.w.w : misspell(q.w.w));
+      finalize(false, mir, h('div', { class:'letters', 'aria-label':'The word is ' + q.w.w }, [...q.w.w].map(c => h('span', { class:'ok', text:c })))); });
+    return [boxes, form, h('div', { class:'row', style:'justify-content:space-between' }, stuck, hintBtn('Show the first letter', () => { const b = boxes.firstChild; b.textContent = q.w.w[0]; b.classList.add('f'); }))];
   }
   function scramQ(){
     const word = q.w.w, letters = [...word];
@@ -1491,7 +1496,11 @@ function question(){
     draw();
     R.keys = e => { if (done) return; const k = e.key.toLowerCase(); if (k === 'backspace'){ if (picked.length > locked){ const o = picked.pop(); o.b.disabled = false; draw(); } return; }
       const b = tileBtns.find((x, j) => !x.disabled && letters[order[j]].toLowerCase() === k); if (b) b.click(); };
-    return [slots, h('div', { class:'tiles' }, tileBtns), h('div', { class:'row', style:'justify-content:space-between' }, clear, hint)];
+    const stuck = stuckBtn(() => { tileBtns.forEach(b => { b.disabled = true; });
+      picked.splice(0); letters.forEach((c, k) => picked.push({ i:k, b:null })); locked = letters.length;
+      const mir = mirrorTurn(okM => okM ? word : misspell(word));
+      finalize(false, mir, h('p', { class:'line' }, h('b', { text:word }), ' = ' + meanOf())); draw(); });
+    return [slots, h('div', { class:'tiles' }, tileBtns), h('div', { class:'row', style:'justify-content:space-between;flex-wrap:wrap;gap:8px' }, clear, hint, stuck)];
   }
 
   /* similar & opposite cards: know it? → similar → (sheet) → opposite, 3 choices → (sheet) → review */
