@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "b83d244fa2";
+const APPV = "65ceab1fd8";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -1539,7 +1539,11 @@ function question(){
       const b = h('button', { class:'ans', type:'button', 'data-t':wd, onclick:() => onPick(wd, b) }, h('span', { class:'l', text:'ABCD'[i] }), h('span', { class:'t' }, h('span', { text:wd }), mean), h('span', { class:'mk' }));
       if (!hintsOn) return { row:b, b };
       const ib = h('button', { class:'peek', type:'button', 'aria-pressed':'false', 'aria-label':'Peek: what does ' + wd + ' mean?', title:'What does ' + wd + ' mean?', text:'i',
-        onclick:() => { const o = mean.hidden; mean.hidden = !o; ib.setAttribute('aria-pressed', String(o)); if (o && !done){ hinted = true; SND.fx('peek'); } } });
+        onclick:() => {
+          sayWord(wd);   // a word he doesn't know: say it aloud every time he taps
+          if (!mean.hidden) return;
+          mean.hidden = false; ib.setAttribute('aria-pressed', 'true'); ib.setAttribute('aria-label', 'Hear ' + wd + ' again'); put(ib, icon('sound'));
+          if (!done){ hinted = true; SND.fx('peek'); } } });
       if (matchMedia('(hover:hover)').matches){ b.addEventListener('mouseenter', () => { if (ib.getAttribute('aria-pressed') !== 'true') b.title = x.m || ''; }); }
       return { row:h('div', { class:'orow' }, b, ib), b };
     }
@@ -1561,7 +1565,7 @@ function question(){
       put(body, track(n),
         h('div', { class:'banner ' + (opp ? 's2' : 's1'), role:'status' }, h('span', { class:'em', 'aria-hidden':'true', text: opp ? '🔄' : '🤝' }), h('span', { text:P.banner })),
         word(P.show), h('div', { class:'answers ' + (opp ? 's2' : 's1') }, rows.map(r => r.row)),
-        hintsOn ? h('p', { class:'small muted', text: n === 2 ? 'Only 3 choices this time. Tap i to peek.' : 'Tap i to peek at a word. Peeking doesn’t pick it.' }) : null);
+        hintsOn ? h('p', { class:'small muted', text: n === 2 ? 'Only 3 choices this time. Tap i to hear and peek.' : 'Tap i to hear a word and see what it means. It doesn’t pick it.' }) : null);
       R.keys = e => { const i = '1234'.indexOf(e.key); if (i > -1 && rows[i] && !rows[i].b.disabled) rows[i].b.click(); };
     }
     function pick(n, P, wd, btn, rows){
