@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "65ceab1fd8";
+const APPV = "f5558186d7";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -535,7 +535,7 @@ function fresh(){
   return { v:1, name:'Aaron', bank:'Sample words (58)', words:sampleWords(),
     prog:{}, points:0, fishV:1, history:[], rounds:[], badges:{}, prizes:[], pin:'', last:'', demo:false,
     race:{ mf:0, mm:0, ms:0 }, custard:0, book:{ list:[], next:[] }, intro:false, leader:null, lastVisit:null, upd:0, mv:2,
-    settings:{ hints:true, sound:true, music:true, cvoice:true, mvoice:true }, freeze:[], goal:'', freezeAsk:'',
+    settings:{ hints:true, sound:true, music:true, cvoice:true, mvoice:true, readout:true }, freeze:[], goal:'', freezeAsk:'',
     stats:{ answered:0, right:0, spell:0, fixed:0, best:0, rounds:0, perfect:0 } };
 }
 const isBlank = o => !o || ((!o.stats || !o.stats.answered) && !(o.history && o.history.length));
@@ -1162,23 +1162,28 @@ const VO = {
 };
 const HAVE = new Set(["c01", "c02", "c03", "c04", "c05", "c06", "c07", "c08", "c09", "c10", "c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27", "c28", "c29", "c30", "c31", "m01", "m02", "m03", "m04", "m05", "m06", "m07", "m08", "m09", "m10", "m11", "m12", "m13", "m14", "m15"]);
 const VOICE = (() => {
-  let cur = null, waiting = null;
+  let cur = null, waiting = null, idle = [], held = null;
+  const flush = () => { if (cur || waiting) return; const f = idle; idle = []; f.forEach(fn => { try { fn(); } catch (e) {} }); };
   const can = id => !!(S && S.settings && S.settings.sound && (id[0] === 'm' ? S.settings.mvoice !== false : S.settings.cvoice !== false) && (HAVE.has(id) || window.__voTest));
   function start(id){
     if (window.__voTest){ window.__voTest.push(id); return; }
     try {
       const a = new Audio('audio/' + id + '.mp3?v=' + APPV); cur = a; SND.duck(true);
-      const done = () => { if (cur !== a) return; cur = null; SND.duck(false); if (waiting){ const w = waiting; waiting = null; start(w); } };
+      const done = () => { if (cur !== a) return; cur = null; SND.duck(false); if (waiting){ const w = waiting; waiting = null; start(w); } else flush(); };
       a.onended = done; a.onerror = done;
-      const p = a.play(); if (p && p.catch) p.catch(() => { cur = null; SND.duck(false); });
+      const p = a.play(); if (p && p.catch) p.catch(() => { cur = null; SND.duck(false); flush(); });
     } catch (e) { cur = null; }
   }
   return {
     can,
-    play(id){ if (!can(id)) return false; if (cur){ waiting = id; return true; } start(id); return true; },
+    play(id){ if (!can(id)) return false; if (held){ held.push(id); return true; } if (cur){ waiting = id; return true; } start(id); return true; },
     /* pick one of several clips that exist; returns its id or null */
     pick(...ids){ const ok = ids.filter(can); return ok.length ? ok[rnd(ok.length)] : null; },
-    stop(){ waiting = null; if (cur){ try { cur.pause(); } catch (e) {} cur = null; } SND.duck(false); }
+    /* run fn once no recorded line is playing or queued */
+    whenIdle(fn){ idle.push(fn); flush(); },
+    /* hold lines back while the narrator reads a slide, then release them */
+    hold(){ held = []; }, release(){ const q = held || []; held = null; return q; },
+    stop(){ waiting = null; idle = []; if (cur){ try { cur.pause(); } catch (e) {} cur = null; } SND.duck(false); }
   };
 })();
 
@@ -1293,7 +1298,7 @@ const root = $('#root');
 let screen = 'home';
 const SCREENS = {};
 let sheetEl = null;
-function closeSheet(){ if (sheetEl){ sheetEl.forEach(e => e.remove()); sheetEl = null; } const a = root.querySelector('.app'); if (a) a.style.paddingBottom = ''; }
+function closeSheet(){ if (typeof NARR !== 'undefined' && NARR.on) stopNarr(); if (sheetEl){ sheetEl.forEach(e => e.remove()); sheetEl = null; } const a = root.querySelector('.app'); if (a) a.style.paddingBottom = ''; }
 function mount(nodes, tab){
   closeSheet();
   put(root, h('div', { class:'app' }, nodes));
@@ -1853,13 +1858,14 @@ function soundPanel(){
       if (key === 'music' && !v){ SND.stop(); SND.loop(false); }
       if (key === 'music' && v && R && R.queue && R.queue.length) SND.loop(true);
       if ((key === 'cvoice' || key === 'mvoice') && !v) VOICE.stop();
+      if (key === 'readout' && !v) stopNarr();
       if (v){ SND.prime(); SND.fx('tap'); }
       save(); document.querySelectorAll('.tbtn[data-k]').forEach(x => x.refresh && x.refresh()); } });
     return h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:label }), h('span', { class:'small muted', text:sub })), b);
   };
   openSheet([h('h2', { text:'Sound' }),
     h('div', {}, row('sound', 'Sound effects', 'Goals, misses and fanfares. Off = everything silent.'), row('music', 'Music', 'Story music and the match groove.'),
-      row('cvoice', 'Cuffin’s voice', 'Cuffin speaking.'), row('mvoice', 'The Mirror’s voice', 'The Mirror speaking.')),
+      row('cvoice', 'Cuffin’s voice', 'Cuffin speaking.'), row('mvoice', 'The Mirror’s voice', 'The Mirror speaking.'), row('readout', 'Read the story aloud', 'The intro, daily chapters and progress updates.')),
     h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Done')], true);
 }
 function soundBtns(){
@@ -1914,6 +1920,10 @@ function progressReport(){
       r('🍮', 'Custard', (S.custard || 0) + ' pot' + ((S.custard || 0) === 1 ? '' : 's'))),
     h('p', { class:'line', text:line }),
     h('button', { class:'btn wide', type:'button', onclick:closeSheet }, 'Back to it')], true);
+  narrateLines(['Fresh fish: ' + A + ' versus ' + M + '. ' + (d > 0 ? 'We lead by ' + d + '.' : d < 0 ? 'The Mirror leads by ' + (-d) + '.' : 'Level.'),
+    'Words mastered: ' + aM + ' of ' + T + '. The Mirror has ' + S.race.mm + '.',
+    ri.next ? (ri.next.at - aM) + ' more words to the next trophy.' : 'Every trophy won.',
+    'Streak: ' + st + ' day' + (st === 1 ? '' : 's') + '.', line]);
 }
 const reportBtn = small => h('button', { class: small ? 'tbtn' : 'btn alt small', type:'button', 'aria-label':'How are we doing?', title:'How are we doing?', onclick:() => { SND.fx('tap'); progressReport(); } }, small ? '📣' : ['📣 ', 'How are we doing?']);
 
@@ -1992,6 +2002,50 @@ function streakRow(){
     h('div', { class:'cpots', title:'Custard pots' }, h('span', { 'aria-hidden':'true', text:'🍮' }), h('b', { text:String(S.custard || 0) })));
 }
 
+/* reading the story aloud in the same British voice as the words */
+const NARR = { tok:0, on:false };
+function stopNarr(){ NARR.tok++; if (NARR.on){ NARR.on = false; try { speechSynthesis.cancel(); } catch (e) {} SND.duck(false); } }
+const tidy = t => t.replace(/[\p{Extended_Pictographic}\u{FE0F}]/gu, '').replace(/\s·\s/g, ', ').replace(/\sv\s/g, ' versus ').replace(/\s+/g, ' ').trim();
+function speakLines(lines, tok, after){
+  const fin = () => { if (tok !== NARR.tok) return; NARR.on = false; SND.duck(false); if (after){ const f = after; after = null; f(); } };
+  if (tok !== NARR.tok) return;
+  if (!lines.length || !('speechSynthesis' in window)) return fin();
+  try {
+    speechSynthesis.cancel(); NARR.on = true; SND.duck(true);
+    lines.forEach((t, k) => { const u = new SpeechSynthesisUtterance(t); u.lang = 'en-GB'; u.rate = .95; if (ttsVoice) u.voice = ttsVoice;
+      if (k === lines.length - 1) u.onend = u.onerror = fin;
+      speechSynthesis.speak(u); });
+    setTimeout(fin, 2500 + lines.join(' ').length * 85);   // in case the phone never says it has finished
+  } catch (e) { fin(); }
+}
+const canNarr = () => S.settings.sound && S.settings.readout !== false && 'speechSynthesis' in window;
+/* everything on a story slide, minus lines a recording already says */
+function slideLines(el){
+  const voiced = new Set(Object.keys(VO).filter(k => VOICE.can(k)).map(k => VO[k].trim()));
+  const out = [];
+  el.querySelectorAll('.chapter, h2, p, .rule, .lower').forEach(x => {
+    if (x.closest('button') || x.closest('.lower') !== null && !x.classList.contains('lower')) return;
+    if (x.matches('p.tap, p.small, .sub p') ) return;
+    let t;
+    if (x.classList.contains('lower')){ const k = x.querySelector('.k'), v = x.querySelector('.v'); t = (k ? k.textContent + ' says: ' : '') + (v ? v.textContent : ''); if (v && voiced.has(v.textContent.trim())) return; }
+    else if (x.classList.contains('tx')){ if (voiced.has(x.textContent.trim())) return; const nm = x.closest('.say') && x.closest('.say').querySelector('.nm'); t = (nm ? nm.textContent + ' says: ' : '') + x.textContent; }
+    else { if (voiced.has(x.textContent.trim())) return; const c = x.cloneNode(true); c.querySelectorAll('.n').forEach(n => n.remove()); t = c.textContent; }
+    t = tidy(t); if (t && t.length > 1 && !out.includes(t)) out.push(t);
+  });
+  return out;
+}
+function narrateSlide(el, clips){
+  const playClips = () => (clips || []).forEach(id => VOICE.play(id));
+  if (!canNarr()) return playClips();
+  const tok = NARR.tok;
+  setTimeout(() => { if (tok !== NARR.tok || !el.isConnected) return; speakLines(slideLines(el), tok, playClips); }, 450);
+}
+function narrateLines(lines, delay){
+  stopNarr(); if (!canNarr()) return;
+  const tok = NARR.tok;
+  setTimeout(() => { if (tok !== NARR.tok) return; VOICE.whenIdle(() => speakLines(lines.map(tidy).filter(Boolean), tok)); }, delay || 600);
+}
+
 /* ---------- Home: the scoreboard and one big button ---------- */
 function homeLine(){
   const now = new Date();
@@ -2054,12 +2108,14 @@ function reel(slides, finish, opts){
   const live = h('span', { class:'small', 'aria-live':'polite', style:'color:#9AA6D6' });
   const top = h('div', { class:'btop' }, h('span', { class:'onair' }, h('i'), opts.tag || 'ON AIR'), h('div', { class:'tools' }, soundBtns(), h('button', { class:'skip', type:'button', onclick:end }, opts.skip || 'Skip')));
   const nav = h('div', { class:'bnav' }, back, h('div', { style:'display:flex;flex-direction:column;align-items:center;gap:4px' }, dots, live), next);
-  function end(){ SND.stop(); VOICE.stop(); R = null; finish(); }
+  function end(){ SND.stop(); VOICE.stop(); stopNarr(); R = null; finish(); }
   function go(n){
     if (n >= slides.length) return end();
     const fwd = n > i; i = Math.max(0, n);
     if (fwd && i > 0) SND.fx('page');
+    VOICE.stop(); stopNarr(); VOICE.hold();
     const s = slides[i](end);
+    narrateSlide(s, VOICE.release());
     s.classList.add('slide', 'in');
     s.addEventListener('click', e => { if (!e.target.closest('button')) go(i + 1); });
     put(box, top, s, opts.ticker ? h('div', { class:'ticker', 'aria-hidden':'true' }, h('span', { text:opts.ticker })) : null, nav);
@@ -2145,7 +2201,7 @@ function ceremony(preview, finish){
     () => h('div', {}, crownSvg('bigcrown float'), h('h2', {}, 'Giles ', h('em', { text:'clears his throat' })),
       h('p', { class:'big', text:'“By the power of the rock, the fish and the very old rules… the new Leader of the Puffin Community is… CUFFIN! With his helper, ' + S.name.toUpperCase() + '!”' })),
     () => { const said = VOICE.play('m08'); return h('div', {}, h('h2', {}, 'Meanwhile… ', h('em', { style:'color:#C6A1FF', text:'the Mirror' })), photo(MIMG.sad, 'The Mirror, flat on the floor', 'tantrum'), sayBlock('rival', said ? VO.m08 : tant[0], MIMG.sad), sayBlock('rival', tant[1], MIMG.smug)); },
-    () => { SND.fx('cheer'); setTimeout(() => VOICE.play('c16'), 1200); return h('div', {}, confetti(60), h('div', { class:'crownwrap' }, photo(IMG.hello, 'Cuffin wearing the crown'), crownSvg('crowndrop')),
+    () => { SND.fx('cheer'); VOICE.play('c16'); return h('div', {}, confetti(60), h('div', { class:'crownwrap' }, photo(IMG.hello, 'Cuffin wearing the crown'), crownSvg('crowndrop')),
       h('h2', {}, h('em', { text:'Leader' }), ' of the Puffin Community'), sayBlock('com', VOICE.can('c16') ? VO.c16 : 'I would like this noted. Officially. In the literature. And bring out the custard. All of it.', IMG.right)); },
     end => h('div', {}, h('div', { class:'cert' }, h('div', { class:'eyebrow', text:'Certificate of the Puffin Community' }), h('div', { class:'t', text:'Cuffin & ' + S.name }),
         h('p', { text:'are crowned Leaders of the Puffin Community, having mastered every word, won ' + (S.custard || 0) + ' pots of custard and beaten the Mirror by ' + Math.max(1, L.a - L.m) + ' fresh fish.' }),
