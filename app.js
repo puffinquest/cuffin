@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "151cc65f45";
+const APPV = "e6c20b00a4";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -819,13 +819,13 @@ function raceCaps(){
   return { T, aM, A, end, fishMax: end ? A - 1 : A + LEAD_CAP, mastMax: Math.max(0, Math.min(T - 1, end ? aM - 1 : aM + MAST_CAP)) };
 }
 /* how far ahead Aaron is allowed to pull: 3 fish normally, up to 20 when he is answering really well */
-const leadTarget = () => { const ra = S.race.ra == null ? .6 : S.race.ra; return Math.max(3, Math.min(20, 3 + (ra - .6) * 42.5)); };
+const leadTarget = () => { const ra = S.race.ta != null ? S.race.ta : S.race.ra == null ? .6 : S.race.ra; return Math.max(3, Math.min(20, 3 + (ra - .6) * 42.5)); };
 const mirrorChance = () => { const base = Math.max(.3, Math.min(MC.base, (S.race.ra == null ? .6 : S.race.ra) - .05)); return Math.max(.15, Math.min(.9, base + MC.slope * (S.points - S.race.mf - (leadTarget() - 3)))); };
 function mirrorTry(gain){
   const c = raceCaps(), r = S.race, d = c.A - r.mf;
   let ok = Math.random() < mirrorChance();
   const tgt = leadTarget(), start = MC.catchStart + (tgt - 3);
-  if (d > tgt + 1){ ok = true; gain = Math.max(gain, Math.min(6, Math.round(d - tgt))); }   // past the lead he has earned: the Mirror closes in (never past him in a perfect round)
+  if (d > tgt + 2){ ok = true; gain = Math.max(gain, Math.min(3, Math.round(d - tgt))); }   // past the lead he has earned: the Mirror closes in (never past him in a perfect round)
   if (ok && d >= start) gain += Math.min(MC.catchMax, 1 + Math.floor((d - start) / MC.catchStep));
   gain = Math.min(gain, c.fishMax - r.mf);
   /* a round Aaron is getting all right: the Mirror can't out-fish him in it */
@@ -900,7 +900,7 @@ function weight(x){
   else if (r.streak >= 3) b = (r.dy || []).includes(today()) && (r.ty || []).length >= 2 ? 0.3 : 6;   // waiting for another day / ready to lock in
   else if (r.miss > 0 && r.streak === 0) b = 7;
   else b = 4;
-  if (r && r.last === today() && r.streak >= 1 && !r.wob) b *= .35;   // got it right earlier today: give it a rest
+  if (r && r.last === today() && r.streak >= 1 && !r.wob && r.lm !== today()) b *= .35;   // got it right earlier today: give it a rest
   if (r && r.seen && !isMasteredRec(r) && !r.wob && dn != null){ if (dn <= 0) b *= 1.4; else if (b < 7) b *= .6; }   // learning words: due ones first
   return x.card ? b * 1.6 : b;
 }
@@ -922,7 +922,8 @@ function startRound(kind){ streakRescue(() => startRound2(kind)); }
 function startRound2(kind){
   let pool = allItems();
   if (kind === 'cards') pool = CARD_ITEMS;
-  else if (kind === 'tricky'){ pool = trickyWords(); if (!pool.length){ toast('Nothing tricky yet!'); return home(say('empty')); } }
+  else if (kind === 'tricky'){ pool = trickyWords(); if (!pool.length){ toast('Nothing tricky yet!'); return home(say('empty')); }
+    if (pool.length < 5) pool = pool.concat(allItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r) && !pool.includes(x); }).sort((a, b) => (peek(b).miss / peek(b).seen) - (peek(a).miss / peek(a).seen)).slice(0, 5 - pool.length)); }   // short of tricky words: top up with the next-shakiest
   if (!pool.length){ toast('The word bank is empty. Add words in Grown-ups.'); return; }
   const B = S.book && S.book.next || [], n = Math.min(10, pool.length);
   const first = kind === 'tricky' ? [] : pool.filter(x => B.includes(pk(x))).slice(0, 4);
@@ -969,6 +970,7 @@ function makeQuestion(item){
   } else if (type === 'm2w'){
     const others = S.words.filter(y => norm(y.w) !== norm(x.w));
     const d = shuffle(others.filter(y => y.w[0].toLowerCase() === x.w[0].toLowerCase())).slice(0, 1);
+    if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y) && y.w[0].toLowerCase() !== x.w[0].toLowerCase()) d.push(y);
     if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y)) d.push(y);
     q.options = shuffle([{ t:x.w, ok:true }, ...d.map(y => ({ t:y.w, ok:false }))]);
   } else if (type === 'gap'){
@@ -985,11 +987,12 @@ function scoreItem(item, q, ok, fishDone, hinted){
   let pts = 0, note = null, line, lock = null, custard = false;
   S.stats.answered += 1;
   S.race.ra = (S.race.ra == null ? .6 : S.race.ra) * .9 + (ok ? .1 : 0);
+  S.race.ta = (S.race.ta == null ? S.race.ra : S.race.ta) * .97 + (ok ? .03 : 0);   // slow-moving accuracy: an earned lead doesn't vanish after one wobbly round
   if (ok){
     S.stats.right++; if (spellish) S.stats.spell++;
     R.streak++; R.best = Math.max(R.best, R.streak); S.stats.best = Math.max(S.stats.best, R.streak);
     if (R.streak % 5 === 0){ S.custard = (S.custard || 0) + 1; R.custard = (R.custard || 0) + 1; custard = true; }
-    if (!item.retry) R.firstTry++; else { r.fixed++; R.fixed++; S.stats.fixed++; }
+    if (!item.retry && !hinted) R.firstTry++; else { r.fixed++; R.fixed++; S.stats.fixed++; }
     if (hinted){ pts = 1; r.hint = (r.hint || 0) + 1; line = say('hinted'); lock = 'hint'; }
     else {
       r.right++; r.streak++;
@@ -1005,7 +1008,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
     }
     R.results[R.idx] = 'ok';
   } else {
-    r.miss++; r.streak = Math.max(0, r.streak - 2); R.streak = 0; R.missed.push(q.w.w);
+    r.miss++; r.lm = today(); r.streak = Math.max(0, r.streak - 2); R.streak = 0; R.missed.push(q.w.w);
     if (r.m && !r.wob){ r.wob = true; lock = 'wobble'; }   // one slip on a mastered word: needs one right answer to re-secure
     else { if (r.m){ r.ty = []; r.dy = []; } r.m = false; r.wob = false; }   // a second slip on a mastered word: earn it again
     line = say('wrong'); R.results[R.idx] = 'bad';
@@ -1756,7 +1759,7 @@ function finishRound(){
   const party = matchCelebrations(R, badges);
   R = null;
   if (SYNC.pending){ SYNC.pending = null; if (SYNC.ready) pull(false); }
-  const end = () => { if (crowned) ceremony(false, () => summary(x)); else summary(x); };
+  const end = () => { if (crowned) ceremony(false, () => summary(x)); else if (x.round.toHome) home(); else summary(x); };
   if (party.length){ screen = 'party'; celebrateAll(party, end); } else end();
 }
 function summary(x){
@@ -1867,7 +1870,7 @@ function bookCheck(list, done){
       h('div', { class:'grow' }), b);
     setTimeout(() => b.focus({ preventScroll:true }), 60);
   }
-  const endB = h('button', { class:'quit', type:'button', 'aria-label':'End the book check and go on', onclick:() => { SND.fx('tap'); done(); } }, icon('x'), h('span', { text:'End' }));
+  const endB = h('button', { class:'quit', type:'button', 'aria-label':'End the book check and go on', onclick:() => { SND.fx('tap'); if (R) R.toHome = true; done(); } }, icon('x'), h('span', { text:'End' }));
   mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'FULL TIME · BOOK CHECK' }), h('div', { class:'tools' }, soundBtns())), led(true, 'BOOK'), cue2, h('div', { class:'pitch' }, strip2, body2)], null);
   show();
 }
@@ -1888,17 +1891,17 @@ function bookStop(e, next){
     VOICE.stop(); SND.fx('page');
     const mv = Math.random() < .3 && VOICE.can('m14');
     VOICE.play('c20'); if (mv) VOICE.play('m14');
-    const yes = h('button', { class:'btn kick', type:'button', onclick:() => { markPinky(e.k); e.pinky = true; VOICE.stop(); VOICE.play('c21'); put(stopgo, h('div', { class:'pinkydone', role:'status' }, h('span', { 'aria-hidden':'true', text:'🤙' }), h('b', { text:'Pinky promise witnessed. Officially.' }))); SND.fx('cheer'); setTimeout(finish, 1500); } }, '🤙 Pinky promise!');
+    const yes = h('button', { class:'btn kick', type:'button', onclick:() => { markPinky(e.k); e.pinky = true; VOICE.stop(); VOICE.play('c21'); put(stopgo, h('div', { class:'pinkydone', role:'status' }, h('span', { 'aria-hidden':'true', text:'🤙' }), h('b', { text:'Pinky promise witnessed. Officially.' }))); SND.fx('cheer'); pinkyT = setTimeout(finish, 1500); } }, '🤙 Pinky promise!');
     const no = h('button', { class:'btn alt', type:'button', onclick:() => { VOICE.stop(); VOICE.play('c22'); left = Math.max(5, Math.round(secs / 2)); secsNow = left; put(stopgo, ring, go); go.disabled = true; put(go, '✍️ Keep writing…'); ring.classList.remove('done'); num.textContent = String(left); ring.style.setProperty('--p', '0'); timer = setInterval(tick, 1000); } }, 'Not yet…');
     put(stopgo, h('div', { class:'pinky' }, h('p', { class:'pq', text:'Pinky promise it’s in your book?' }), mv ? h('p', { class:'small', style:'color:#C9D2F2', text:'The Mirror: “' + VO.m14 + '”' }) : null, h('div', { class:'pbtns' }, yes, no)));
     setTimeout(() => yes.focus({ preventScroll:true }), 30);
   }
-  let secsNow = secs;
+  let secsNow = secs, pinkyT = null;
   const go = h('button', { class:'btn kick', type:'button', disabled:true, onclick:() => { if (go.disabled) return; promise(); } }, '✍️ Keep writing…');
   const stopgo = h('div', { class:'stopgo' }, ring, go);
   const ov = h('div', { class:'stopov', role:'dialog', 'aria-modal':'true', 'aria-labelledby':'stoph' },
     h('div', { class:'stopin' },
-      h('button', { class:'endlink', type:'button', onclick:() => { clearInterval(timer); VOICE.stop(); ov.remove(); if (R) R.keys = prevKeys; if (R && R.queue) quitMatch(); else home(); } }, '✕ End match'),
+      h('button', { class:'endlink', type:'button', onclick:() => { clearInterval(timer); clearTimeout(pinkyT); VOICE.stop(); ov.remove(); if (R) R.keys = prevKeys; if (R && R.queue) quitMatch(); else home(); } }, '✕ End match'),
       h('div', { class:'stoptop' }, cimg(IMG.hello, 'stopimg', 150, 'Cuffin'), h('div', {}, h('h2', { id:'stoph', text:'STOP!' }), h('p', { class:'stopsub', text:'Write it in your vocabulary book.' }))),
       bookBox(e),
       h('p', { class:'stopline', text: (VOICE.can('c17') ? VO.c17 : pickOne(BOOK_SAY)) + ' I will check at full time.' }),
