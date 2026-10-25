@@ -206,7 +206,7 @@ svg.ic{width:1.15em;height:1.15em;fill:currentColor;flex:none;vertical-align:-.2
 .tile[disabled]{opacity:.25}
 .slot{width:36px;height:44px;border-radius:10px;border:2px dashed var(--line);background:var(--surface-2);font:800 1.2rem var(--font-body);display:grid;place-items:center}
 .slot.full{border-style:solid;border-color:var(--team);background:var(--team-soft)} .slot.lock{border-color:var(--gold);background:var(--gold-soft)}
-@media (max-width:400px){ .tile{width:36px;height:44px;font-size:1.15rem} .slot{width:30px;height:40px;font-size:1.05rem} }
+@media (max-width:400px){ .tile{width:38px;height:46px;font-size:1.15rem} .slot{width:31px;height:40px;font-size:1.05rem} }
 .know{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .kbtn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:clamp(14px,3dvh,22px) 10px;border-radius:20px;border:2px solid var(--line);background:var(--surface);font:400 1rem/1.1 var(--font-display);box-shadow:0 5px 0 var(--line)}
 .kbtn .em{font-size:2rem;line-height:1}
@@ -431,7 +431,7 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .cert .t{font:400 1.2rem var(--font-display);color:#D7263D}
 .confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1}
 .confetti i{position:absolute;top:-20px;width:9px;height:15px;border-radius:2px;opacity:0}
-.toastbox{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;width:max-content;max-width:calc(100vw - 32px)}
+.toastbox{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:40;width:max-content;max-width:calc(100vw - 32px)}
 .toast{background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:14px;font-weight:700;box-shadow:var(--shadow)}
 .leaderbox{flex:none;display:flex;gap:10px;align-items:center;border-radius:18px;padding:10px 12px;border:3px solid var(--gold);background:var(--gold-soft);font-size:.86rem}
 .leaderbox svg{width:38px;height:38px;fill:var(--gold);flex:none}
@@ -551,6 +551,19 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .storytext{display:flex;flex-direction:column;gap:9px;overflow-y:auto;min-height:0;font-size:1.02rem;line-height:1.5}
 .sw{border:0;background:var(--gold-soft);color:var(--team);font:inherit;font-weight:800;padding:0 4px;border-radius:6px;border-bottom:2px solid var(--gold)}
 .swb{color:var(--team)}
+.homerow .btn{white-space:nowrap;flex:1;min-width:0;padding-left:8px;padding-right:8px;font-size:clamp(.64rem,3vw,.9rem);justify-content:center}
+/* shrink-to-fit levels (set by fitApp when a screen would overflow) */
+.app.fit1 .homemid{gap:8px} .app.fit1 .led:not(.mini) .ava{width:56px;height:56px} .app.fit1 .led:not(.mini) .digits{font-size:2.1rem} .app.fit1 .btn.kick{padding:14px 18px;font-size:1.35rem}
+.app.fit1 .streakrow>div{padding:4px 6px} .app.fit1 .pbody{gap:7px} .app.fit1 .ans{padding:9px 11px} .app.fit1 .say .tx{font-size:.9rem}
+.app.fit2 .led:not(.mini) .who{display:none} .app.fit2 .led:not(.mini) .ava{width:44px;height:44px} .app.fit2 .led:not(.mini) .digits{font-size:1.8rem} .app.fit2 .led:not(.mini) .lhead{margin-bottom:2px}
+.app.fit2 .say img{width:36px;height:36px} .app.fit2 .say .tx{font-size:.85rem} .app.fit2 .cue{display:none} .app.fit2 .ans{padding:7px 10px;font-size:.95rem} .app.fit2 .word{font-size:1.7rem} .app.fit2 .banner.big{padding:6px 10px}
+.app.fit2 .meaning{font-size:1.05rem} .app.fit2 .stat4 .st{padding:6px 8px}
+.app.fit3 .led:not(.mini) .ava{display:none} .app.fit3 .say img{display:none} .app.fit3 .say .tx{font-size:.8rem} .app.fit3 .btn.kick{padding:11px 16px;font-size:1.2rem}
+.app.fit3 .led.mini{padding:4px 8px} .app.fit3 .led.mini .ava{width:28px;height:28px} .app.fit3 .ans{padding:6px 9px;font-size:.9rem} .app.fit3 .streakrow{display:none} .app.fit3 .hintrow .hintbtn{padding:3px 8px;font-size:.75rem}
+.wordrow{max-width:100%} .wordrow>.word,.wordrow>.bw,.wordrow>.celword{min-width:0;overflow:hidden}
+.bw,.celword,.word{overflow-wrap:normal}
+.hintbtn{min-height:36px} .bnav button,.skip{min-height:38px} .subtabs button{min-height:38px} .wbtns .btn{min-height:38px} .seg button{min-height:38px}
+.say .nm{font-size:.72rem}
 </style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -592,5 +605,5 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=403308a45f"></script>
+<script src="app.js?v=c963a7fe36"></script>
 </body></html>

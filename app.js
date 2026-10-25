@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "403308a45f";
+const APPV = "c963a7fe36";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -1417,6 +1417,29 @@ function openSheet(kids, withScrim, pad){
   if (pad) requestAnimationFrame(() => { const a = root.querySelector('.app'); if (a) a.style.paddingBottom = (sh.offsetHeight + 8) + 'px'; });
   return sh;
 }
+/* shrink-to-fit: if a screen is taller than the phone (real fonts, notch and home bar), step down through tighter layouts */
+function fitApp(){
+  const a = root.querySelector('.app'); if (!a) return;
+  fitWords(document);
+  if (a.style.paddingBottom) return;   // a result sheet is open and the page scrolls above it on purpose: keep the current layout
+  const over = () => a.scrollHeight > a.clientHeight + 1 || a.scrollWidth > a.clientWidth + 1 || [...a.querySelectorAll('.homemid,.pbody,.pitch,.panel:not(.grow)')].some(e => e.scrollHeight > e.clientHeight + 1);
+  a.classList.remove('fit1', 'fit2', 'fit3');
+  for (const l of [1, 2, 3]){ if (!over()) break; a.classList.add('fit' + l); }
+}
+/* big single words (STOP card, celebrations, question words): shrink the font until the word fits on one line */
+function fitWords(scope){
+  scope.querySelectorAll('.bw, .celword, .word').forEach(el => {
+    el.style.fontSize = ''; el.style.whiteSpace = 'nowrap';
+    const box = el.parentElement && el.parentElement.classList.contains('wordrow') ? el.parentElement : el;
+    let n = 0, fs = parseFloat(getComputedStyle(el).fontSize);
+    while (n++ < 14 && (box.scrollWidth > box.clientWidth + 1 || el.scrollWidth > el.clientWidth + 1)){ fs *= .93; el.style.fontSize = fs + 'px'; }
+  });
+}
+let fitRAF = 0;
+const fitSoon = () => { cancelAnimationFrame(fitRAF); fitRAF = requestAnimationFrame(fitApp); };
+new MutationObserver(fitSoon).observe(root, { childList:true, subtree:true });
+window.addEventListener('resize', fitSoon);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSoon);
 function toast(t){ const e = h('div', { class:'toast', role:'status', text:t }); put($('#toastbox'), e); setTimeout(() => { if (e.parentNode) e.remove(); }, 2600); }
 const cimg = (src, cls, size, alt) => h('img', { class:cls || '', src, alt:alt || '', width:size, height:size, decoding:'async' });
 function topbar(){
@@ -1944,7 +1967,7 @@ function bookStop(e, next){
       bookBox(e),
       h('p', { class:'stopline', text: (VOICE.can('c17') ? VO.c17 : pickOne(BOOK_SAY)) + ' I will check at full time.' }),
       stopgo));
-  document.body.append(ov);
+  document.body.append(ov); requestAnimationFrame(() => fitWords(ov));
   const prevKeys = R ? R.keys : null; if (R) R.keys = null;
   if (!VOICE.play('c17')) SND.fx('whistle');
   const tick = () => {
@@ -2023,7 +2046,7 @@ function celebrate(o, next){
       o.sub ? h('p', { class:'celsub', text:o.sub }) : null,
       o.line ? h('div', { class:'mline', style:'background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff' }, cimg(o.who === 'm' ? MIMG.smug : IMG.right, '', 34, ''), h('span', { class:'q', text:o.line })) : null,
       go, h('button', { class:'endlink', type:'button', onclick:() => { ov.remove(); if (R) R.keys = prev; if (R && R.queue && R.queue.length) quitMatch(); else home(); } }, '✕ End')));
-  document.body.append(ov);
+  document.body.append(ov); requestAnimationFrame(() => fitWords(ov));
   const prev = R ? R.keys : null; if (R) R.keys = null;
   SND.fx(o.sound || 'cheer'); if (o.tune) SND.tune(o.tune);
   if (o.voice) setTimeout(() => VOICE.play(o.voice), 900);
