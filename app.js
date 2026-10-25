@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "94bd08336a";
+const APPV = "403308a45f";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -616,8 +616,9 @@ function mergeStates(a, b, base){
   const bl = {}; ((r.book || {}).list || []).concat((o.book || {}).list || []).forEach(e => { const c = bl[e.k]; bl[e.k] = c ? Object.assign({}, c, e, { ok:c.ok || e.ok, pinky:c.pinky || e.pinky, chk:c.chk || e.chk, s:e.s || c.s, o:e.o || c.o }) : e; });
   o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
   o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
-  { const wm = {}; (r.words || []).concat(o.words || []).forEach(w => { const k = norm(w.w), c = wm[k]; wm[k] = !c || (!c.m && w.m) ? w : c; }); o.words = Object.values(wm); }
+  if ((a.bank || '') === (r.bank || '')){ const wm = {}; (r.words || []).concat(o.words || []).forEach(w => { const k = norm(w.w), c = wm[k]; wm[k] = !c || (!c.m && w.m) ? w : c; }); o.words = Object.values(wm); }
   if (r.school && (!o.school || (r.school.d || '') > (o.school.d || ''))) o.school = r.school;
+  else if (r.school && o.school && r.school.d === o.school.d) o.school = { d:o.school.d, list:[...new Set((o.school.list || []).concat(r.school.list || []))] };
   o.tstat = {}; for (const k of new Set(Object.keys(a.tstat || {}).concat(Object.keys(r.tstat || {})))){ const x = (a.tstat || {})[k] || [0, 0], y = (r.tstat || {})[k] || [0, 0], z = base && base.tstat && base.tstat[k]; o.tstat[k] = [0, 1].map(i => add(x[i], y[i], z ? z[i] : 0)); }
   o.tstatFrom = [a.tstatFrom, r.tstatFrom].filter(Boolean).sort()[0] || '';
   if (!o.leader && r.leader) o.leader = r.leader;
@@ -768,7 +769,7 @@ const pk = x => x.card ? 'card:' + (x.card.id || norm(x.w)) : norm(x.w);
 function rec(x){ const k = pk(x); return S.prog[k] || (S.prog[k] = { streak:0, seen:0, right:0, miss:0, fixed:0, last:'', ty:[], dy:[] }); }
 const peek = x => S.prog[pk(x)];
 /* cards also need a hint-free, fully right similar & opposite answer in the current run */
-const meetsMastery = (r, card) => r.streak >= 3 && (r.ty || []).length >= 2 && (r.dy || []).length >= 2 && (!card || (r.ty || []).includes('sim'));
+const meetsMastery = (r, card, nTypes) => r.streak >= 3 && (r.ty || []).length >= Math.min(2, nTypes || 2) && (r.dy || []).length >= 2 && (!card || (r.ty || []).includes('sim'));
 const isMasteredRec = r => !!r && !!r.m && !r.wob;
 const isMastered = x => isMasteredRec(peek(x));
 const masteredCount = () => allItems().filter(isMastered).length;
@@ -943,14 +944,14 @@ function startRound2(kind){
 }
 const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell it', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite', hear:'Listen and spell', pre:'Pick the right start' };
 /* ---------- word-building: prefixes ("not" words and friends) ---------- */
-const PREFIX_WORDS = { illegible:'il', illogical:'il', immortal:'im', impolite:'im', impure:'im', impatient:'im', improper:'im', inadequate:'in', incorrect:'in', indirect:'in', informal:'in', inoffensive:'in', inaccurate:'in', incapable:'in', invalid:'in', irreparable:'ir', irrational:'ir', irresistible:'ir', irresponsible:'ir', uncanny:'un',
+const PREFIX_WORDS = { illegible:'il', illogical:'il', immortal:'im', impolite:'im', impure:'im', impatient:'im', improper:'im', inadequate:'in', incorrect:'in', indirect:'in', informal:'in', inoffensive:'in', inaccurate:'in', incapable:'in', invalid:'in', irreparable:'ir', irrational:'ir', irresistible:'ir', irresponsible:'ir',
   disadvantage:'dis', disappear:'dis', disappointed:'dis', disbelief:'dis', disconnect:'dis', dishonest:'dis', mishear:'mis', misinform:'mis', misjudge:'mis', mispronounced:'mis',
   reappear:'re', redesign:'re', reemerge:'re', rephrase:'re', reapply:'re', rearrange:'re', redecorate:'re', reheat:'re', antibiotic:'anti', anticlimax:'anti', antiseptic:'anti', antivirus:'anti', antifreeze:'anti', antisocial:'anti', autograph:'auto', autopilot:'auto', autobiography:'auto', automobile:'auto' };
 const prefixOf = x => PREFIX_WORDS[norm(x.w)] || null;
 const PREFIX_TIP = { il:'il- goes before l: il + legible = illegible.', im:'im- goes before m, p or b: im + polite = impolite.', in:'in- is the usual “not” start: in + correct = incorrect.', ir:'ir- goes before r: ir + responsible = irresponsible.',
   un:'un- means not: un + canny = uncanny.', dis:'dis- means not, or the opposite: dis + appear = disappear.', mis:'mis- means wrongly: mis + hear = mishear.', re:'re- means again: re + heat = reheat.', anti:'anti- means against: anti + freeze = antifreeze.', auto:'auto- means self: auto + graph = autograph.' };
 const PREFIX_RULE = 'The “not” starts: il- before l (illegal), ir- before r (irregular), im- before m, p or b (impossible), and in- for most others (incorrect). un- and dis- mean not too. re- means again, mis- means wrongly, anti- means against, auto- means self.';
-const canHear = () => 'speechSynthesis' in window;
+const canHear = () => 'speechSynthesis' in window && !!(S && S.settings && S.settings.sound);
 const hasMeaning = x => !!(x.card || (x.m && x.m.trim()));
 function typesFor(x){
   if (!hasMeaning(x)) return canHear() ? ['hear', 'scram'] : ['scram'];   // a school word with no meaning yet: spelling only
@@ -965,7 +966,7 @@ function pickType(item){
   if (FORCE && typesFor(x).includes(FORCE)) return FORCE;
   if (item.retry && item.lastType) return item.lastType;
   if (r && x.card && r.streak >= 2 && !(r.ty || []).includes('sim')) return 'sim';   // steer cards towards the similar & opposite test
-  if (!hasMeaning(x)) return typesFor(x)[0];
+  if (!hasMeaning(x)){ const ts = typesFor(x), notYet = ts.filter(t => !((r && r.ty) || []).includes(t)); return notYet.length ? notYet[0] : ts[rnd(ts.length)]; }
   if (!r || !r.seen) return x.card ? (Math.random() < .65 ? 'sim' : 'w2m') : (S.words.length >= 4 ? (Math.random() < .5 ? 'w2m' : 'm2w') : 'spell');
   const base = { sim:4, w2m:2, m2w:2, spell:2, scram:2, gap:2.5, hear:1.6, pre:3 };
   const ts = typesFor(x), ws = ts.map(t => base[t] * ((r.streak > 0 && (r.ty || []).includes(t)) ? .35 : 1) * (t === item.lastType ? .2 : 1));
@@ -979,7 +980,7 @@ function makeQuestion(item){
   if (type === 'w2m'){
     if (x.card){
       const right = info(x.w).m, ban = new Set([x.w, ...x.card.o]);
-      const d = shuffle(CARDS.filter(c => !ban.has(c.w))).map(c => info(c.w).m).filter(m => m && m !== right).slice(0, 3);
+      const d = [...new Set(shuffle(CARDS.filter(c => !ban.has(c.w))).map(c => info(c.w).m).filter(m => m && m !== right))].slice(0, 3);
       q.options = shuffle([{ t:right, ok:true }, ...d.map(t => ({ t, ok:false }))]);
     } else {
       const d = shuffle(S.words.filter(y => norm(y.w) !== norm(x.w) && y.m && y.m !== x.m)).slice(0, 3);
@@ -993,11 +994,12 @@ function makeQuestion(item){
     q.options = shuffle([{ t:x.w, ok:true }, ...d.map(y => ({ t:y.w, ok:false }))]);
   } else if (type === 'pre'){
     const p = prefixOf(x), stem = x.w.slice(p.length), fam = ['il', 'im', 'in', 'ir', 'un'].includes(p) ? ['il', 'im', 'in', 'ir', 'un'] : ['re', 'dis', 'mis', 'anti', 'auto', 'un'];
-    q.options = shuffle([{ t:x.w, ok:true }, ...shuffle(fam.filter(f => f !== p)).slice(0, 3).map(f => ({ t:f + stem, ok:false }))]);
+    const REAL = new Set(['inpatient', 'disappear', 'reappear', 'rehear', 'reappointed', 'disarrange', 'unfreeze', 'refreeze', 'dissocial', 'reinform', 'discover', 'recover', 'unappear', 'disconnect', 'reconnect', 'misplace', 'replace', 'disapply', 'reform', 'inform', 'unarrange']);
+    q.options = shuffle([{ t:x.w, ok:true }, ...shuffle(fam.filter(f => f !== p && !REAL.has(f + stem))).slice(0, 3).map(f => ({ t:f + stem, ok:false }))]);
     q.tip = PREFIX_TIP[p];
   } else if (type === 'gap'){
     q.gap = gapFor(x);
-    const pool = x.card ? CARDS.filter(c => c.w !== x.w && !x.card.o.includes(c.w)).map(c => c.w) : S.words.filter(y => norm(y.w) !== norm(x.w)).map(y => y.w);
+    const pool = x.card ? CARDS.filter(c => c.w !== x.w && !x.card.o.includes(c.w)).map(c => c.w) : S.words.filter(y => norm(y.w) !== norm(x.w) && y.m).map(y => y.w);
     q.options = shuffle([{ t:q.gap.word.toLowerCase() === x.w.toLowerCase() ? x.w : q.gap.word, ok:true }, ...shuffle(pool).slice(0, 3).map(t => ({ t, ok:false }))]);
   }
   return q;
@@ -1022,10 +1024,10 @@ function scoreItem(item, q, ok, fishDone, hinted){
       if (!r.dy.includes(today())) r.dy.push(today());
       pts = item.retry ? 1 : 1 + (R.streak >= 3 ? 1 : 0) + (spellish ? 1 : 0);
       if (r.wob){ r.wob = false; }
-      else if (!r.m && meetsMastery(r, !!q.w.card)) r.m = true;
+      else if (!r.m && meetsMastery(r, !!q.w.card, typesFor(q.w).length)) r.m = true;
       const now = isMasteredRec(r);
       if (now && !was){ lock = 'mastered'; line = say('mastered'); R.mastered.push(q.w.w); r.md = today(); }
-      else if (!now && r.streak >= 3){ lock = (q.w.card && !r.ty.includes('sim')) ? 'needsim' : r.ty.length < 2 ? 'type' : 'day'; line = say(lock === 'day' ? 'lockin' : lock === 'needsim' ? 'needSim' : 'needType'); }
+      else if (!now && r.streak >= 3){ lock = (q.w.card && !r.ty.includes('sim')) ? 'needsim' : r.ty.length < Math.min(2, typesFor(q.w).length) ? 'type' : 'day'; line = say(lock === 'day' ? 'lockin' : lock === 'needsim' ? 'needSim' : 'needType'); }
       else line = (R.streak === 3 || R.streak === 5 || R.streak === 10) ? say('streak', { n:R.streak }) : say(item.retry ? 'fixed' : 'right');
     }
     R.results[R.idx] = 'ok';
@@ -1550,7 +1552,7 @@ function question(){
       const mir = mirrorTurn(okM => { const wr = q.options.filter(x => !x.ok); return okM ? q.options.find(x => x.ok).t : wr[rnd(wr.length)].t; });
       if (!mir.sat) btns.forEach(b => { if (b.dataset.t === mir.guess) b.querySelector('.mk').before(mtag()); });
       const answer = q.type === 'pre' ? h('div', {}, h('p', { class:'line' }, h('b', { text:q.w.w }), ' = ' + meanOf()), h('p', { class:'small', style:'margin-top:3px', text:'💡 ' + q.tip })) : q.type === 'gap' ? h('p', { class:'sentence', style:'font-size:1rem' }, q.gap.before, h('span', { class:'fill', text:q.gap.word }), q.gap.after)
-        : h('p', { class:'line' }, h('b', { text:q.w.w }), ' = ' + meanOf());
+        : h('p', { class:'line' }, h('b', { text:q.w.w }), meanOf() ? ' = ' + meanOf() : '');
       finalize(o.ok, mir, answer);
     }
     R.keys = e => { if (done) return; const i = '1234'.indexOf(e.key); if (i > -1 && btns[i] && !btns[i].disabled) btns[i].click(); };
@@ -1593,7 +1595,7 @@ function question(){
       const guess = picked.map(p => letters[p.i]).join(''), ok = norm(guess) === norm(word);
       tileBtns.forEach(b => { b.disabled = true; });
       const mir = mirrorTurn(okM => okM ? word : misspell(word));
-      finalize(ok, mir, h('p', { class:'line' }, h('b', { text:word }), ' = ' + meanOf()));
+      finalize(ok, mir, h('p', { class:'line' }, h('b', { text:word }), meanOf() ? ' = ' + meanOf() : ''));
       draw(); if (ok) slots.classList.add('win');
     }
     const clear = h('button', { class:'btn alt small', type:'button', onclick:() => { if (done) return; picked.splice(locked).forEach(o => { o.b.disabled = false; }); draw(); } }, 'Clear');
@@ -1608,7 +1610,7 @@ function question(){
     const stuck = stuckBtn(() => { tileBtns.forEach(b => { b.disabled = true; });
       picked.splice(0); letters.forEach((c, k) => picked.push({ i:k, b:null })); locked = letters.length;
       const mir = mirrorTurn(okM => okM ? word : misspell(word));
-      finalize(false, mir, h('p', { class:'line' }, h('b', { text:word }), ' = ' + meanOf())); draw(); });
+      finalize(false, mir, h('p', { class:'line' }, h('b', { text:word }), meanOf() ? ' = ' + meanOf() : '')); draw(); });
     return [slots, h('div', { class:'tiles' }, tileBtns), h('div', { class:'row', style:'justify-content:space-between;flex-wrap:wrap;gap:8px' }, clear, hint, stuck)];
   }
 
@@ -2249,11 +2251,21 @@ function prefixLesson(){
 
 /* ---------- Grown-ups → School: this week's school words ---------- */
 const schoolDue = () => !S.school || !S.school.d || daysSince(S.school.d) >= 7;
+/* reads the way school lists usually arrive: one per line, or "a, b, c", with or without meanings */
 function parseSchool(txt){
-  return txt.split(/\n|;/).map(l => l.trim()).filter(Boolean).map(l => {
-    const m = l.match(/^([A-Za-z][A-Za-z'\- ]*?)\s*(?:[,:–—=]|\s-\s)\s*(.+)$/);
-    return m ? { w:m[1].trim(), m:m[2].trim() } : { w:l.replace(/[^A-Za-z'\- ]/g, '').trim(), m:'' };
-  }).filter(x => x.w && x.w.length > 1);
+  const clean = w => w.normalize('NFC').replace(/\(.*?\)/g, '').replace(/^[\s\-–—•*\d.)]+/, '').replace(/[^\p{L}'\- ]/gu, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const out = [];
+  for (let line of txt.split(/\n|;/)){
+    line = line.trim(); if (!line) continue;
+    if (/^(week|spelling|spellings|words|list)\b[^,]*:?\s*$/i.test(line)) continue;   // a heading on its own
+    line = line.replace(/^(week\s*\d+\s*)?(spellings?|words|list)\s*:\s*/i, '');      // "Spellings: a, b"
+    const sep = line.match(/\s*(\t|:|=|\s[-–—]\s|–|—)\s*/);
+    if (sep){ const w = clean(line.slice(0, sep.index)), m = line.slice(sep.index + sep[0].length).trim(); if (w) out.push({ w, m }); continue; }
+    const parts = line.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length === 2 && /\s/.test(parts[1])){ const w = clean(parts[0]); if (w) out.push({ w, m:parts[1] }); continue; }   // "word, a meaning in words"
+    for (const p of parts){ const w = clean(p); if (w) out.push({ w, m:'' }); }                                           // "a, b, c" or a single word
+  }
+  return out.filter(x => x.w.length > 1 && x.w.split(' ').length <= 3);
 }
 function saveSchool(rows){
   const keys = [];
@@ -2290,8 +2302,8 @@ function storyTime(done){
   const words = st.w.filter(w => meanOfX(bankItem(w)));
   S.storyDay = today(); S.stories = (S.stories || []).concat(st.t).slice(-40); save();
   screen = 'story'; SND.loop(false);
-  const re = new RegExp('\\b(' + words.map(esc).join('|') + ')\\b', 'gi');
-  const para = t => { const out = []; let last = 0, m; re.lastIndex = 0; while ((m = re.exec(t))){ out.push(t.slice(last, m.index)); const w = m[0]; out.push(h('button', { class:'sw', type:'button', title:'Hear it', onclick:() => sayWord(w) }, w)); last = m.index + w.length; } out.push(t.slice(last)); return h('p', {}, out); };
+  const re = words.length ? new RegExp('\\b(' + words.map(esc).join('|') + ')\\b', 'gi') : null;
+  const para = t => { if (!re) return h('p', { text:t }); const out = []; let last = 0, m; re.lastIndex = 0; while ((m = re.exec(t))){ out.push(t.slice(last, m.index)); const w = m[0]; out.push(h('button', { class:'sw', type:'button', title:'Hear it', onclick:() => sayWord(w) }, w)); last = m.index + w.length; } out.push(t.slice(last)); return h('p', {}, out); };
   const endB = h('button', { class:'quit', type:'button', 'aria-label':'End the story and go home', onclick:() => { stopNarr(); home(); } }, icon('x'), h('span', { text:'End' }));
   const body = h('div', { class:'story' });
   function read(){
@@ -2302,12 +2314,12 @@ function storyTime(done){
         h('button', { class:'btn small', type:'button', style:'flex:1', onclick:() => { stopNarr(); SND.fx('tap'); quiz(0); } }, words.length >= 2 ? 'Questions →' : 'Done')));
     if (S.settings.sound) narrateLines([st.t].concat(st.p), 500);
   }
-  const qs = shuffle(words.slice()).slice(0, 2), sentences = st.p.join(' ').split(/(?<=[.!?][”"]?)\s+/);
+  const qs = shuffle(words.slice()).slice(0, 2), sentences = (() => { const raw = st.p.join(' ').split(/(?<=[.!?][”"]?)\s+/), out = []; let cur = ''; for (const r of raw){ cur = cur ? cur + ' ' + r : r; const q = (cur.match(/["“”]/g) || []).length; if (q % 2 === 0){ out.push(cur); cur = ''; } } if (cur) out.push(cur); return out; })();
   let got = 0;
   function quiz(i){
     if (words.length < 2 || i >= qs.length) return finish();
     const w = qs[i], x = bankItem(w), right = meanOfX(x), sent = sentences.find(s => new RegExp('\\b' + esc(w) + '\\b', 'i').test(s)) || '';
-    const wrong = shuffle(allItems().filter(y => norm(y.w) !== norm(w)).map(meanOfX).filter(m => m && m !== right)).slice(0, 3);
+    const wrong = [...new Set(shuffle(allItems().filter(y => norm(y.w) !== norm(w)).map(meanOfX).filter(m => m && m !== right)))].slice(0, 3);
     const opts = shuffle([right].concat(wrong));
     const ix = sent.search(new RegExp('\\b' + esc(w) + '\\b', 'i'));
     const btns = opts.map((o, j) => h('button', { class:'ans', type:'button', onclick:() => {
@@ -2352,12 +2364,12 @@ const STORIES = [
     'The Mirror tried to rearrange Cuffin’s shells so they spelled MIRROR. But Cuffin could discern the change at once. "That shell was facing north," he said. "It is now facing smug."'] },
   { t:'The Mishap at Breakfast', w:['mishear','misjudge','reheat','frail','fret'], p:[
     'Giles asked for "a nice sprat on toast". The Mirror managed to mishear him and brought a nice SPLAT on toast. It was just a blob of seaweed.',
-    'Then the Mirror tried to reheat yesterday’s fish on a sunny rock. He did misjudge the sun, and the fish stayed cold and sad.',
-    'Giles is old and a little frail, and he began to fret about missing breakfast. Cuffin calmly shared his own sprat. "Four in, four hold, four out," he told Giles. "Then eat."'] },
+    'Then the Mirror tried to reheat yesterday’s fish on a sunny rock. It is easy to misjudge the sun, and the fish stayed cold and sad.',
+    'Giles was old and a little frail, and he began to fret about missing breakfast. Cuffin calmly shared his own sprat. "Four in, four hold, four out," he told Giles. "Then eat."'] },
   { t:'The Disappearing Shell', w:['disappear','reappear','deceive','dishonest','confide'], p:[
     'Cuffin’s lucky shell seemed to disappear overnight. He searched everywhere: under rocks, behind the lighthouse, inside his own ear.',
     'The Mirror said he had not seen it. But the Mirror was sitting on something lumpy and shell-shaped. It is hard to deceive a puffin who has crossed the Atlantic eleven times.',
-    'Then the shell seemed to reappear under the Mirror’s bottom. "Being dishonest does not suit you," said Cuffin. Later, the Mirror decided to confide the truth: he only wanted to borrow some luck.'] },
+    'Then the shell seemed to reappear under the Mirror’s bottom. "Being dishonest does not suit you," said Cuffin. Later, the Mirror decided to confide in Cuffin: he only wanted to borrow some luck.'] },
   { t:'The Sea Fog', w:['obscure','visible','ascend','tranquil','serene'], p:[
     'One morning a thick fog rolled in. It began to obscure everything. Cuffin could not see the sea, the rocks, or his own feet.',
     'Only the top of the lighthouse was visible. "Let us ascend," said Cuffin, and the puffins flew up and up until they popped out above the fog.',
@@ -2373,7 +2385,7 @@ const STORIES = [
   { t:'The Biggest Wave', w:['colossal','cautious','gush','awe'], p:[
     'One stormy day a colossal wave rose out of the sea. It was taller than the lighthouse and greener than the Mirror’s jealousy.',
     'Water began to gush between the rocks. "Be cautious," said Cuffin. "Back to the burrows." The puffins scurried up the cliff.',
-    'From the top they watched the wave crash down. Everyone stood in awe, beaks open. Even the Mirror said, "Wow." It was the only time he has ever been speechless.'] },
+    'From the top they watched the wave crash down. Everyone stood in awe, beaks open. Even the Mirror said, "Wow." It was the first time anyone could remember him being speechless.'] },
   { t:'The Recipe', w:['classify','examine','thorough','familiar'], p:[
     'Cuffin found a book called "Custard: A Recipe". He wanted to examine every page. He was very thorough: he even read the bits about washing up.',
     'He began to classify the steps into "easy", "tricky" and "needs a cow". Most were "needs a cow".',
@@ -2385,7 +2397,7 @@ const STORIES = [
   { t:'The Sullen Mirror', w:['sullen','gripe','offend'], p:[
     'After losing the leg-standing contest, the Mirror sat in a corner, sullen and silent, staring at a puddle.',
     'Every so often he made a little gripe: "The wind was unfair. The crab was on Cuffin’s side. My leg is shorter."',
-    'Cuffin did not want to offend him. He sat down and said, "You were very good for ten seconds." The Mirror looked a little more cheerful. Then he said, "Eleven," and Cuffin let him have it.'] },
+    'Cuffin did not want to offend him. He sat down and said, "You were very good for ten seconds." The Mirror looked a little more cheerful. Then he said, "Eleven," and Cuffin let him have that one.'] },
   { t:'Impatient Giles', w:['impatient','impolite','rephrase','informal'], p:[
     'Giles was impatient. The new Leader had not been chosen yet, and he wanted to retire and eat sprats on a rock.',
     '"Hurry UP," he snapped at the Mirror. That was a bit impolite, so he decided to rephrase it.',
@@ -2399,17 +2411,17 @@ const STORIES = [
     'The Mirror offered to read it. He said it was an invitation to the Mirror’s Birthday Party. That was incorrect. He had tried to misinform everyone.',
     'Cuffin worked hard to decipher it himself. It was from his cousin in Iceland: "Still no custard here either." Cuffin felt frustrated, but not surprised.'] },
   { t:'The Brilliant Idea', w:['deliberate','propose','astute','commend','flourish'], p:[
-    'Cuffin had an idea. He wanted to be deliberate about it, so he thought for three whole days.',
+    'Cuffin had an idea. It was no accident: he made a deliberate choice to think about it for three whole days.',
     'Then he went to Giles. "I propose a puffin school," he said. "Every puffin learns one new word a day." Giles thought this was very astute.',
     '"I commend you, Cuffin," he said. The school began the next morning. The puffins started to flourish. The Mirror learned the word "magnificent" and used it about himself all week.'] },
   { t:'The Echo Cave', w:['onomatopoeia','alliteration','simile','metaphor','reappear'], p:[
     'Cuffin found a cave that echoed everything. "Splash! Crash! Squawk!" he shouted. "That is onomatopoeia," said Giles. "Words that sound like the noise they make."',
     'The Mirror shouted, "Marvellous Mirror makes magnificent moves!" "That is alliteration," said Giles. "Lots of words starting with the same sound."',
     'Cuffin said the echo was "like a parrot made of rock". That was a simile. The Mirror said, "My voice is a golden trumpet." That was a metaphor, and also not true. Every word seemed to reappear a second later, bouncing round the walls.'] },
-  { t:'The Volatile Volcano', w:['volatile','evaporate','humid','elevate','dumb'], p:[
+  { t:'The Volatile Volcano', w:['volatile','evaporate','humid','elevate'], p:[
     'Giles told a story about a volatile volcano that could erupt at any moment. The puffins listened, very still.',
     'It was so hot near the volcano, he said, that puddles would evaporate in seconds, and the air was so humid your feathers went curly.',
-    'To escape, the puffins had to elevate themselves on a passing cloud. The Mirror was struck dumb with amazement. "Is that true?" he whispered. "No," said Giles. "But it is a good story."'] },
+    'To escape, the puffins had to elevate themselves on a passing cloud. The Mirror was speechless with amazement. "Is that true?" he whispered. "No," said Giles. "But it is a good story."'] },
   { t:'The Untidy Burrow', w:['disarray','unkempt','arrange','pristine','routine'], p:[
     'The Mirror’s burrow was in total disarray: mirrors everywhere, feathers on the floor, and a sock nobody could explain.',
     'He himself looked unkempt, with feathers sticking out in seventeen directions. "I cannot find my comb," he moaned.',
@@ -2448,10 +2460,10 @@ const visitSnap = () => ({ d:today(), a:S.points, m:S.race.mf, w:masteredCount()
 function home(greeting){
   screen = 'home';
   SND.loop(false);
+  if (location.hash === '#report' && !home.reportShown && S.intro){ home.reportShown = true; try { history.replaceState(null, '', location.pathname); } catch (e) {} gTab = 'insights'; return grownups(); }   // opened from the Sunday report: straight to Insights
   if (!S.intro) return intro(() => { S.intro = true; S.lastVisit = visitSnap(); save(); home(); });
   if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); if (storyDue()) storyTime(() => home()); else home(); }); }
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
-  if (location.hash === '#report' && !home.reportShown){ home.reportShown = true; try { history.replaceState(null, '', location.pathname); } catch (e) {} gTab = 'insights'; return grownups(); }   // opened from the Sunday report
   { const nb = checkBadges(); if (nb.length){ save(); toast('🏅 New badge: ' + nb.map(b => b.n).join(', ')); } }   // catch up on badges earned in an unfinished match
   autoDaily();
   let greet = greeting || null;
@@ -2962,6 +2974,7 @@ if (location.hash === '#test'){
 }
 
 /* ---------- boot ---------- */
+window.addEventListener('hashchange', () => { if (location.hash === '#report'){ home.reportShown = false; home(); } });
 $('#tabbar').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; SND.fx('tap'); ({ home:() => { home.recapDone = true; home(); }, progress, trophies, grownups })[b.dataset.t](); });
 raceFix();
 (async () => {
