@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "bc2df5a5bc";
+const APPV = "151cc65f45";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -770,14 +770,17 @@ const meetsMastery = (r, card) => r.streak >= 3 && (r.ty || []).length >= 2 && (
 const isMasteredRec = r => !!r && !!r.m && !r.wob;
 const isMastered = x => isMasteredRec(peek(x));
 const masteredCount = () => allItems().filter(isMastered).length;
+/* almost mastered: on a run of 2+, or mastered-then-slipped once */
+const isAlmost = r => !!r && r.seen > 0 && !isMasteredRec(r) && (r.wob || r.streak >= 2);
+const almostCount = () => allItems().filter(x => isAlmost(peek(x))).length;
 function status(x){
   const r = peek(x);
   if (!r || !r.seen) return 'new';
   if (isMasteredRec(r)) return 'mastered';
-  if (r.wob || r.streak >= 3) return 'lock';
+  if (isAlmost(r)) return 'lock';
   return 'learning';
 }
-const trickyWords = () => allItems().filter(x => { const r = peek(x); return r && r.miss > 0 && !isMasteredRec(r); })
+const trickyWords = () => allItems().filter(x => { const r = peek(x); return r && r.miss > 0 && !isMasteredRec(r) && (r.wob || r.streak < 2); })
   .sort((a,b) => peek(b).miss - peek(a).miss);
 function counts(){ const c = { mastered:0, lock:0, learning:0, new:0 }; for (const x of allItems()) c[status(x)]++; return c; }
 const lockReadyToday = () => allItems().filter(x => { const r = peek(x); return r && !isMasteredRec(r) && (r.wob || (r.streak >= 3 && !(r.dy || []).includes(today()))); }).length;
@@ -809,18 +812,24 @@ function rankInfo(m){ const t = ranks(); let i = 0; while (i+1 < t.length && t[i
    His guesses look random but are steered: more likely right when he is behind, a big catch when he is well behind,
    never more than LEAD_CAP fish or MAST_CAP words ahead, never every word, and in the last END_ZONE words
    he must stay strictly behind. Aaron's own scoring is never touched. */
-const LEAD_CAP = 3, MAST_CAP = 1, END_ZONE = 10;
+const LEAD_CAP = 3, MAST_CAP = 0, END_ZONE = 10;
 const MC = { base:.6, slope:.08, catchStart:3, catchStep:3, catchMax:4 };
 function raceCaps(){
   const T = allItems().length, aM = masteredCount(), A = S.points, end = T - aM <= END_ZONE;
   return { T, aM, A, end, fishMax: end ? A - 1 : A + LEAD_CAP, mastMax: Math.max(0, Math.min(T - 1, end ? aM - 1 : aM + MAST_CAP)) };
 }
-const mirrorChance = () => { const base = Math.max(.3, Math.min(MC.base, (S.race.ra == null ? .6 : S.race.ra) - .05)); return Math.max(.15, Math.min(.9, base + MC.slope * (S.points - S.race.mf))); };
+/* how far ahead Aaron is allowed to pull: 3 fish normally, up to 20 when he is answering really well */
+const leadTarget = () => { const ra = S.race.ra == null ? .6 : S.race.ra; return Math.max(3, Math.min(20, 3 + (ra - .6) * 42.5)); };
+const mirrorChance = () => { const base = Math.max(.3, Math.min(MC.base, (S.race.ra == null ? .6 : S.race.ra) - .05)); return Math.max(.15, Math.min(.9, base + MC.slope * (S.points - S.race.mf - (leadTarget() - 3)))); };
 function mirrorTry(gain){
   const c = raceCaps(), r = S.race, d = c.A - r.mf;
   let ok = Math.random() < mirrorChance();
-  if (ok && d >= MC.catchStart) gain += Math.min(MC.catchMax, 1 + Math.floor((d - MC.catchStart) / MC.catchStep));
+  const tgt = leadTarget(), start = MC.catchStart + (tgt - 3);
+  if (d > tgt + 1){ ok = true; gain = Math.max(gain, Math.min(6, Math.round(d - tgt))); }   // past the lead he has earned: the Mirror closes in (never past him in a perfect round)
+  if (ok && d >= start) gain += Math.min(MC.catchMax, 1 + Math.floor((d - start) / MC.catchStep));
   gain = Math.min(gain, c.fishMax - r.mf);
+  /* a round Aaron is getting all right: the Mirror can't out-fish him in it */
+  if (R && R.queue && R.firstTry === R.idx && !R.results.some(v => v === 'bad')) gain = Math.min(gain, Math.max(0, R.points - R.mfish));
   if (gain < 1) ok = false;
   if (ok){ r.mf += gain; r.ms++; } else r.ms = 0;
   return { ok, fish: ok ? gain : 0 };
@@ -829,7 +838,7 @@ const mirrorGain = type => 1 + (S.race.ms >= 2 ? 1 : 0) + (type === 'spell' || t
 function mirrorMastery(ok){
   const r = S.race, c = raceCaps();
   const day2 = (S.history || []).some(x => x.d < today());
-  if (ok && day2 && Math.random() < Math.max(.08, Math.min(.9, .3 + .12 * (c.aM - r.mm)))) r.mm++;
+  if (ok && day2 && r.mm < c.aM && Math.random() < Math.max(.05, Math.min(.6, .12 + .1 * (c.aM - r.mm - 1)))) r.mm++;   // the Mirror trails Aaron on words, and catches up slowly
   else if (!ok && r.mm > c.aM && Math.random() < .5) r.mm--;
   r.mm = Math.max(0, Math.min(r.mm, raceCaps().mastMax));
 }
@@ -891,6 +900,7 @@ function weight(x){
   else if (r.streak >= 3) b = (r.dy || []).includes(today()) && (r.ty || []).length >= 2 ? 0.3 : 6;   // waiting for another day / ready to lock in
   else if (r.miss > 0 && r.streak === 0) b = 7;
   else b = 4;
+  if (r && r.last === today() && r.streak >= 1 && !r.wob) b *= .35;   // got it right earlier today: give it a rest
   if (r && r.seen && !isMasteredRec(r) && !r.wob && dn != null){ if (dn <= 0) b *= 1.4; else if (b < 7) b *= .6; }   // learning words: due ones first
   return x.card ? b * 1.6 : b;
 }
@@ -958,7 +968,7 @@ function makeQuestion(item){
     }
   } else if (type === 'm2w'){
     const others = S.words.filter(y => norm(y.w) !== norm(x.w));
-    const d = shuffle(others.filter(y => y.w[0].toLowerCase() === x.w[0].toLowerCase())).slice(0, 3);
+    const d = shuffle(others.filter(y => y.w[0].toLowerCase() === x.w[0].toLowerCase())).slice(0, 1);
     if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y)) d.push(y);
     q.options = shuffle([{ t:x.w, ok:true }, ...d.map(y => ({ t:y.w, ok:false }))]);
   } else if (type === 'gap'){
@@ -1398,7 +1408,8 @@ function led(mini, label){
   const side = (who, img, name, fish, m, bump) => {
     const dg = h('div', { class:'digits' + (bump ? ' bump' : '') }, String(fish), h('small', { text:'🐟' }));
     const wc = h('div', { class:'wc', text: m + '/' + T + ' words' });
-    return h('div', { class:'lside ' + who }, mini ? [cimg(img, 'ava', 38, ''), h('div', { class:'lcol' }, dg, segs(m), wc)] : [h('div', { class:'who', text:name }), cimg(img, 'ava', 82, ''), dg, segs(m), wc]);
+    const al = who === 'me' && !mini ? h('div', { class:'wc almost', text:'⭐ ' + almostCount() + ' almost' }) : null;
+    return h('div', { class:'lside ' + who }, mini ? [cimg(img, 'ava', 38, ''), h('div', { class:'lcol' }, dg, segs(m), wc)] : [h('div', { class:'who', text:name }), cimg(img, 'ava', 82, ''), dg, segs(m), wc, al]);
   };
   lastBoard = { A, M };
   const lead = d > 0 ? 'CUFFIN +' + d : d < 0 ? 'MIRROR +' + (-d) : 'LEVEL';
@@ -1509,7 +1520,10 @@ function question(){
       finalize(o.ok, mir, answer);
     }
     R.keys = e => { if (done) return; const i = '1234'.indexOf(e.key); if (i > -1 && btns[i] && !btns[i].disabled) btns[i].click(); };
-    return [h('div', { class:'answers' }, btns), hintBtn('Knock one out', () => { const wr = btns.filter((b, j) => !q.options[j].ok && !b.disabled); const b = wr[rnd(wr.length)]; if (b){ b.disabled = true; b.classList.add('gone'); } })];
+    const sent = q.type === 'w2m' ? gapFor(q.w) : null;
+    const clueBox = h('div', { class:'clue', hidden:true, 'aria-live':'polite' });
+    const clue = sent ? hintBtn('Clue: see it in a sentence', () => { put(clueBox, h('span', { class:'em', 'aria-hidden':'true', text:'💡' }), h('span', {}, sent.before, h('b', { text:sent.word }), sent.after)); clueBox.hidden = false; }) : null;
+    return [clueBox, h('div', { class:'answers' }, btns), h('div', { class:'row hintrow' }, clue, hintBtn('Knock one out', () => { const wr = btns.filter((b, j) => !q.options[j].ok && !b.disabled); const b = wr[rnd(wr.length)]; if (b){ b.disabled = true; b.classList.add('gone'); } }))];
   }
   function spellQ(){
     const input = h('input', { id:'spellin', type:'text', autocomplete:'off', autocapitalize:'none', autocorrect:'off', spellcheck:'false', 'aria-label':'Type the word' });
@@ -1624,7 +1638,9 @@ function question(){
       if (n === 2 || opp) SND.fx('flip');
       const rows = P.list.map((wd, i) => optRow(wd, i, (w, b) => pick(n, P, w, b, rows)));
       put(body, track(n),
-        h('div', { class:'banner ' + (opp ? 's2' : 's1'), role:'status' }, h('span', { class:'em', 'aria-hidden':'true', text: opp ? '🔄' : '🤝' }), h('span', { text:P.banner })),
+        h('div', { class:'banner big ' + (opp ? 's2' : 's1'), role:'status' }, h('span', { class:'em', 'aria-hidden':'true', text: opp ? '↔️' : '🟰' }),
+          h('div', { class:'bt' }, h('b', { text: opp ? 'OPPOSITE' : 'SIMILAR' }),
+            h('span', { text: (mode === 'reverse' ? 'Which card word means ' : 'Which word means ') + (opp ? 'the OPPOSITE of…' : 'the SAME as…') }))),
         word(P.show), h('div', { class:'answers ' + (opp ? 's2' : 's1') }, rows.map(r => r.row)),
         hintsOn ? h('p', { class:'small muted', text: n === 2 ? 'Only 3 choices this time. Tap i to hear and peek.' : 'Tap i to hear a word and see what it means. It doesn’t pick it.' }) : null);
       R.keys = e => { const i = '1234'.indexOf(e.key); if (i > -1 && rows[i] && !rows[i].b.disabled) rows[i].b.click(); };
@@ -1692,7 +1708,7 @@ function question(){
     const kids = q.type === 'spell' ? spellQ() : q.type === 'scram' ? scramQ() : choiceQ();
     put(body, cue(lead), top, kids);
   }
-  const quit = h('button', { class:'quit', type:'button', 'aria-label':'Quit this match', onclick:() => quitMatch() }, icon('x'));
+  const quit = h('button', { class:'quit', type:'button', 'aria-label':'End this match and go home', onclick:() => quitMatch() }, icon('x'), h('span', { text:'End' }));
   put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length));
   const keepSheet = sheetEl; sheetEl = null;
   mount([h('div', { class:'qbar' }, quit, pipsEl, qn, h('div', { class:'tools' }, reportBtn(true), soundBtns())), boardBox, h('div', { class:'pitch' }, strip, body)], null);
@@ -1724,6 +1740,8 @@ function finishRound(){
   const acc = R.firstTry / R.total;
   let bonus = 0;
   if (R.firstTry === R.total && R.total >= 5){ bonus = 3; R.points += bonus; S.points += bonus; S.stats.perfect++; }
+  if (R.firstTry >= R.total && R.mfish >= R.points){ const cut = R.mfish - Math.max(0, R.points - 1); R.mfish -= cut; S.race.mf = Math.max(0, S.race.mf - cut); }   // all right first time: the round is always his
+  else if (R.firstTry >= R.total){ const over = (S.points - S.race.mf) - Math.round(leadTarget()), room = R.points - 1 - R.mfish; if (over > 0 && room > 0){ const t = Math.min(over, room); R.mfish += t; S.race.mf += t; } }   // perfect round, already well clear: he still wins it, but the lead grows slowly
   raceFix();
   const stars = acc >= 1 ? 3 : acc >= .8 ? 2 : acc >= .5 ? 1 : 0;
   S.stats.rounds++;
@@ -1849,7 +1867,8 @@ function bookCheck(list, done){
       h('div', { class:'grow' }), b);
     setTimeout(() => b.focus({ preventScroll:true }), 60);
   }
-  mount([h('div', { class:'qbar' }, h('span', { class:'qn', text:'FULL TIME · BOOK CHECK' }), h('div', { class:'tools' }, soundBtns())), led(true, 'BOOK'), cue2, h('div', { class:'pitch' }, strip2, body2)], null);
+  const endB = h('button', { class:'quit', type:'button', 'aria-label':'End the book check and go on', onclick:() => { SND.fx('tap'); done(); } }, icon('x'), h('span', { text:'End' }));
+  mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'FULL TIME · BOOK CHECK' }), h('div', { class:'tools' }, soundBtns())), led(true, 'BOOK'), cue2, h('div', { class:'pitch' }, strip2, body2)], null);
   show();
 }
 function markBook(k, ok){ const e = bookStore().list.find(b => b.k === k); if (e){ e.ok = ok; e.chk = ok ? 'ok' : 'miss'; } }
@@ -1879,6 +1898,7 @@ function bookStop(e, next){
   const stopgo = h('div', { class:'stopgo' }, ring, go);
   const ov = h('div', { class:'stopov', role:'dialog', 'aria-modal':'true', 'aria-labelledby':'stoph' },
     h('div', { class:'stopin' },
+      h('button', { class:'endlink', type:'button', onclick:() => { clearInterval(timer); VOICE.stop(); ov.remove(); if (R) R.keys = prevKeys; if (R && R.queue) quitMatch(); else home(); } }, '✕ End match'),
       h('div', { class:'stoptop' }, cimg(IMG.hello, 'stopimg', 150, 'Cuffin'), h('div', {}, h('h2', { id:'stoph', text:'STOP!' }), h('p', { class:'stopsub', text:'Write it in your vocabulary book.' }))),
       bookBox(e),
       h('p', { class:'stopline', text: (VOICE.can('c17') ? VO.c17 : pickOne(BOOK_SAY)) + ' I will check at full time.' }),
@@ -1961,7 +1981,7 @@ function celebrate(o, next){
       o.big ? wordWithSpeak(o.big, 'celword') : null,
       o.sub ? h('p', { class:'celsub', text:o.sub }) : null,
       o.line ? h('div', { class:'mline', style:'background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff' }, cimg(o.who === 'm' ? MIMG.smug : IMG.right, '', 34, ''), h('span', { class:'q', text:o.line })) : null,
-      go));
+      go, h('button', { class:'endlink', type:'button', onclick:() => { ov.remove(); if (R) R.keys = prev; if (R && R.queue && R.queue.length) quitMatch(); else home(); } }, '✕ End')));
   document.body.append(ov);
   const prev = R ? R.keys : null; if (R) R.keys = null;
   SND.fx(o.sound || 'cheer'); if (o.tune) SND.tune(o.tune);
@@ -2145,6 +2165,31 @@ function insightsPanel(){
     typeRows.length ? [h('h3', { class:'ih', text:'By question type' }), h('div', { class:'itypes' }, typeRows)] : null,
     recent.length ? [h('h3', { class:'ih', text:'Mastered this week' }), h('p', { class:'small', text:recent.join(', ') })] : null,
     h('p', { class:'small muted', text:(S.tstatFrom ? 'Question-type figures count from ' + longDate(S.tstatFrom) + '. ' : '') + '📘 learning · ✅ mastered · 🟠 wobbly (slipped once after mastering).' }));
+}
+
+/* ---------- Progress → Aaron's own word lists ---------- */
+function wordLists(){
+  const all = allItems().map(x => ({ x, r:peek(x) }));
+  return {
+    mastered:all.filter(o => isMasteredRec(o.r)).map(o => o.x).sort((a, b) => a.w.localeCompare(b.w)),
+    almost:all.filter(o => isAlmost(o.r)).sort((a, b) => (b.r.wob ? 1 : 0) - (a.r.wob ? 1 : 0) || b.r.streak - a.r.streak).map(o => o.x),
+    tricky:trickyWords()
+  };
+}
+const LIST_INFO = { mastered:['✅', 'Mastered', 'Locked in for good. The puffin community is impressed.'], almost:['⭐', 'Almost there', 'Get these right again on another day to master them.'], tricky:['🔥', 'Tricky words', 'These caught you out. Practise them in “Tricky words” in More matches.'] };
+function wordListSheet(kind){
+  const L = wordLists(), list = L[kind], [em, title, tip] = LIST_INFO[kind];
+  const tabs = h('div', { class:'seg seg3', role:'group', 'aria-label':'Choose list' }, Object.keys(LIST_INFO).map(k => h('button', { type:'button', 'aria-pressed':String(k === kind), onclick:() => { SND.fx('tap'); wordListSheet(k); } }, LIST_INFO[k][0] + ' ' + L[k].length)));
+  const mean = x => x.card ? info(x.w).m : x.m;
+  const note = x => { const r = peek(x); return kind === 'almost' ? (r.wob ? 'Slipped once: one right answer saves it' : (r.streak >= 3 ? 'Ready: get it right on another day' : r.streak + ' in a row')) : kind === 'tricky' ? 'Missed ' + r.miss + (r.miss === 1 ? ' time' : ' times') : ''; };
+  openSheet([h('h2', {}, em + ' ' + title + ' ', h('span', { class:'muted', style:'font-size:.9em', text:'(' + list.length + ')' })), tabs, h('p', { class:'small muted', text:tip }),
+    h('div', { class:'wlist' }, list.length ? list.map(x => h('div', { class:'wl' }, h('div', { style:'min-width:0' }, h('b', { text:x.w }), h('span', { class:'small muted', text:(mean(x) || '') + (note(x) ? ' · ' + note(x) : '') })), speakBtn(x.w)))
+      : h('p', { class:'muted', text: kind === 'mastered' ? 'None yet. Keep going!' : kind === 'almost' ? 'Get a word right 2 times in a row and it appears here.' : 'Nothing tricky right now. Brilliant.' })),
+    h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Close')], true);
+}
+function wordListBtns(){
+  const L = wordLists();
+  return h('div', { class:'wbtns' }, Object.keys(LIST_INFO).map(k => h('button', { class:'btn alt small', type:'button', onclick:() => { SND.fx('tap'); wordListSheet(k); } }, LIST_INFO[k][0] + ' ' + L[k].length + ' ' + (k === 'almost' ? 'Almost' : k === 'tricky' ? 'Tricky' : 'Mastered'))));
 }
 
 /* ---------- Home: the scoreboard and one big button ---------- */
@@ -2358,7 +2403,8 @@ function progress(){
     h('div', { class:'panel grow' }, legend(), h('div', { class:'chartbox' }, raceChart(rows, progView === 'fish' ? 'p' : 'm', progView === 'fish' ? 'mf' : 'mm', progView === 'fish' ? 'Fresh fish over time' : 'Words mastered over time'))),
     h('div', { class:'panel', style:'flex:none' }, h('div', { class:'row', style:'justify-content:space-between' }, h('b', { text:'My ' + T + ' words' }), h('span', { class:'pots', style:'color:var(--ink);background:var(--custard-soft);border-color:var(--custard)', text:'🍮 ' + (S.custard || 0) + ' pots' })),
       h('div', { class:'stackbar', role:'img', 'aria-label':seg.map(s => c[s[0]] + ' ' + s[2].toLowerCase()).join(', ') }, seg.map(s => c[s[0]] ? h('i', { style:'width:' + (100 * c[s[0]] / T) + '%;background:' + s[1] }) : null)),
-      h('div', { class:'keys' }, seg.map(s => h('span', {}, h('i', { style:'background:' + s[1] }), h('b', { text:String(c[s[0]]) }), ' ' + s[2]))))
+      h('div', { class:'keys' }, seg.map(s => h('span', {}, h('i', { style:'background:' + s[1] }), h('b', { text:String(c[s[0]]) }), ' ' + s[2]))),
+      wordListBtns())
   ], 'progress');
 }
 SCREENS.progress = progress;
@@ -2643,6 +2689,7 @@ if (location.hash === '#test'){
         while (q < (maxQ || 8000) && !allDone()){
           if (q % (daysPer || 40) === 0) day++;
           SIMDAY = '2027-' + pad(1 + Math.floor(day / 28) % 12) + '-' + pad(1 + day % 28);
+          if (!S.history.some(x => x.d === SIMDAY)) S.history.push({ d:SIMDAY, p:S.points });
           R = newRound(pickWords(10, allItems()), 'mixed');
           while (R.idx < R.queue.length){
             const item = R.queue[R.idx], qq = makeQuestion(item); item.lastType = qq.type;
