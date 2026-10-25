@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "e6c20b00a4";
+const APPV = "94bd08336a";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -616,6 +616,8 @@ function mergeStates(a, b, base){
   const bl = {}; ((r.book || {}).list || []).concat((o.book || {}).list || []).forEach(e => { const c = bl[e.k]; bl[e.k] = c ? Object.assign({}, c, e, { ok:c.ok || e.ok, pinky:c.pinky || e.pinky, chk:c.chk || e.chk, s:e.s || c.s, o:e.o || c.o }) : e; });
   o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
   o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
+  { const wm = {}; (r.words || []).concat(o.words || []).forEach(w => { const k = norm(w.w), c = wm[k]; wm[k] = !c || (!c.m && w.m) ? w : c; }); o.words = Object.values(wm); }
+  if (r.school && (!o.school || (r.school.d || '') > (o.school.d || ''))) o.school = r.school;
   o.tstat = {}; for (const k of new Set(Object.keys(a.tstat || {}).concat(Object.keys(r.tstat || {})))){ const x = (a.tstat || {})[k] || [0, 0], y = (r.tstat || {})[k] || [0, 0], z = base && base.tstat && base.tstat[k]; o.tstat[k] = [0, 1].map(i => add(x[i], y[i], z ? z[i] : 0)); }
   o.tstatFrom = [a.tstatFrom, r.tstatFrom].filter(Boolean).sort()[0] || '';
   if (!o.leader && r.leader) o.leader = r.leader;
@@ -834,7 +836,7 @@ function mirrorTry(gain){
   if (ok){ r.mf += gain; r.ms++; } else r.ms = 0;
   return { ok, fish: ok ? gain : 0 };
 }
-const mirrorGain = type => 1 + (S.race.ms >= 2 ? 1 : 0) + (type === 'spell' || type === 'scram' ? 1 : 0);
+const mirrorGain = type => 1 + (S.race.ms >= 2 ? 1 : 0) + (type === 'spell' || type === 'scram' || type === 'hear' ? 1 : 0);
 function mirrorMastery(ok){
   const r = S.race, c = raceCaps();
   const day2 = (S.history || []).some(x => x.d < today());
@@ -928,8 +930,10 @@ function startRound2(kind){
   const B = S.book && S.book.next || [], n = Math.min(10, pool.length);
   const first = kind === 'tricky' ? [] : pool.filter(x => B.includes(pk(x))).slice(0, 4);
   if (first.length && S.book) S.book.next = B.filter(k => !first.some(x => pk(x) === k));
-  const due = shuffle(pool.filter(x => !first.includes(x) && (() => { const r = peek(x), d = dueIn(r); return r && r.seen && d != null && d <= 0; })())).sort((a, b) => dueIn(peek(a)) - dueIn(peek(b))).slice(0, Math.min(3, n - first.length));   // up to 3 due reviews, most overdue first
-  first.push(...due);
+  const due0 = shuffle(pool.filter(x => !first.includes(x) && (() => { const r = peek(x), d = dueIn(r); return r && r.seen && d != null && d <= 0; })())).sort((a, b) => dueIn(peek(a)) - dueIn(peek(b))).slice(0, 3);   // up to 3 due reviews, most overdue first
+  const due = due0;
+  const school = (S.school && S.school.list || []).map(k => pool.find(x => norm(x.w) === k)).filter(x => x && !first.includes(x) && !isMastered(x)); first.push(...shuffle(school).slice(0, Math.max(0, Math.min(3, n - first.length))));   // this week's school words: up to 3 each match
+  first.push(...due.filter(x => !first.includes(x)).slice(0, Math.max(0, n - first.length)));
   const rest = pickWords(n - first.length, pool.filter(x => !first.includes(x)));
   R = newRound(shuffle(first).concat(rest), kind);
   R.rank0 = rankInfo(masteredCount()).i; R.lastD = S.points - S.race.mf; R.badges0 = Object.keys(S.badges || {}).length;
@@ -937,10 +941,23 @@ function startRound2(kind){
   if (Math.random() < .5) setTimeout(() => VOICE.play('c04'), 600);
   question();
 }
-const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell it', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite' };
+const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell it', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite', hear:'Listen and spell', pre:'Pick the right start' };
+/* ---------- word-building: prefixes ("not" words and friends) ---------- */
+const PREFIX_WORDS = { illegible:'il', illogical:'il', immortal:'im', impolite:'im', impure:'im', impatient:'im', improper:'im', inadequate:'in', incorrect:'in', indirect:'in', informal:'in', inoffensive:'in', inaccurate:'in', incapable:'in', invalid:'in', irreparable:'ir', irrational:'ir', irresistible:'ir', irresponsible:'ir', uncanny:'un',
+  disadvantage:'dis', disappear:'dis', disappointed:'dis', disbelief:'dis', disconnect:'dis', dishonest:'dis', mishear:'mis', misinform:'mis', misjudge:'mis', mispronounced:'mis',
+  reappear:'re', redesign:'re', reemerge:'re', rephrase:'re', reapply:'re', rearrange:'re', redecorate:'re', reheat:'re', antibiotic:'anti', anticlimax:'anti', antiseptic:'anti', antivirus:'anti', antifreeze:'anti', antisocial:'anti', autograph:'auto', autopilot:'auto', autobiography:'auto', automobile:'auto' };
+const prefixOf = x => PREFIX_WORDS[norm(x.w)] || null;
+const PREFIX_TIP = { il:'il- goes before l: il + legible = illegible.', im:'im- goes before m, p or b: im + polite = impolite.', in:'in- is the usual “not” start: in + correct = incorrect.', ir:'ir- goes before r: ir + responsible = irresponsible.',
+  un:'un- means not: un + canny = uncanny.', dis:'dis- means not, or the opposite: dis + appear = disappear.', mis:'mis- means wrongly: mis + hear = mishear.', re:'re- means again: re + heat = reheat.', anti:'anti- means against: anti + freeze = antifreeze.', auto:'auto- means self: auto + graph = autograph.' };
+const PREFIX_RULE = 'The “not” starts: il- before l (illegal), ir- before r (irregular), im- before m, p or b (impossible), and in- for most others (incorrect). un- and dis- mean not too. re- means again, mis- means wrongly, anti- means against, auto- means self.';
+const canHear = () => 'speechSynthesis' in window;
+const hasMeaning = x => !!(x.card || (x.m && x.m.trim()));
 function typesFor(x){
+  if (!hasMeaning(x)) return canHear() ? ['hear', 'scram'] : ['scram'];   // a school word with no meaning yet: spelling only
   const t = x.card ? ['sim', 'w2m', 'scram'] : (S.words.length >= 4 ? ['w2m', 'm2w', 'spell', 'scram'] : ['spell', 'scram']);
   if (gapFor(x) && (x.card || S.words.length >= 4)) t.push('gap');
+  if (!x.card && canHear()) t.push('hear');
+  if (prefixOf(x)) t.push('pre');
   return t;
 }
 function pickType(item){
@@ -948,8 +965,9 @@ function pickType(item){
   if (FORCE && typesFor(x).includes(FORCE)) return FORCE;
   if (item.retry && item.lastType) return item.lastType;
   if (r && x.card && r.streak >= 2 && !(r.ty || []).includes('sim')) return 'sim';   // steer cards towards the similar & opposite test
+  if (!hasMeaning(x)) return typesFor(x)[0];
   if (!r || !r.seen) return x.card ? (Math.random() < .65 ? 'sim' : 'w2m') : (S.words.length >= 4 ? (Math.random() < .5 ? 'w2m' : 'm2w') : 'spell');
-  const base = { sim:4, w2m:2, m2w:2, spell:2, scram:2, gap:2.5 };
+  const base = { sim:4, w2m:2, m2w:2, spell:2, scram:2, gap:2.5, hear:1.6, pre:3 };
   const ts = typesFor(x), ws = ts.map(t => base[t] * ((r.streak > 0 && (r.ty || []).includes(t)) ? .35 : 1) * (t === item.lastType ? .2 : 1));
   let p = Math.random() * ws.reduce((a, b) => a + b, 0), i = 0;
   while (i < ts.length - 1 && p >= ws[i]){ p -= ws[i]; i++; }
@@ -964,15 +982,19 @@ function makeQuestion(item){
       const d = shuffle(CARDS.filter(c => !ban.has(c.w))).map(c => info(c.w).m).filter(m => m && m !== right).slice(0, 3);
       q.options = shuffle([{ t:right, ok:true }, ...d.map(t => ({ t, ok:false }))]);
     } else {
-      const d = shuffle(S.words.filter(y => norm(y.w) !== norm(x.w) && y.m !== x.m)).slice(0, 3);
+      const d = shuffle(S.words.filter(y => norm(y.w) !== norm(x.w) && y.m && y.m !== x.m)).slice(0, 3);
       q.options = shuffle([{ t:x.m, ok:true }, ...d.map(y => ({ t:y.m, ok:false }))]);
     }
   } else if (type === 'm2w'){
-    const others = S.words.filter(y => norm(y.w) !== norm(x.w));
+    const others = S.words.filter(y => norm(y.w) !== norm(x.w) && y.m);
     const d = shuffle(others.filter(y => y.w[0].toLowerCase() === x.w[0].toLowerCase())).slice(0, 1);
     if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y) && y.w[0].toLowerCase() !== x.w[0].toLowerCase()) d.push(y);
     if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y)) d.push(y);
     q.options = shuffle([{ t:x.w, ok:true }, ...d.map(y => ({ t:y.w, ok:false }))]);
+  } else if (type === 'pre'){
+    const p = prefixOf(x), stem = x.w.slice(p.length), fam = ['il', 'im', 'in', 'ir', 'un'].includes(p) ? ['il', 'im', 'in', 'ir', 'un'] : ['re', 'dis', 'mis', 'anti', 'auto', 'un'];
+    q.options = shuffle([{ t:x.w, ok:true }, ...shuffle(fam.filter(f => f !== p)).slice(0, 3).map(f => ({ t:f + stem, ok:false }))]);
+    q.tip = PREFIX_TIP[p];
   } else if (type === 'gap'){
     q.gap = gapFor(x);
     const pool = x.card ? CARDS.filter(c => c.w !== x.w && !x.card.o.includes(c.w)).map(c => c.w) : S.words.filter(y => norm(y.w) !== norm(x.w)).map(y => y.w);
@@ -983,7 +1005,7 @@ function makeQuestion(item){
 /* Aaron's scoring, shared by the game and the test simulation. fishDone = fish already paid (cards pay per stage). */
 function scoreItem(item, q, ok, fishDone, hinted){
   const r = rec(q.w); r.seen++; r.last = today(); r.ty = r.ty || []; r.dy = r.dy || [];
-  const was = isMasteredRec(r) || !!(r.m && r.wob), spellish = q.type === 'spell' || q.type === 'scram';
+  const was = isMasteredRec(r) || !!(r.m && r.wob), spellish = q.type === 'spell' || q.type === 'scram' || q.type === 'hear';
   let pts = 0, note = null, line, lock = null, custard = false;
   S.stats.answered += 1;
   S.race.ra = (S.race.ra == null ? .6 : S.race.ra) * .9 + (ok ? .1 : 0);
@@ -1315,6 +1337,13 @@ function familyScreen(done){
 
 /* ---------- 4pm reminders (push notifications) ---------- */
 const REMKEY = KEY + '-remind';
+const GROWNKEY = KEY + '-grownup';
+const isGrownupDev = () => { try { return localStorage.getItem(GROWNKEY) === '1'; } catch (e) { return false; } };
+async function setGrownupDev(v){
+  try { localStorage.setItem(GROWNKEY, v ? '1' : '0'); } catch (e) {}
+  const id = remindState(), fam = famId(familyCode()); if (!id || !fam || !FBAPP) return;
+  try { const fsM = await import('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-firestore.js'); await fsM.setDoc(fsM.doc(fsM.getFirestore(FBAPP), 'families/' + fam + '/tokens/' + id), { grownup:!!v }, { merge:true }); } catch (e) {}
+}
 const remindState = () => { try { return localStorage.getItem(REMKEY) || ''; } catch (e) { return ''; } };
 const pushCapable = () => 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
 const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1332,7 +1361,7 @@ async function turnOnReminders(){
   const token = await mM.getToken(mM.getMessaging(FBAPP), { vapidKey:VAPID, serviceWorkerRegistration:reg });
   if (!token) throw new Error('notoken');
   const id = await sha(token);
-  await fsM.setDoc(fsM.doc(fsM.getFirestore(FBAPP), 'families/' + fam + '/tokens/' + id), { t:token, at:Date.now(), dev:(isIOS() ? 'iPhone/iPad' : navigator.platform || 'device') });
+  await fsM.setDoc(fsM.doc(fsM.getFirestore(FBAPP), 'families/' + fam + '/tokens/' + id), { t:token, at:Date.now(), dev:(isIOS() ? 'iPhone/iPad' : navigator.platform || 'device'), grownup:isGrownupDev() });
   try { localStorage.setItem(REMKEY, id); } catch (e) {}
   return true;
 }
@@ -1356,7 +1385,9 @@ function remindBlock(){
       catch (e){ const m = String(e && e.message || e); draw(m === 'denied' ? 'Notifications are blocked. Settings → Notifications → Cuffin → Allow, then try again.' : m === 'nosync' ? 'Needs the family code and a connection. Try again in a moment.' : 'Couldn’t turn on: ' + m, true); }
     } }, '🔔 Turn on');
     const extra = !pushCapable() || (isIOS() && !standalone()) ? h('span', { class:'small', style:'color:var(--miss);flex-basis:100%', text: isIOS() ? 'On iPhone/iPad: open the game from its home-screen icon (needs iOS 16.4 or newer) to turn this on.' : 'This browser can’t do reminders.' }) : null;
-    put(box, lbl, btn, extra);
+    const gsw = h('button', { class:'switch', type:'button', role:'switch', 'aria-checked':String(isGrownupDev()), 'aria-label':'Grown-up’s device', onclick:() => { const v = gsw.getAttribute('aria-checked') !== 'true'; gsw.setAttribute('aria-checked', String(v)); setGrownupDev(v); toast(v ? 'This device gets the Sunday report' : 'No Sunday report on this device'); } });
+    const grow = h('div', { class:'set', style:'flex-basis:100%;border:0;padding:6px 0 0' }, h('div', { class:'lbl' }, h('b', { text:'This is a grown-up’s phone or iPad' }), h('span', { class:'small muted', text:'Gets the Sunday 6pm weekly report' + (on ? '' : ' (turn on reminders first)') + '.' })), gsw);
+    put(box, lbl, btn, extra, grow);
   };
   draw();
   return box;
@@ -1518,7 +1549,7 @@ function question(){
       if (!o.ok) btns[i].classList.add('wrong');
       const mir = mirrorTurn(okM => { const wr = q.options.filter(x => !x.ok); return okM ? q.options.find(x => x.ok).t : wr[rnd(wr.length)].t; });
       if (!mir.sat) btns.forEach(b => { if (b.dataset.t === mir.guess) b.querySelector('.mk').before(mtag()); });
-      const answer = q.type === 'gap' ? h('p', { class:'sentence', style:'font-size:1rem' }, q.gap.before, h('span', { class:'fill', text:q.gap.word }), q.gap.after)
+      const answer = q.type === 'pre' ? h('div', {}, h('p', { class:'line' }, h('b', { text:q.w.w }), ' = ' + meanOf()), h('p', { class:'small', style:'margin-top:3px', text:'💡 ' + q.tip })) : q.type === 'gap' ? h('p', { class:'sentence', style:'font-size:1rem' }, q.gap.before, h('span', { class:'fill', text:q.gap.word }), q.gap.after)
         : h('p', { class:'line' }, h('b', { text:q.w.w }), ' = ' + meanOf());
       finalize(o.ok, mir, answer);
     }
@@ -1706,10 +1737,15 @@ function question(){
     const top = q.type === 'w2m' ? [h('p', { class:'muted', text:'What does this word mean?' }), wordWithSpeak(q.w.w)]
       : q.type === 'm2w' ? [h('p', { class:'muted', text:'Which word means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
       : q.type === 'gap' ? [h('p', { class:'muted', text:'Which word fills the gap?' }), h('p', { class:'sentence' }, q.gap.before, h('span', { class:'blank', 'aria-label':'gap' }), q.gap.after)]
+      : q.type === 'scram' && !meanOf() ? [h('p', { class:'muted', text:'Unscramble the word you hear.' }), h('button', { class:'btn alt hearbtn', type:'button', onclick:() => sayWord(q.w.w) }, icon('sound'), 'Hear the word')]
       : q.type === 'scram' ? [h('p', { class:'muted', text:'Unscramble the word that means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
+      : q.type === 'hear' ? [h('p', { class:'muted', text:'Listen, then spell the word you hear.' }), h('button', { class:'btn alt hearbtn', type:'button', onclick:() => sayWord(q.w.w) }, icon('sound'), 'Hear it again')]
+      : q.type === 'pre' ? [h('p', { class:'muted', text:'Pick the right start. Which word means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
       : [h('p', { class:'muted', text:'Spell the word that means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })];
-    const kids = q.type === 'spell' ? spellQ() : q.type === 'scram' ? scramQ() : choiceQ();
+    const kids = q.type === 'spell' || q.type === 'hear' ? spellQ() : q.type === 'scram' ? scramQ() : choiceQ();
+    if ((q.type === 'hear' || (q.type === 'scram' && !meanOf())) && S.settings.sound) sayWord(q.w.w);   // said straight away (inside the tap, so iPhone allows it)
     put(body, cue(lead), top, kids);
+    if (q.type === 'pre' && !S.seenPre){ S.seenPre = true; save(); setTimeout(prefixLesson, 120); }
   }
   const quit = h('button', { class:'quit', type:'button', 'aria-label':'End this match and go home', onclick:() => quitMatch() }, icon('x'), h('span', { text:'End' }));
   put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length));
@@ -1852,7 +1888,7 @@ function bookCheck(list, done){
       }
     } }, input, go);
     function nextBtn(){ const b = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); i++; show(); } }, i >= items.length - 1 ? 'Done ✓' : 'Next word'); put(next, b); setTimeout(() => b.focus({ preventScroll:true }), 60); }
-    put(body2, h('p', { class:'muted', text:'Look in your vocabulary book. Which word means…' }), h('p', { class:'meaning', text:'“' + (e.m || '') + '”' }),
+    put(body2, e.m ? h('p', { class:'muted', text:'Look in your vocabulary book. Which word means…' }) : h('p', { class:'muted', text:'Listen, then type the word from your vocabulary book.' }), e.m ? h('p', { class:'meaning', text:'“' + e.m + '”' }) : h('button', { class:'btn alt hearbtn', type:'button', onclick:() => sayWord(e.w) }, icon('sound'), 'Hear the word'),
       h('div', { class:'boxes', 'aria-label':'The word has ' + e.w.length + ' letters' }, [...e.w].map((ch, j) => h('b', { class: j === 0 ? 'f' : '', text: j === 0 ? ch : '' }))),
       form, fb, h('div', { class:'grow' }), next);
     setTimeout(() => input.focus({ preventScroll:true }), 60);
@@ -2139,7 +2175,7 @@ function narrateLines(lines, delay){
 }
 
 /* ---------- Grown-ups → Insights: where Aaron is strong and where he struggles ---------- */
-const TYPE_NAMES = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spelling', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite' };
+const TYPE_NAMES = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spelling', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite', hear:'Listen and spell', pre:'Pick the right start' };
 function ago(d){ const n = daysSince(d); return n >= 999 ? 'never' : n === 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago'; }
 function whenDue(r){ const dn = dueIn(r); if (dn == null) return ''; return dn < 0 ? 'review overdue' : dn === 0 ? 'review today' : dn === 1 ? 'review tomorrow' : 'review in ' + dn + ' days'; }
 function insightsPanel(){
@@ -2158,7 +2194,12 @@ function insightsPanel(){
   const ts = S.tstat || {};
   const typeRows = Object.keys(TYPE_NAMES).filter(t => ts[t] && ts[t][1]).map(t => { const [ok, n] = ts[t], p = Math.round(100 * ok / n);
     return h('div', { class:'irow' }, h('span', { class:'iname', text:TYPE_NAMES[t] }), h('span', { class:'ibar', 'aria-hidden':'true' }, h('i', { style:'width:' + p + '%;background:' + (p >= 80 ? 'var(--win)' : p >= 60 ? 'var(--gold)' : 'var(--miss)') })), h('b', { class:'ipct', text:p + '%' }), h('span', { class:'small muted', text:'of ' + n })); });
-  return h('div', { class:'insights' },
+  const days7 = new Set((S.history || []).filter(x => daysSince(x.d) <= 6).map(x => x.d)).size, q7 = R7.reduce((a, x) => a + (x.n || 0), 0);
+  const week = h('div', { class:'weekbox' }, h('h3', { class:'ih', style:'margin:0', text:'This week' }),
+    h('p', { text:'Played on ' + days7 + ' of the last 7 days · ' + q7 + ' questions · ' + recent.length + ' new word' + (recent.length === 1 ? '' : 's') + ' mastered · 🔥 ' + dayStreak() + '-day streak.' }),
+    tricky.length ? h('p', { class:'small', text:'Worth a chat: ' + tricky.slice(0, 3).map(o => o.x.w).join(', ') + '.' }) : null,
+    schoolDue() ? h('button', { class:'linkbtn', type:'button', style:'align-self:flex-start', onclick:() => { gTab = 'school'; grownups(); } }, '📅 Add this week’s school words →') : null);
+  return h('div', { class:'insights' }, week,
     h('div', { class:'stat4' }, cell('MASTERED', c.mastered, 'of ' + allItems().length), cell('LEARNING', c.learning + c.lock, c.new + ' not started'), cell('DUE TODAY', dueToday, dueWeek + ' more this week'),
       cell('RIGHT FIRST TIME', p7 == null ? '–' : p7 + '%', p7 == null ? 'last 7 days' : pOld == null ? 'last 7 days' : (p7 > pOld ? '▲ ' : p7 < pOld ? '▼ ' : '= ') + 'was ' + pOld + '% before')),
     h('h3', { class:'ih', text:'Words he finds hardest' }),
@@ -2195,6 +2236,196 @@ function wordListBtns(){
   return h('div', { class:'wbtns' }, Object.keys(LIST_INFO).map(k => h('button', { class:'btn alt small', type:'button', onclick:() => { SND.fx('tap'); wordListSheet(k); } }, LIST_INFO[k][0] + ' ' + L[k].length + ' ' + (k === 'almost' ? 'Almost' : k === 'tricky' ? 'Tricky' : 'Mastered'))));
 }
 
+/* ---------- Cuffin's word-building lesson (first prefix question, and from Progress) ---------- */
+function prefixLesson(){
+  const row = (p, ex, rule) => h('div', { class:'prow' }, h('b', { class:'pp', text:p }), h('span', {}, h('b', { text:ex }), ' · ' + rule));
+  openSheet([h('div', { class:'say' }, cimg(IMG.hello, '', 52, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:'A word-building secret. The start of a word can flip its meaning. Learn the rule and you win lots of words at once.' }))),
+    h('div', { class:'prules' },
+      row('il-', 'illegal', 'before l'), row('ir-', 'irregular', 'before r'), row('im-', 'impossible', 'before m, p or b'), row('in-', 'incorrect', 'most other “not” words'),
+      row('un- / dis-', 'unkind, dishonest', 'also mean not'), row('re-', 'reheat', 'again'), row('mis-', 'mishear', 'wrongly'), row('anti-', 'antifreeze', 'against'), row('auto-', 'autograph', 'self')),
+    h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); closeSheet(); } }, 'Got it')], true);
+  narrateLines(['A word-building secret. I L before L, as in illegal. I R before R, as in irregular. I M before M, P or B, as in impossible. And I N for most other not words, as in incorrect.'], 300);
+}
+
+/* ---------- Grown-ups → School: this week's school words ---------- */
+const schoolDue = () => !S.school || !S.school.d || daysSince(S.school.d) >= 7;
+function parseSchool(txt){
+  return txt.split(/\n|;/).map(l => l.trim()).filter(Boolean).map(l => {
+    const m = l.match(/^([A-Za-z][A-Za-z'\- ]*?)\s*(?:[,:–—=]|\s-\s)\s*(.+)$/);
+    return m ? { w:m[1].trim(), m:m[2].trim() } : { w:l.replace(/[^A-Za-z'\- ]/g, '').trim(), m:'' };
+  }).filter(x => x.w && x.w.length > 1);
+}
+function saveSchool(rows){
+  const keys = [];
+  for (const r of rows){
+    const k = norm(r.w), card = CARD_ITEMS.find(x => norm(x.w) === k), ex = S.words.find(x => norm(x.w) === k);
+    if (ex){ if (r.m && !ex.m) ex.m = r.m; }
+    else if (!card) S.words.push({ w:r.w, m:r.m || '', s:'' });
+    if (!keys.includes(k)) keys.push(k);
+  }
+  S.school = { d:today(), list:keys }; save();
+}
+function schoolPanel(){
+  const due = schoolDue(), L = (S.school && S.school.list) || [];
+  const ta = h('textarea', { id:'schoolin', 'aria-label':'This week’s school words', placeholder:'One word per line. Add a meaning after a comma if you have it:\nnecessary, needed or essential\nseparate\nbelieve, to think something is true', style:'min-height:120px' });
+  const msg = h('p', { class:'small', 'aria-live':'polite' });
+  const find = k => S.words.find(x => norm(x.w) === k) || CARD_ITEMS.find(x => norm(x.w) === k);
+  const stat = x => { const r = peek(x); return !r || !r.seen ? '… not seen yet' : isMasteredRec(r) ? '✅ mastered' : isAlmost(r) ? '⭐ almost' : r.miss ? '🔥 tricky' : '📘 learning'; };
+  return h('div', { class:'insights' },
+    due ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📅' }), h('b', { text: L.length ? 'New week: add this week’s school words.' : 'Add Aaron’s school spelling words for this week.' }))
+        : h('div', { class:'note' }, h('span', { 'aria-hidden':'true', text:'✅' }), h('span', { text:'This week’s words added ' + longDate(S.school.d) + '. Next reminder in ' + (7 - daysSince(S.school.d)) + ' day' + (7 - daysSince(S.school.d) === 1 ? '' : 's') + '.' })),
+    h('p', { class:'small muted', text:'Paste or type the list. Meanings are optional: words with a meaning get every question type; words without one get “Listen and spell” and unscramble. Up to 3 of these words open every match until they are mastered. Last week’s words stay in his word bank.' }),
+    ta, h('button', { class:'btn small', type:'button', style:'align-self:flex-start', onclick:() => {
+      const rows = parseSchool(ta.value);
+      if (!rows.length){ msg.style.color = 'var(--miss)'; msg.textContent = 'Type at least one word first.'; return; }
+      saveSchool(rows); SND.fx('fish'); toast(rows.length + ' school word' + (rows.length === 1 ? '' : 's') + ' added'); grownups(); } }, '💾 Save this week’s words'), msg,
+    L.length ? [h('h3', { class:'ih', text:'This week (' + L.length + ')' }), h('div', { class:'saves' }, L.map(k => { const x = find(k); if (!x) return null;
+      return h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:x.w }), h('span', { class:'muted', text:(x.card ? info(x.w).m : x.m) || 'No meaning: spelling questions only' })), h('span', { class:'you', text:stat(x) })); }))] : null);
+}
+
+/* ---------- Cuffin's word story: every 2–3 days after the daily chapter, and any time from More matches ---------- */
+const storyDue = () => S.storyDay ? daysSince(S.storyDay) >= 3 || (daysSince(S.storyDay) >= 2 && Math.random() < .5) : matchDay() >= 2;
+function storyTime(done){
+  const st = pickStory(), bankItem = w => allItems().find(x => norm(x.w) === norm(w)), meanOfX = x => x ? (x.card ? info(x.w).m : x.m) : '';
+  const words = st.w.filter(w => meanOfX(bankItem(w)));
+  S.storyDay = today(); S.stories = (S.stories || []).concat(st.t).slice(-40); save();
+  screen = 'story'; SND.loop(false);
+  const re = new RegExp('\\b(' + words.map(esc).join('|') + ')\\b', 'gi');
+  const para = t => { const out = []; let last = 0, m; re.lastIndex = 0; while ((m = re.exec(t))){ out.push(t.slice(last, m.index)); const w = m[0]; out.push(h('button', { class:'sw', type:'button', title:'Hear it', onclick:() => sayWord(w) }, w)); last = m.index + w.length; } out.push(t.slice(last)); return h('p', {}, out); };
+  const endB = h('button', { class:'quit', type:'button', 'aria-label':'End the story and go home', onclick:() => { stopNarr(); home(); } }, icon('x'), h('span', { text:'End' }));
+  const body = h('div', { class:'story' });
+  function read(){
+    put(body, h('div', { class:'storyhead' }, h('div', { class:'eyebrow', text:'📖 CUFFIN’S WORD STORY' }), h('h2', { text:st.t })),
+      h('div', { class:'storytext' }, st.p.map(para)),
+      h('p', { class:'small muted', text:'Tap a coloured word to hear it.' }),
+      h('div', { class:'row', style:'gap:8px' }, h('button', { class:'btn alt small', type:'button', onclick:() => narrateLines([st.t].concat(st.p), 100) }, icon('sound'), 'Read it to me'),
+        h('button', { class:'btn small', type:'button', style:'flex:1', onclick:() => { stopNarr(); SND.fx('tap'); quiz(0); } }, words.length >= 2 ? 'Questions →' : 'Done')));
+    if (S.settings.sound) narrateLines([st.t].concat(st.p), 500);
+  }
+  const qs = shuffle(words.slice()).slice(0, 2), sentences = st.p.join(' ').split(/(?<=[.!?][”"]?)\s+/);
+  let got = 0;
+  function quiz(i){
+    if (words.length < 2 || i >= qs.length) return finish();
+    const w = qs[i], x = bankItem(w), right = meanOfX(x), sent = sentences.find(s => new RegExp('\\b' + esc(w) + '\\b', 'i').test(s)) || '';
+    const wrong = shuffle(allItems().filter(y => norm(y.w) !== norm(w)).map(meanOfX).filter(m => m && m !== right)).slice(0, 3);
+    const opts = shuffle([right].concat(wrong));
+    const ix = sent.search(new RegExp('\\b' + esc(w) + '\\b', 'i'));
+    const btns = opts.map((o, j) => h('button', { class:'ans', type:'button', onclick:() => {
+      btns.forEach((b, k) => { b.disabled = true; if (opts[k] === right) b.classList.add('correct'); });
+      const ok = o === right; if (!ok) btns[j].classList.add('wrong');
+      if (ok){ got++; S.points += 1; save(); SND.fx('goal'); } else SND.fx('wrong');
+      put(nx, h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); quiz(i + 1); } }, i + 1 < qs.length ? 'Next question' : 'Finish'));
+    } }, h('span', { class:'l', text:'ABCD'[j] }), h('span', { class:'t', text:o }), h('span', { class:'mk' })));
+    const nx = h('div');
+    put(body, h('div', { class:'storyhead' }, h('div', { class:'eyebrow', text:'📖 STORY QUESTION ' + (i + 1) + ' OF ' + qs.length })),
+      h('p', { class:'sentence', style:'font-size:1rem' }, ix >= 0 ? [sent.slice(0, ix), h('b', { class:'swb', text:sent.substr(ix, w.length) }), sent.slice(ix + w.length)] : sent),
+      h('p', { class:'muted', text:'In the story, what does “' + w + '” mean?' }), h('div', { class:'answers' }, btns), h('div', { class:'grow' }), nx);
+  }
+  function finish(){
+    stopNarr();
+    put(body, h('div', { class:'storyhead' }, h('div', { class:'eyebrow', text:'📖 THE END' }), h('h2', { text:st.t })),
+      sayBlock('com', words.length >= 2 ? (got === 2 ? 'Both right. A story-reading puffin. The community is impressed.' : got === 1 ? 'One out of two. Eventually still counts.' : 'Tricky ones. We will meet those words again.') : 'A good story. Mostly true. Partly custard.', IMG.right),
+      words.length >= 2 ? h('p', { class:'line', text:'+' + got + ' 🐟 fresh fish from the story' }) : null,
+      h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); done(); } }, 'Back to the race'));
+  }
+  mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'STORY TIME' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' }, body))], null);
+  read();
+}
+
+/* ---------- Cuffin's word stories: short, silly, read aloud, each using a few of Aaron's words ---------- */
+const STORIES = [
+  { t:'The Custard Map', w:['inaccurate','ponder','ramble','dismal','acquire'], p:[
+    'Giles found an old map that promised a lake of custard. Cuffin studied it for a long time. "This map is inaccurate," he said. "It shows the sea as a picnic blanket."',
+    'They set off anyway. The walk turned into a long ramble across wet rocks. The weather was dismal, grey and drizzly, and everyone’s feathers went flat.',
+    'At the end they found only a puddle. Cuffin stopped to ponder. "We did not acquire any custard," he said, "but we did acquire very damp feet. I would like that noted."'] },
+  { t:'The Mirror’s Autograph', w:['autograph','brazen','vex','sincere','insolent'], p:[
+    'The Mirror set up a table on the cliff and offered his autograph to anyone passing. Nobody asked. So he signed a rock, a seagull and Giles’s hat.',
+    '"That is brazen," said Cuffin. "You cannot sign other people’s hats." Signing things was the Mirror’s favourite way to vex everyone.',
+    'Giles was not amused. The Mirror said sorry, but it did not sound sincere. When he added "Your hat looked better with my name on it," Giles called him insolent and took the pen away.'] },
+  { t:'The Great Fish Race', w:['collide','hasten','cautious','turbulent','prevail'], p:[
+    'Every summer the puffins race to the fishing rock. "Hasten!" shouted Giles, waving a flag that was mostly seaweed.',
+    'The Mirror flew so fast he nearly managed to collide with a lighthouse. Cuffin was more cautious. He flew low over the turbulent waves, choosing each gust carefully.',
+    'The Mirror zoomed past, then got distracted by his reflection in a rock pool. Slow and steady, Cuffin landed first. "Brains prevail," he said. "Also, he stopped to look at himself again."'] },
+  { t:'Redecorating the Burrow', w:['redecorate','rearrange','gaudy','refined','discern'], p:[
+    'The Mirror decided to redecorate his burrow. He painted it gold, pink and a colour he called "shiny". It was very gaudy.',
+    'Cuffin preferred a refined look: one smooth stone, one nice shell, and a sign saying "No custard here. Yet."',
+    'The Mirror tried to rearrange Cuffin’s shells so they spelled MIRROR. But Cuffin could discern the change at once. "That shell was facing north," he said. "It is now facing smug."'] },
+  { t:'The Mishap at Breakfast', w:['mishear','misjudge','reheat','frail','fret'], p:[
+    'Giles asked for "a nice sprat on toast". The Mirror managed to mishear him and brought a nice SPLAT on toast. It was just a blob of seaweed.',
+    'Then the Mirror tried to reheat yesterday’s fish on a sunny rock. He did misjudge the sun, and the fish stayed cold and sad.',
+    'Giles is old and a little frail, and he began to fret about missing breakfast. Cuffin calmly shared his own sprat. "Four in, four hold, four out," he told Giles. "Then eat."'] },
+  { t:'The Disappearing Shell', w:['disappear','reappear','deceive','dishonest','confide'], p:[
+    'Cuffin’s lucky shell seemed to disappear overnight. He searched everywhere: under rocks, behind the lighthouse, inside his own ear.',
+    'The Mirror said he had not seen it. But the Mirror was sitting on something lumpy and shell-shaped. It is hard to deceive a puffin who has crossed the Atlantic eleven times.',
+    'Then the shell seemed to reappear under the Mirror’s bottom. "Being dishonest does not suit you," said Cuffin. Later, the Mirror decided to confide the truth: he only wanted to borrow some luck.'] },
+  { t:'The Sea Fog', w:['obscure','visible','ascend','tranquil','serene'], p:[
+    'One morning a thick fog rolled in. It began to obscure everything. Cuffin could not see the sea, the rocks, or his own feet.',
+    'Only the top of the lighthouse was visible. "Let us ascend," said Cuffin, and the puffins flew up and up until they popped out above the fog.',
+    'Up there the sky was tranquil and blue. Even the Mirror stopped talking. For one whole minute, everything was serene. Then he said, "I look amazing in this light," and the moment was over.'] },
+  { t:'The Rematch', w:['contest','oppose','fair','endure','thwart'], p:[
+    'The Mirror demanded a contest: who could stand on one leg the longest. Giles did not oppose the idea, as long as it was fair.',
+    'Cuffin could endure the wind, the rain and a crab nibbling his toe. The Mirror wobbled after ten seconds.',
+    'So he tried to thwart Cuffin by tickling him with a feather. Giles blew his whistle. "Disqualified," he said. "Cuffin wins. Again."'] },
+  { t:'The Antisocial Seagull', w:['antisocial','hostile','permit','banish','solace'], p:[
+    'A seagull moved onto the puffins’ cliff. He was antisocial: he would not say hello, and he stole chips from everyone.',
+    'He was quite hostile too, flapping and squawking whenever anyone came near. "We do not permit chip-stealing," said Giles.',
+    'Some puffins wanted to banish him for ever. But Cuffin noticed the seagull was lonely. He offered him a sprat. The seagull found solace in the sprat, and stopped squawking. Mostly.'] },
+  { t:'The Biggest Wave', w:['colossal','cautious','gush','awe'], p:[
+    'One stormy day a colossal wave rose out of the sea. It was taller than the lighthouse and greener than the Mirror’s jealousy.',
+    'Water began to gush between the rocks. "Be cautious," said Cuffin. "Back to the burrows." The puffins scurried up the cliff.',
+    'From the top they watched the wave crash down. Everyone stood in awe, beaks open. Even the Mirror said, "Wow." It was the only time he has ever been speechless.'] },
+  { t:'The Recipe', w:['classify','examine','thorough','familiar'], p:[
+    'Cuffin found a book called "Custard: A Recipe". He wanted to examine every page. He was very thorough: he even read the bits about washing up.',
+    'He began to classify the steps into "easy", "tricky" and "needs a cow". Most were "needs a cow".',
+    'Some words seemed familiar: milk, sugar, egg. "We have none of these," Cuffin said. "We have fish." He closed the book and sighed. The mystery of the custard continues.'] },
+  { t:'The Lost Fish', w:['retrieve','sparse','struggle','accomplishment'], p:[
+    'Cuffin dropped his best fish into a deep rock pool. He dived in to retrieve it. The pool was cold, and the fish were sparse.',
+    'It was a real struggle. He came up three times with nothing but seaweed on his head.',
+    'But Cuffin did not give up. On the fourth dive he grabbed it. "Eventually still counts," he puffed. Getting that fish back was his proudest accomplishment of the week.'] },
+  { t:'The Sullen Mirror', w:['sullen','gripe','offend'], p:[
+    'After losing the leg-standing contest, the Mirror sat in a corner, sullen and silent, staring at a puddle.',
+    'Every so often he made a little gripe: "The wind was unfair. The crab was on Cuffin’s side. My leg is shorter."',
+    'Cuffin did not want to offend him. He sat down and said, "You were very good for ten seconds." The Mirror looked a little more cheerful. Then he said, "Eleven," and Cuffin let him have it.'] },
+  { t:'Impatient Giles', w:['impatient','impolite','rephrase','informal'], p:[
+    'Giles was impatient. The new Leader had not been chosen yet, and he wanted to retire and eat sprats on a rock.',
+    '"Hurry UP," he snapped at the Mirror. That was a bit impolite, so he decided to rephrase it.',
+    '"What I meant was: please hurry up, young puffin." The Mirror said Giles could be informal with him. "Call me Your Shininess," he said. Giles did not.'] },
+  { t:'The Robot Puffin', w:['automobile','autopilot','incapable','invalid'], p:[
+    'A tourist dropped a toy robot puffin on the cliff. The Mirror thought it was a new rival.',
+    'The robot was on autopilot. It marched in circles, beeping. It seemed incapable of stopping. "It moves like a tiny automobile," said Cuffin.',
+    'The Mirror challenged it to a staring contest. The robot ran out of batteries. "I win!" said the Mirror. Giles ruled the result invalid, because you cannot beat a robot that is asleep.'] },
+  { t:'The Illegible Letter', w:['illegible','misinform','incorrect'], p:[
+    'A letter arrived for Cuffin, but the writing was illegible. It looked like a crab had walked through some ink.',
+    'The Mirror offered to read it. He said it was an invitation to the Mirror’s Birthday Party. That was incorrect. He had tried to misinform everyone.',
+    'Cuffin worked hard to decipher it himself. It was from his cousin in Iceland: "Still no custard here either." Cuffin felt frustrated, but not surprised.'] },
+  { t:'The Brilliant Idea', w:['deliberate','propose','astute','commend','flourish'], p:[
+    'Cuffin had an idea. He wanted to be deliberate about it, so he thought for three whole days.',
+    'Then he went to Giles. "I propose a puffin school," he said. "Every puffin learns one new word a day." Giles thought this was very astute.',
+    '"I commend you, Cuffin," he said. The school began the next morning. The puffins started to flourish. The Mirror learned the word "magnificent" and used it about himself all week.'] },
+  { t:'The Echo Cave', w:['onomatopoeia','alliteration','simile','metaphor','reappear'], p:[
+    'Cuffin found a cave that echoed everything. "Splash! Crash! Squawk!" he shouted. "That is onomatopoeia," said Giles. "Words that sound like the noise they make."',
+    'The Mirror shouted, "Marvellous Mirror makes magnificent moves!" "That is alliteration," said Giles. "Lots of words starting with the same sound."',
+    'Cuffin said the echo was "like a parrot made of rock". That was a simile. The Mirror said, "My voice is a golden trumpet." That was a metaphor, and also not true. Every word seemed to reappear a second later, bouncing round the walls.'] },
+  { t:'The Volatile Volcano', w:['volatile','evaporate','humid','elevate','dumb'], p:[
+    'Giles told a story about a volatile volcano that could erupt at any moment. The puffins listened, very still.',
+    'It was so hot near the volcano, he said, that puddles would evaporate in seconds, and the air was so humid your feathers went curly.',
+    'To escape, the puffins had to elevate themselves on a passing cloud. The Mirror was struck dumb with amazement. "Is that true?" he whispered. "No," said Giles. "But it is a good story."'] },
+  { t:'The Untidy Burrow', w:['disarray','unkempt','arrange','pristine','routine'], p:[
+    'The Mirror’s burrow was in total disarray: mirrors everywhere, feathers on the floor, and a sock nobody could explain.',
+    'He himself looked unkempt, with feathers sticking out in seventeen directions. "I cannot find my comb," he moaned.',
+    'Cuffin helped him arrange everything neatly. Soon the burrow was pristine. "Now make it a routine," said Cuffin. "Tidy every morning." The Mirror agreed, then went straight back to admiring himself.'] },
+];
+/* pick a story that uses the most words Aaron is learning right now, one he hasn't heard yet */
+function pickStory(){
+  const seen = S.stories || [], k = w => norm(w);
+  const learning = new Set(allItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r); }).map(x => norm(x.w)));
+  const known = new Set(allItems().map(x => norm(x.w)));
+  const score = st => st.w.filter(w => learning.has(k(w))).length * 3 + st.w.filter(w => known.has(k(w))).length;
+  let pool = STORIES.filter(st => !seen.includes(st.t));
+  if (!pool.length){ S.stories = []; pool = STORIES.slice(); }
+  return pool.slice().sort((a, b) => score(b) - score(a) || Math.random() - .5)[0];
+}
+
 /* ---------- Home: the scoreboard and one big button ---------- */
 function homeLine(){
   const now = new Date();
@@ -2218,8 +2449,9 @@ function home(greeting){
   screen = 'home';
   SND.loop(false);
   if (!S.intro) return intro(() => { S.intro = true; S.lastVisit = visitSnap(); save(); home(); });
-  if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); home(); }); }
+  if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); if (storyDue()) storyTime(() => home()); else home(); }); }
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
+  if (location.hash === '#report' && !home.reportShown){ home.reportShown = true; try { history.replaceState(null, '', location.pathname); } catch (e) {} gTab = 'insights'; return grownups(); }   // opened from the Sunday report
   { const nb = checkBadges(); if (nb.length){ save(); toast('🏅 New badge: ' + nb.map(b => b.n).join(', ')); } }   // catch up on badges earned in an unfinished match
   autoDaily();
   let greet = greeting || null;
@@ -2242,6 +2474,8 @@ function moreSheet(){
   openSheet([h('h2', { text:'More matches' }), h('div', { class:'mlist' },
     item('🤝', 'Cards match', 'Just the similar & opposite cards', () => startRound('cards')),
     item('🎯', 'Training', tricky ? tricky + ' tricky words to fix' : 'No tricky words yet', () => startRound('tricky'), !tricky),
+    item('📖', 'Story time', 'A Cuffin story using your words', () => storyTime(() => home())),
+    item('💡', 'Word-building tip', 'How il-, im-, in-, ir- and friends work', () => { home(); prefixLesson(); }),
     item('📺', 'Today’s chapter', 'Watch the match report again', () => chapter(() => home())),
     item('🎬', 'The story from the start', 'Giles, the crown and the Mirror', () => intro(() => home()))),
     h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Close')], true);
@@ -2515,7 +2749,7 @@ function grownups(){
     setTimeout(() => inp.focus(), 30); return;
   }
   const nb = bookStore().list.filter(e => e.d === today()).length;
-  const tabs = [['play','Play'],['insights','Insights'],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
+  const tabs = [['play','Play'],['insights','Insights'],['school','School' + (schoolDue() ? ' ⚠️' : '')],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
   const bar = h('div', { class:'subtabs', role:'group', 'aria-label':'Grown-ups sections' }, tabs.map(([id, t]) => h('button', { type:'button', 'aria-pressed':String(gTab === id), onclick:() => { gTab = id; grownups(); } }, t)));
   const panel = h('div', { class:'panel grow', style:'overflow-y:auto' });
   const c = counts(), T = allItems().length;
@@ -2529,6 +2763,8 @@ function grownups(){
       sw('sw-music', S.settings.music, 'Music', 'Story fanfare, chapter sting, crowning anthem, match groove.', v => { S.settings.music = v; if (v) S.settings.sound = true; save(); grownups(); if (!v){ SND.stop(); SND.loop(false); } else { SND.prime(); SND.tune('win'); } }),
       h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:'Previews' }), h('span', { class:'small muted', text:'These do not change any progress.' }))),
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => intro(() => grownups()) }, 'The story'), h('button', { class:'btn alt small', type:'button', onclick:() => chapter(() => grownups()) }, 'Today’s chapter'), h('button', { class:'btn alt small', type:'button', onclick:() => ceremony(true, () => grownups()) }, 'The crowning')));
+  } else if (gTab === 'school'){
+    put(panel, schoolPanel());
   } else if (gTab === 'insights'){
     put(panel, insightsPanel());
   } else if (gTab === 'book'){

@@ -3,11 +3,16 @@ on:
   schedule:
     - cron: '0 15 * * *'   # 4pm UK in summer time
     - cron: '0 16 * * *'   # 4pm UK in winter
+    - cron: '0 17 * * 0'   # Sunday 6pm report (summer time)
+    - cron: '0 18 * * 0'   # Sunday 6pm report (winter)
   workflow_dispatch:
     inputs:
       force:
         description: 'Send a test now, even if Aaron has played (yes/no)'
         default: 'no'
+      mode:
+        description: 'What to send: reminder or report'
+        default: 'reminder'
 jobs:
   remind:
     runs-on: ubuntu-latest
@@ -21,3 +26,4 @@ jobs:
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FORCE: ${{ github.event.inputs.force == 'yes' && '1' || '' }}
+          MODE: ${{ github.event.inputs.mode }}
