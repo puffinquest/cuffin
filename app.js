@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "3f76529875";
+const APPV = "721085228d";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -686,8 +686,10 @@ async function write(remote, again){
   setSync('saving');
   const snap = JSON.parse(JSON.stringify(S));
   for (let t = 0; t < 3; t++){
-    try { await withTimeout(progRef().set({ s:JSON.stringify(snap), upd:snap.upd || 0, fish:snap.points, words:masteredCount(), played:snap.last || '' }), 15000); setBaseAll(snap); setSync('cloud'); syncNote(true); clearTimeout(SYNC.retryT); return; }
-    catch (e){ if (!(e && (e.code === 'unavailable' || e.code === 'timeout')) || t === 2){ setSync('error'); syncNote(false); syncRetry(); return; } await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500)); }
+    try { const ref = progRef(), data = { s:JSON.stringify(snap), upd:snap.upd || 0, fish:snap.points, words:masteredCount(), played:snap.last || '' };
+      await withTimeout(ref.setIf ? ref.setIf(remote ? remote.upd || 0 : 0, data) : ref.set(data), 15000); setBaseAll(snap); setSync('cloud'); syncNote(true); clearTimeout(SYNC.retryT); return; }
+    catch (e){ if (e && e.code === 'clash'){ const now = await fetchRemote().catch(() => null); if (now) return decide(now, false); }
+      if (!(e && (e.code === 'unavailable' || e.code === 'timeout')) || t === 2){ setSync('error'); syncNote(false); syncRetry(); return; } await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500)); }
   }
 }
 const pull = first => syncStep(first);
@@ -1304,6 +1306,8 @@ async function fbInit(){
   const docRef = p => { const path = mapPath(p); return {
     get: async () => { const s = await fsM.getDoc(fsM.doc(fs, path)); return { exists: s.exists(), data: () => s.data() }; },
     set: d => fsM.setDoc(fsM.doc(fs, path), d),
+    /* save only if nobody else saved since we looked (all-or-nothing): otherwise report a clash so we can merge first */
+    setIf: (expectUpd, d) => fsM.runTransaction(fs, async t => { const ref = fsM.doc(fs, path), cur = await t.get(ref); const u = cur.exists() ? (cur.data().upd || 0) : 0; if (u !== (expectUpd || 0)) throw { code:'clash' }; t.set(ref, d); }),
     delete: () => fsM.deleteDoc(fsM.doc(fs, path)),
     collection: c => colRef(p + '/' + c) }; };
   const colRef = p => { const path = mapPath(p);
@@ -1503,7 +1507,7 @@ function question(){
   const qn = h('span', { class:'qn' });
   const body = h('div', { class:'pbody' });
   const strip = h('div', { class:'strip' });
-  const refresh = () => { save(); put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length)); drawPips(); };
+  const refresh = () => { roundRec(false); S.last = today(); snapshot(); save(); put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length)); drawPips(); };
   function drawPips(){
     put(pipsEl, R.queue.map((it, i) => h('i', { class: i === R.idx ? 'now' : R.results[i] === 'ok' ? 'ok' : R.results[i] === 'bad' ? 'no' : '' })));
     qn.textContent = (R.idx + 1) + '/' + R.queue.length;
@@ -1795,12 +1799,22 @@ function snapshot(){
   if (last && last.d === row.d) S.history[S.history.length - 1] = row; else S.history.push(row);
   if (S.history.length > 400) S.history.shift();
 }
+/* the match's record is kept up to date after every answer, so if the app is closed mid-match (Screen Time, battery, swiped away) today's goal and streak still count */
+function roundRec(final){
+  if (!R) return;
+  R.recId = R.recId || Date.now().toString(36) + rnd(1e6);
+  const n = final ? R.total : (R.results || []).reduce((a, v, i) => a + (v && R.queue[i] && !R.queue[i].retry ? 1 : 0), 0);
+  if (!n) return;
+  const rec = { id:R.recId, d:today(), r:R.firstTry, n, a:R.points, m:R.mfish, part:!final };
+  const i = S.rounds.findIndex(x => x.id === R.recId);
+  if (i >= 0) S.rounds[i] = rec; else { S.rounds.push(rec); if (S.rounds.length > 200) S.rounds.shift(); }
+}
 /* leaving early still counts today's answers towards the streak and goal, and celebrates any badge */
 function quitMatch(){
   SND.loop(false); closeSheet();
   const n = (R.results || []).reduce((a, v, i) => a + (v && R.queue[i] && !R.queue[i].retry ? 1 : 0), 0), nb = R.newBadges || [];
   if (n){
-    S.rounds.push({ id:Date.now().toString(36) + rnd(1e6), d:today(), r:R.firstTry, n, a:R.points, m:R.mfish, part:true }); if (S.rounds.length > 200) S.rounds.shift();
+    roundRec(false);
     raceFix(); S.last = today(); snapshot(); save();
   }
   const party = n ? matchCelebrations({ rank0:R.rank0 }, nb) : [];
@@ -1818,7 +1832,7 @@ function finishRound(){
   raceFix();
   const stars = acc >= 1 ? 3 : acc >= .8 ? 2 : acc >= .5 ? 1 : 0;
   S.stats.rounds++;
-  S.rounds.push({ id:Date.now().toString(36) + rnd(1e6), d:today(), r:R.firstTry, n:R.total, a:R.points, m:R.mfish }); if (S.rounds.length > 200) S.rounds.shift();
+  roundRec(true);
   S.last = today(); snapshot();
   const crowned = !S.leader && allDone() && S.points > S.race.mf;
   if (crowned) S.leader = { d:today(), a:S.points, m:S.race.mf };
