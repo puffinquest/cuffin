@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "c963a7fe36";
+const APPV = "3f76529875";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -639,11 +639,16 @@ const savesCol = () => progRef().collection('saves');
 /* every sync step runs one at a time: read the family copy, then decide */
 const inRoundNow = () => !!(R && R.queue && R.queue.length);
 const answered = o => ((o && o.stats) || {}).answered || 0;
-function syncStep(first){ SYNC.chain = (SYNC.chain || Promise.resolve()).then(() => syncOnce(first)).catch(() => {}); return SYNC.chain; }
-async function fetchRemote(){ const snap = await progRef().get(); let remote = null; if (snap.exists){ try { remote = JSON.parse(snap.data().s); } catch (e) {} } return remote; }
+/* a network step that takes too long (lost Wi-Fi, phone asleep) is abandoned so it can never block later saves */
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({ code:'timeout' }), ms))]);
+function syncStep(first){ SYNC.chain = (SYNC.chain || Promise.resolve()).then(() => withTimeout(syncOnce(first), 30000)).catch(() => { setSync('error'); syncRetry(); }); return SYNC.chain; }
+/* not saved to the family yet: keep trying quietly until it works */
+function syncRetry(){ clearTimeout(SYNC.retryT); SYNC.retryT = setTimeout(() => { if (SYNC.db) syncStep(false); }, 20000); }
+function syncNote(ok){ try { localStorage.setItem(KEY + '-synclog', JSON.stringify({ at:Date.now(), ok })); } catch (e) {} }
+async function fetchRemote(){ const snap = await withTimeout(progRef().get(), 12000); let remote = null; if (snap.exists){ try { remote = JSON.parse(snap.data().s); } catch (e) {} } return remote; }
 async function syncOnce(first){
   let remote;
-  try { remote = await fetchRemote(); } catch (e) { if (first) setSync('local'); else setSync('error'); return; }
+  try { remote = await fetchRemote(); } catch (e) { setSync(first && !SYNC.ready ? 'local' : 'error'); syncNote(false); syncRetry(); return; }
   SYNC.ready = true; SYNC.remoteReal = !!remote && !isBlank(remote);
   await decide(remote, first);
 }
@@ -652,7 +657,7 @@ async function decide(remote, first){
   /* demo progress never beats real progress */
   if (remote.demo && !S.demo && !isBlank(S)){ keepCopy(S, 'Real progress (rescued)'); S.upd = Date.now(); saveLocal(); return write(remote); }
   const ru = remote.upd || 0, lu = S.upd || 0, base = getBase();
-  if (ru === lu){ setBaseAll(S); return setSync('cloud'); }
+  if (ru === lu){ setBaseAll(S); syncNote(true); return setSync('cloud'); }
   /* a Restart, Restore or Go back is deliberate: the newest one wins outright */
   const re = remote.epoch || 0, le = S.epoch || 0;
   if (re !== le){
@@ -681,12 +686,12 @@ async function write(remote, again){
   setSync('saving');
   const snap = JSON.parse(JSON.stringify(S));
   for (let t = 0; t < 3; t++){
-    try { await progRef().set({ s:JSON.stringify(snap), upd:snap.upd || 0, fish:snap.points, words:masteredCount(), played:snap.last || '' }); setBaseAll(snap); setSync('cloud'); return; }
-    catch (e){ if (!(e && e.code === 'unavailable') || t === 2){ setSync('error'); return; } await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500)); }
+    try { await withTimeout(progRef().set({ s:JSON.stringify(snap), upd:snap.upd || 0, fish:snap.points, words:masteredCount(), played:snap.last || '' }), 15000); setBaseAll(snap); setSync('cloud'); syncNote(true); clearTimeout(SYNC.retryT); return; }
+    catch (e){ if (!(e && (e.code === 'unavailable' || e.code === 'timeout')) || t === 2){ setSync('error'); syncNote(false); syncRetry(); return; } await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500)); }
   }
 }
 const pull = first => syncStep(first);
-function pushSoon(){ if (!SYNC.ready) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(() => syncStep(false), 1500); }
+function pushSoon(){ if (!SYNC.db) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(() => syncStep(false), 1500); }
 const push = () => syncStep(false);
 /* a cloud save point of a state, so nothing replaced by sync is ever lost */
 function keepCopy(o, why){
@@ -1313,13 +1318,17 @@ async function syncStart(){
   setSync('check');
   const fam = famId(familyCode());
   if (!fam || !FIREBASE_CONFIG.apiKey){ setSync('local'); return; }
-  let db = null;
-  try { db = await fbInit(); } catch (e) { db = null; }
-  if (!db){ setSync('local'); return; }
-  SYNC.db = db; SYNC.uid = fam;
-  await pull(true);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && SYNC.ready) pull(false); });
-  setInterval(() => { if (SYNC.ready && document.visibilityState === 'visible' && !(R && R.queue && R.queue.length)) pull(false); }, 60000);
+  /* connect; if there is no internet yet, keep trying in the background (Wi-Fi back, app reopened) */
+  const connect = async () => {
+    if (SYNC.db) return true;
+    try { SYNC.db = await withTimeout(fbInit(), 15000); SYNC.uid = fam; return true; } catch (e) { SYNC.db = null; setSync('local'); return false; }
+  };
+  if (await connect()) await pull(true);
+  const again = async () => { if (await connect()) pull(false); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') again(); else if (SYNC.db && S.upd > getBase()) pull(false); });   // also try to send on the way out
+  window.addEventListener('online', again);
+  window.addEventListener('pageshow', again);
+  setInterval(() => { if (document.visibilityState === 'visible' && (!SYNC.db || !(R && R.queue && R.queue.length) || S.upd > getBase())) again(); }, 45000);
 }
 /* first launch on a device: join the family */
 function familyScreen(done){
@@ -2872,6 +2881,12 @@ function grownups(){
       h('div', { class:'row' }, h('label', { for:'namein', text:'Name' }), nameIn),
       h('div', { class:'notice' }, h('b', { text:'Family code: ' }), (familyCode() && familyCode() !== 'LOCAL') ? familyCode() : 'not set (this device only)', ' ',
         h('button', { class:'linkbtn', type:'button', onclick:() => { setFamily(''); location.reload(); } }, 'Change')),
+      (() => { const lg = (() => { try { return JSON.parse(localStorage.getItem(KEY + '-synclog') || 'null'); } catch (e) { return null; } })();
+        const unsent = (S.upd || 0) > getBase();
+        const t = lg ? new Date(lg.at).toLocaleString('en-GB', { weekday:'short', hour:'2-digit', minute:'2-digit' }) : 'never';
+        const msg = h('span', { class:'small', text: unsent ? '⚠️ This device has progress not yet saved to the family. ' : '✅ Everything on this device is saved to the family. ' });
+        return h('div', { class:'notice' }, msg, h('span', { class:'small muted', text:'Last contact: ' + t + (lg && !lg.ok ? ' (failed)' : '') + '. ' }),
+          h('button', { class:'linkbtn', type:'button', onclick:async () => { toast('Syncing…'); await pull(false); grownups(); toast((S.upd || 0) > getBase() ? 'Still not saved: check the internet connection' : 'Saved to the family ✓'); } }, 'Sync now')); })(),
       h('div', { class:'row' }, pinIn, h('button', { class:'btn small', type:'button', onclick:() => { if (pinIn.value.trim()){ S.pin = pinIn.value.trim(); save(); toast('PIN saved'); grownups(); } } }, 'Set PIN'), S.pin ? h('button', { class:'linkbtn', type:'button', onclick:() => { S.pin = ''; save(); grownups(); } }, 'Remove') : null),
       h('p', { class:'small muted', text:'The PIN keeps ' + S.name + ' out of Grown-ups (including restart). It is a child-lock, not real security.' }),
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => { code.value = exportCode(); code.select(); } }, 'Show backup code'), h('button', { class:'btn alt small', type:'button', onclick:() => { if (!code.value) code.value = exportCode(); copyText(code); } }, 'Copy'),
