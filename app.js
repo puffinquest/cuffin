@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "3d4a3a38e5";
+const APPV = "0128c67b86";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -2570,6 +2570,13 @@ function pieGame(){
     start = null; launch(Math.max(10, Math.min(r.width - 10, tx)), Math.max(10, ty));
   });
   arena.addEventListener('pointercancel', () => { start = null; });
+  /* stop iPhone treating a flick as "scroll the page" */
+  const stopScroll = ev => { if (ev.cancelable) ev.preventDefault(); };
+  arena.addEventListener('touchstart', stopScroll, { passive:false });
+  arena.addEventListener('touchmove', stopScroll, { passive:false });
+  document.documentElement.classList.add('noscroll');
+  const unlock = () => document.documentElement.classList.remove('noscroll');
+  setTimeout(() => { const t = setInterval(() => { if (!arena.isConnected){ unlock(); clearInterval(t); } }, 500); }, 0);
   function finish(){
     if (over) return; over = true; cancelAnimationFrame(raf); raceFix(); save();
     const nb = checkBadges(); if (nb.length) save();

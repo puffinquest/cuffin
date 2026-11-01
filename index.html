@@ -578,7 +578,7 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .sayopt.sel{border-color:var(--sim);background:var(--surface-2);box-shadow:0 0 0 3px var(--sim) inset}
 .sayopt .t{display:flex !important;flex-direction:row !important;align-items:center;gap:8px} .sayopt .t svg{width:22px;height:22px}
 .sayans{display:flex;flex-direction:column;gap:3px} .saynow{font-weight:800;border-radius:10px;background:var(--gold-soft);border:2px solid var(--gold);padding:5px 9px}
-.arena{position:relative;flex:1;min-height:0;border-radius:22px;overflow:hidden;background:linear-gradient(#9FD3FF,#D9F0FF 60%,#7BC47F 60%,#5DAA62);touch-action:manipulation;cursor:crosshair;user-select:none;-webkit-user-select:none}
+.arena{position:relative;flex:1;min-height:0;border-radius:22px;overflow:hidden;background:linear-gradient(#9FD3FF,#D9F0FF 60%,#7BC47F 60%,#5DAA62);touch-action:none;overscroll-behavior:none;cursor:crosshair;user-select:none;-webkit-user-select:none}
 .mbox{position:absolute;top:28%;transform:translateX(-50%);width:clamp(90px,26vw,130px)} .mbox.duck{transform:translateX(-50%) translateY(38%) scale(.75)}
 .piemirror{width:100%;height:auto;display:block;filter:drop-shadow(0 6px 4px rgba(0,0,0,.25))}
 .splats{position:absolute;inset:0;pointer-events:none} .splat{position:absolute;width:44%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at 40% 40%,#FFF4B0,#FFD23F 45%,#F2B705 70%,transparent 72%);filter:drop-shadow(0 2px 1px rgba(0,0,0,.2))}
@@ -603,6 +603,7 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .piebub.hit{border-color:#F2B705;background:#FFF4CF}
 .pieres{display:flex;flex-direction:column;gap:10px;flex:1;align-items:stretch;text-align:center} .piebig{font:400 3rem/1 var(--font-display);color:var(--team)}
 button.cpots{font:inherit;color:inherit;cursor:pointer}
+html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-action:none;position:fixed;inset:0;width:100%}
 </style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -644,5 +645,5 @@ button.cpots{font:inherit;color:inherit;cursor:pointer}
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=3d4a3a38e5"></script>
+<script src="app.js?v=0128c67b86"></script>
 </body></html>
