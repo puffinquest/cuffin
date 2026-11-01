@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "6cfb3e12c5";
+const APPV = "9bd2d5f3a9";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -1805,7 +1805,7 @@ function question(){
       R.keys = e => { const i = '1234'.indexOf(e.key); if (i > -1 && rows[i] && !rows[i].b.disabled) rows[i].b.click(); };
     }
     function pick(n, P, wd, btn, rows){
-      if (rows[0].b.disabled || Date.now() < lockUntil) return;
+      if (rows.answered || Date.now() < lockUntil) return;   // answered already (a caught, greyed-out option doesn't count)
       const other = P.role === 'opp' ? c.s : c.p;
       if (mode !== 'reverse' && wd === other && wd !== P.right && !g['warn' + n]){   // he picked the SIMILAR word on an OPPOSITE question (or the other way round): catch it
         g['warn' + n] = true; btn.disabled = true; btn.classList.add('gone'); SND.fx('whistle');
@@ -1816,6 +1816,7 @@ function question(){
         return;
       }
       const right = P.right, ok = wd === right;
+      rows.answered = true;
       if (n === 1) firstRight = right;
       if (P.role === 'sim'){ g.ps = wd; g.s = ok; } else { g.po = wd; g.o = ok; }
       if (ok){ S.points += 1; R.points += 1; fishN++; }
