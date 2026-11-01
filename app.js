@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "721085228d";
+const APPV = "0c0c18be85";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -536,7 +536,7 @@ function fresh(){
     prog:{}, points:0, fishV:1, history:[], rounds:[], badges:{}, prizes:[], pin:'', last:'', demo:false,
     race:{ mf:0, mm:0, ms:0 }, custard:0, book:{ list:[], next:[] }, intro:false, leader:null, lastVisit:null, upd:0, mv:2,
     settings:{ hints:true, sound:true, music:true, cvoice:true, mvoice:true, readout:true }, epoch:0, freeze:[], goal:'', freezeAsk:'',
-    stats:{ answered:0, right:0, spell:0, fixed:0, best:0, rounds:0, perfect:0 } };
+    stats:{ answered:0, right:0, spell:0, fixed:0, best:0, rounds:0, perfect:0, splats:0, pies:0, stories:0, early:0, owl:0, cwon:0 } };
 }
 const isBlank = o => !o || ((!o.stats || !o.stats.answered) && !(o.history && o.history.length));
 /* restoring = keep the old progress (a backup code, a save point, the archive); otherwise a pre-race save starts the race from scratch */
@@ -881,7 +881,51 @@ const BADGES = [
   { id:'d7',     n:'Perfect Week',    d:'Play 7 days in a row.',                      ic:'trophy', t:c => c.days >= 7 },
   { id:'r10',    n:'Regular',         d:'Finish 10 rounds.',                          ic:'flame',  t:c => c.S.stats.rounds >= 10 },
   { id:'cust5',  n:'Custard Collector', d:'Win 5 pots of custard.',             ic:'custard', t:c => (c.S.custard || 0) >= 5 },
-  { id:'leader', n:'Crowned',         d:'Beat the Mirror and become Leader.',         ic:'crown',  t:c => !!c.S.leader }
+  { id:'leader', n:'Crowned',         d:'Beat the Mirror and become Leader.',         ic:'crown',  t:c => !!c.S.leader },
+  /* more to chase */
+  { id:'m25',  n:'Quarter Century', d:'Master 25 words.', em:'🎯', t:c => c.m >= 25 },
+  { id:'m50',  n:'Half a Hundred', d:'Master 50 words.', em:'🥈', t:c => c.m >= 50 },
+  { id:'m75',  n:'Word Wizard', d:'Master 75 words.', em:'🧙', t:c => c.m >= 75 },
+  { id:'m100', n:'The Ton', d:'Master 100 words.', em:'💯', t:c => c.m >= 100 },
+  { id:'m150', n:'Word Hoarder', d:'Master 150 words.', em:'🐉', t:c => c.m >= 150 },
+  { id:'m200', n:'Dictionary Puffin', d:'Master 200 words.', em:'📚', t:c => c.m >= 200 },
+  { id:'mall', n:'Every Last Word', d:'Master every word in the bank.', em:'🌟', t:c => c.total > 0 && c.m >= c.total },
+  { id:'d5',   n:'Five-Day Flap', d:'Play 5 days in a row.', em:'🗓️', t:c => c.days >= 5 },
+  { id:'d14',  n:'Fortnight Flyer', d:'Play 14 days in a row.', em:'🛫', t:c => c.days >= 14 },
+  { id:'d21',  n:'Three-Week Wonder', d:'Play 21 days in a row.', em:'🎆', t:c => c.days >= 21 },
+  { id:'d30',  n:'Month of Mastery', d:'Play 30 days in a row.', em:'🏰', t:c => c.days >= 30 },
+  { id:'f100', n:'Fish Supper', d:'Win 100 fresh fish.', em:'🍟', t:c => c.S.points >= 100 },
+  { id:'f250', n:'Trawler', d:'Win 250 fresh fish.', em:'🚢', t:c => c.S.points >= 250 },
+  { id:'f500', n:'Fish Mountain', d:'Win 500 fresh fish.', em:'⛰️', t:c => c.S.points >= 500 },
+  { id:'f1000',n:'Ocean Emptier', d:'Win 1,000 fresh fish.', em:'🌊', t:c => c.S.points >= 1000 },
+  { id:'clear20', n:'Over the Horizon', d:'Get 20 fish ahead of the Mirror.', em:'🔭', t:c => c.S.points - c.S.race.mf >= 20 },
+  { id:'s15',  n:'On Fire', d:'15 right in a row.', em:'🔥', t:c => c.S.stats.best >= 15 },
+  { id:'s20',  n:'Untouchable', d:'20 right in a row.', em:'⚡', t:c => c.S.stats.best >= 20 },
+  { id:'r25',  n:'Season Ticket', d:'Finish 25 matches.', em:'🎟️', t:c => c.S.stats.rounds >= 25 },
+  { id:'r50',  n:'Club Legend', d:'Finish 50 matches.', em:'🏟️', t:c => c.S.stats.rounds >= 50 },
+  { id:'r100', n:'Centurion', d:'Finish 100 matches.', em:'🛡️', t:c => c.S.stats.rounds >= 100 },
+  { id:'perf3',n:'Hat-trick', d:'3 perfect matches.', em:'🎩', t:c => c.S.stats.perfect >= 3 },
+  { id:'perf10',n:'Flawless', d:'10 perfect matches.', em:'💎', t:c => c.S.stats.perfect >= 10 },
+  { id:'fix20',n:'Never Give Up', d:'Fix 20 tricky words.', em:'🧗', t:c => c.S.stats.fixed >= 20 },
+  { id:'spell25',n:'Spelling Bee', d:'Spell or unscramble 25 words.', em:'🐝', t:c => c.S.stats.spell >= 25 },
+  { id:'spell50',n:'Spelling Champion', d:'Spell or unscramble 50 words.', em:'🏅', t:c => c.S.stats.spell >= 50 },
+  { id:'cw10', n:'Custard Connoisseur', d:'Win 10 pots of custard (ever).', em:'🍮', t:c => (c.S.stats.cwon || 0) >= 10 },
+  { id:'cw25', n:'Custard Factory', d:'Win 25 pots of custard (ever).', em:'🏭', t:c => (c.S.stats.cwon || 0) >= 25 },
+  { id:'splat1', n:'First Splat', d:'Hit the Mirror with a custard pie.', em:'🥧', t:c => (c.S.stats.splats || 0) >= 1 },
+  { id:'splat10', n:'Pie Sniper', d:'Hit the Mirror with 10 custard pies.', em:'🎯', t:c => (c.S.stats.splats || 0) >= 10 },
+  { id:'splat50', n:'Custard Commander', d:'Hit the Mirror with 50 custard pies.', em:'🫡', t:c => (c.S.stats.splats || 0) >= 50 },
+  { id:'story1', n:'Bookworm', d:'Read a Cuffin story.', em:'📖', t:c => (c.S.stats.stories || 0) >= 1 },
+  { id:'story10', n:'Story Collector', d:'Read 10 Cuffin stories.', em:'📚', t:c => (c.S.stats.stories || 0) >= 10 },
+  { id:'say10', n:'Smooth Talker', d:'Pick the right way to say 10 words.', em:'🗣️', t:c => ((c.S.tstat || {}).say || [0])[0] >= 10 },
+  { id:'say40', n:'Golden Voice', d:'Pick the right way to say 40 words.', em:'🎤', t:c => ((c.S.tstat || {}).say || [0])[0] >= 40 },
+  { id:'pre10', n:'Word Builder', d:'Pick the right start 10 times.', em:'🧱', t:c => ((c.S.tstat || {}).pre || [0])[0] >= 10 },
+  { id:'hear10', n:'Sharp Ears', d:'Listen and spell 10 words.', em:'👂', t:c => ((c.S.tstat || {}).hear || [0])[0] >= 10 },
+  { id:'pinky10', n:'Pinky Pro', d:'Make 10 pinky promises.', em:'🤙', t:c => ((c.S.book || {}).list || []).filter(e => e.pinky).length >= 10 },
+  { id:'book10', n:'Book Keeper', d:'Get 10 words right at the book check.', em:'📓', t:c => ((c.S.book || {}).list || []).filter(e => e.ok).length >= 10 },
+  { id:'cards10', n:'Card Shark', d:'Master 10 similar & opposite cards.', em:'🃏', t:c => CARD_ITEMS.filter(isMastered).length >= 10 },
+  { id:'school1', n:'Top of the Class', d:'Master one of this week’s school words.', em:'🏫', t:c => ((c.S.school || {}).list || []).some(k => { const x = allItems().find(y => norm(y.w) === k); return x && isMastered(x); }) },
+  { id:'early', n:'Early Bird', d:'Finish a match before 8am.', em:'🐦', t:c => (c.S.stats.early || 0) >= 1 },
+  { id:'owl', n:'Night Owl', d:'Finish a match after 7pm.', em:'🦉', t:c => (c.S.stats.owl || 0) >= 1 }
 ];
 function checkBadges(){
   const ctx = { S, m:masteredCount(), days:dayStreak(), total:allItems().length }, got = [];
@@ -949,7 +993,7 @@ function startRound2(kind){
   if (Math.random() < .5) setTimeout(() => VOICE.play('c04'), 600);
   question();
 }
-const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell it', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite', hear:'Listen and spell', pre:'Pick the right start' };
+const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell it', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite', hear:'Listen and spell', pre:'Pick the right start', say:'How do you say it?' };
 /* ---------- word-building: prefixes ("not" words and friends) ---------- */
 const PREFIX_WORDS = { illegible:'il', illogical:'il', immortal:'im', impolite:'im', impure:'im', impatient:'im', improper:'im', inadequate:'in', incorrect:'in', indirect:'in', informal:'in', inoffensive:'in', inaccurate:'in', incapable:'in', invalid:'in', irreparable:'ir', irrational:'ir', irresistible:'ir', irresponsible:'ir',
   disadvantage:'dis', disappear:'dis', disappointed:'dis', disbelief:'dis', disconnect:'dis', dishonest:'dis', mishear:'mis', misinform:'mis', misjudge:'mis', mispronounced:'mis',
@@ -966,6 +1010,7 @@ function typesFor(x){
   if (gapFor(x) && (x.card || S.words.length >= 4)) t.push('gap');
   if (!x.card && canHear()) t.push('hear');
   if (prefixOf(x)) t.push('pre');
+  if (canHear() && pronOptions(x.w)) t.push('say');
   return t;
 }
 function pickType(item){
@@ -975,7 +1020,7 @@ function pickType(item){
   if (r && x.card && r.streak >= 2 && !(r.ty || []).includes('sim')) return 'sim';   // steer cards towards the similar & opposite test
   if (!hasMeaning(x)){ const ts = typesFor(x), notYet = ts.filter(t => !((r && r.ty) || []).includes(t)); return notYet.length ? notYet[0] : ts[rnd(ts.length)]; }
   if (!r || !r.seen) return x.card ? (Math.random() < .65 ? 'sim' : 'w2m') : (S.words.length >= 4 ? (Math.random() < .5 ? 'w2m' : 'm2w') : 'spell');
-  const base = { sim:4, w2m:2, m2w:2, spell:2, scram:2, gap:2.5, hear:1.6, pre:3 };
+  const base = { sim:4, w2m:2, m2w:2, spell:2, scram:2, gap:2.5, hear:1.6, pre:3, say:2.2 };
   const ts = typesFor(x), ws = ts.map(t => base[t] * ((r.streak > 0 && (r.ty || []).includes(t)) ? .35 : 1) * (t === item.lastType ? .2 : 1));
   let p = Math.random() * ws.reduce((a, b) => a + b, 0), i = 0;
   while (i < ts.length - 1 && p >= ws[i]){ p -= ws[i]; i++; }
@@ -999,6 +1044,8 @@ function makeQuestion(item){
     if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y) && y.w[0].toLowerCase() !== x.w[0].toLowerCase()) d.push(y);
     if (d.length < 3) for (const y of shuffle(others)) if (d.length < 3 && !d.includes(y)) d.push(y);
     q.options = shuffle([{ t:x.w, ok:true }, ...d.map(y => ({ t:y.w, ok:false }))]);
+  } else if (type === 'say'){
+    q.options = shuffle([{ t:x.w, ok:true, sp:x.w, j:'' }].concat(pronOptions(x.w).map(p => ({ t:p[1], ok:false, sp:p[0], j:p[2] }))));
   } else if (type === 'pre'){
     const p = prefixOf(x), stem = x.w.slice(p.length), fam = ['il', 'im', 'in', 'ir', 'un'].includes(p) ? ['il', 'im', 'in', 'ir', 'un'] : ['re', 'dis', 'mis', 'anti', 'auto', 'un'];
     const REAL = new Set(['inpatient', 'disappear', 'reappear', 'rehear', 'reappointed', 'disarrange', 'unfreeze', 'refreeze', 'dissocial', 'reinform', 'discover', 'recover', 'unappear', 'disconnect', 'reconnect', 'misplace', 'replace', 'disapply', 'reform', 'inform', 'unarrange']);
@@ -1022,7 +1069,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
   if (ok){
     S.stats.right++; if (spellish) S.stats.spell++;
     R.streak++; R.best = Math.max(R.best, R.streak); S.stats.best = Math.max(S.stats.best, R.streak);
-    if (R.streak % 5 === 0){ S.custard = (S.custard || 0) + 1; R.custard = (R.custard || 0) + 1; custard = true; }
+    if (R.streak % 5 === 0){ S.stats.cwon = (S.stats.cwon || 0) + 1; S.custard = (S.custard || 0) + 1; R.custard = (R.custard || 0) + 1; custard = true; }
     if (!item.retry && !hinted) R.firstTry++; else { r.fixed++; R.fixed++; S.stats.fixed++; }
     if (hinted){ pts = 1; r.hint = (r.hint || 0) + 1; line = say('hinted'); lock = 'hint'; }
     else {
@@ -1568,6 +1615,15 @@ function question(){
     R.keys = e => { if (e.key === 'Enter' && document.activeElement !== nb) nb.click(); };
   }
   /* "I'm stuck": counts as a miss, shows the answer, then on to the book */
+  /* a big unmissable OPPOSITE warning before every opposite question */
+  function oppFlash(w, rev){
+    const ov = h('div', { class:'oppflash', role:'alert', onclick:() => ov.remove() },
+      h('div', { class:'ofin' }, h('div', { class:'ofarrows', 'aria-hidden':'true', text:'⬅️ ↔️ ➡️' }), h('div', { class:'oftitle', text:'OPPOSITE!' }),
+        h('div', { class:'ofsub' }, rev ? 'Find the card word that means the OPPOSITE of ' : 'Find the word that means the OPPOSITE of ', h('b', { text:w }))));
+    document.body.append(ov);
+    if (S.settings.sound) sayWord('Opposite!');
+    setTimeout(() => ov.remove(), 1500);
+  }
   function stuckBtn(fn){ return h('button', { class:'stuck', type:'button', onclick:() => { if (done) return; SND.fx('page'); fn(); } }, '🤷 I’m stuck, show me'); }
   function finalize(ok, mir, answer){
     if (done) return; done = true;
@@ -1596,6 +1652,27 @@ function question(){
     const clueBox = h('div', { class:'clue', hidden:true, 'aria-live':'polite' });
     const clue = sent ? hintBtn('Clue: see it in a sentence', () => { put(clueBox, h('span', { class:'em', 'aria-hidden':'true', text:'💡' }), h('span', {}, sent.before, h('b', { text:sent.word }), sent.after)); clueBox.hidden = false; }) : null;
     return [clueBox, h('div', { class:'answers' }, btns), h('div', { class:'row hintrow' }, clue, hintBtn('Knock one out', () => { const wr = btns.filter((b, j) => !q.options[j].ok && !b.disabled); const b = wr[rnd(wr.length)]; if (b){ b.disabled = true; b.classList.add('gone'); } }))];
+  }
+  /* "How do you say it?": three spoken versions, one right; tap to hear, then pick */
+  function sayQ(){
+    let sel = null; const L = 'ABC';
+    const go = h('button', { class:'btn wide', type:'button', disabled:true, onclick:() => {
+      if (done || sel == null) return;
+      const o = q.options[sel], ri = q.options.findIndex(x => x.ok);
+      btns.forEach((b, j) => { b.disabled = true; if (q.options[j].ok) b.classList.add('correct'); });
+      if (!o.ok) btns[sel].classList.add('wrong');
+      const mir = mirrorTurn(okM => okM ? 'Version ' + L[ri] : 'Version ' + L[q.options.findIndex(x => !x.ok)]);
+      setTimeout(() => sayWord(q.w.w), 600);
+      finalize(o.ok, mir, h('div', { class:'sayans' },
+        h('div', { class:'wordrow' }, h('span', { text:'Say it like this: ' }), h('b', { text:q.w.w }), speakBtn(q.w.w)),
+        q.options.filter(x => !x.ok).map(x => h('p', { class:'small' }, '❌ “' + x.t + '”' + (x.j ? ' · ' + x.j : ''))),
+        h('p', { class:'saynow' }, '🗣️ Now you say it out loud: ', h('b', { text:q.w.w }))));
+    } }, 'Check');
+    const btns = q.options.map((o, i) => h('button', { class:'ans sayopt', type:'button', onclick:() => {
+      if (done) return; sayWord(String(o.sp).toLowerCase()); sel = i; btns.forEach((b, j) => b.classList.toggle('sel', j === i)); go.disabled = false; } },
+      h('span', { class:'l', text:L[i] }), h('span', { class:'t' }, icon('sound'), ' Hear version ' + L[i]), h('span', { class:'mk' })));
+    R.keys = e => { const i = '123'.indexOf(e.key); if (i > -1 && btns[i] && !btns[i].disabled) btns[i].click(); if (e.key === 'Enter') go.click(); };
+    return [h('div', { class:'answers' }, btns), h('p', { class:'small muted', text:'Tap each one to hear it. Pick the one that sounds right, then Check.' }), go];
   }
   function spellQ(){
     const input = h('input', { id:'spellin', type:'text', autocomplete:'off', autocapitalize:'none', autocorrect:'off', spellcheck:'false', 'aria-label':'Type the word' });
@@ -1681,15 +1758,19 @@ function question(){
         bk ? h('div', { class:'book slim' }, h('div', { class:'bk' }, h('span', { 'aria-hidden':'true', text:'📓' }), 'WRITE ' + c.w.toUpperCase() + ' AND ITS MEANING IN YOUR VOCABULARY BOOK')) : null, h('div', { class:'grow' }), go);
       R.keys = null;
     }
+    /* the meaning shows in a fixed box under the choices, so nothing moves and his next tap lands where he aims */
+    let peekBox = null, lockUntil = 0;
     function optRow(wd, i, onPick){
-      const x = info(wd), mean = h('small', { text:x.m || 'No meaning on file.', hidden:true });
-      const b = h('button', { class:'ans', type:'button', 'data-t':wd, onclick:() => onPick(wd, b) }, h('span', { class:'l', text:'ABCD'[i] }), h('span', { class:'t' }, h('span', { text:wd }), mean), h('span', { class:'mk' }));
+      const x = info(wd);
+      const b = h('button', { class:'ans', type:'button', 'data-t':wd, onclick:() => onPick(wd, b) }, h('span', { class:'l', text:'ABCD'[i] }), h('span', { class:'t' }, h('span', { text:wd })), h('span', { class:'mk' }));
       if (!hintsOn) return { row:b, b };
       const ib = h('button', { class:'peek', type:'button', 'aria-pressed':'false', 'aria-label':'Peek: what does ' + wd + ' mean?', title:'What does ' + wd + ' mean?', text:'i',
-        onclick:() => {
+        onclick:e => {
+          e.stopPropagation(); lockUntil = Date.now() + 450;   // ignore a stray second tap on the answers
           sayWord(wd);   // a word he doesn't know: say it aloud every time he taps
-          if (!mean.hidden) return;
-          mean.hidden = false; ib.setAttribute('aria-pressed', 'true'); ib.setAttribute('aria-label', 'Hear ' + wd + ' again'); put(ib, icon('sound'));
+          if (peekBox){ put(peekBox, h('b', { text:wd + ': ' }), x.m || 'No meaning on file.'); peekBox.classList.add('on'); }
+          if (ib.getAttribute('aria-pressed') === 'true') return;
+          ib.setAttribute('aria-pressed', 'true'); ib.setAttribute('aria-label', 'Hear ' + wd + ' again'); put(ib, icon('sound'));
           if (!done){ hinted = true; SND.fx('peek'); } } });
       if (matchMedia('(hover:hover)').matches){ b.addEventListener('mouseenter', () => { if (ib.getAttribute('aria-pressed') !== 'true') b.title = x.m || ''; }); }
       return { row:h('div', { class:'orow' }, b, ib), b };
@@ -1708,17 +1789,27 @@ function question(){
       const P = part(n), opp = P.role === 'opp';
       setStrip(opp ? 'opp' : 'sim', 'PART ' + n + ' · ' + LBL[P.role] + (mode === 'reverse' ? ' · BACKWARDS' : ''));
       if (n === 2 || opp) SND.fx('flip');
+      peekBox = hintsOn ? h('div', { class:'peekbox', 'aria-live':'polite' }, n === 2 ? 'Only 3 choices this time. Tap i to hear a word and see what it means.' : 'Tap i to hear a word and see what it means. It doesn’t pick it.') : null;
       const rows = P.list.map((wd, i) => optRow(wd, i, (w, b) => pick(n, P, w, b, rows)));
+      if (opp) oppFlash(P.show, mode === 'reverse');
       put(body, track(n),
         h('div', { class:'banner big ' + (opp ? 's2' : 's1'), role:'status' }, h('span', { class:'em', 'aria-hidden':'true', text: opp ? '↔️' : '🟰' }),
           h('div', { class:'bt' }, h('b', { text: opp ? 'OPPOSITE' : 'SIMILAR' }),
             h('span', { text: (mode === 'reverse' ? 'Which card word means ' : 'Which word means ') + (opp ? 'the OPPOSITE of…' : 'the SAME as…') }))),
-        word(P.show), h('div', { class:'answers ' + (opp ? 's2' : 's1') }, rows.map(r => r.row)),
-        hintsOn ? h('p', { class:'small muted', text: n === 2 ? 'Only 3 choices this time. Tap i to hear and peek.' : 'Tap i to hear a word and see what it means. It doesn’t pick it.' }) : null);
+        word(P.show), h('div', { class:'answers ' + (opp ? 's2 hazard' : 's1') }, rows.map(r => r.row)), peekBox);
       R.keys = e => { const i = '1234'.indexOf(e.key); if (i > -1 && rows[i] && !rows[i].b.disabled) rows[i].b.click(); };
     }
     function pick(n, P, wd, btn, rows){
-      if (rows[0].b.disabled) return;
+      if (rows[0].b.disabled || Date.now() < lockUntil) return;
+      const other = P.role === 'opp' ? c.s : c.p;
+      if (mode !== 'reverse' && wd === other && wd !== P.right && !g['warn' + n]){   // he picked the SIMILAR word on an OPPOSITE question (or the other way round): catch it
+        g['warn' + n] = true; btn.disabled = true; btn.classList.add('gone'); SND.fx('whistle');
+        const want = P.role === 'opp' ? 'OPPOSITE' : 'SIMILAR', got = P.role === 'opp' ? 'SIMILAR' : 'OPPOSITE';
+        openSheet([h('div', { class:'say' }, cimg(IMG.ask, '', 52, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx' }, 'Careful! ', h('b', { text:wd }), ' is the ' + got + ' word. This one wants the ', h('b', { text:want }), '. Have another go.'))),
+          h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); closeSheet(); } }, 'Try again ' + (P.role === 'opp' ? '↔️' : '🟰'))], true);
+        if (S.settings.sound) sayWord('Careful! That is the ' + got.toLowerCase() + ' word. Find the ' + want.toLowerCase() + '.');
+        return;
+      }
       const right = P.right, ok = wd === right;
       if (n === 1) firstRight = right;
       if (P.role === 'sim'){ g.ps = wd; g.s = ok; } else { g.po = wd; g.o = ok; }
@@ -1778,9 +1869,10 @@ function question(){
       : q.type === 'scram' && !meanOf() ? [h('p', { class:'muted', text:'Unscramble the word you hear.' }), h('button', { class:'btn alt hearbtn', type:'button', onclick:() => sayWord(q.w.w) }, icon('sound'), 'Hear the word')]
       : q.type === 'scram' ? [h('p', { class:'muted', text:'Unscramble the word that means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
       : q.type === 'hear' ? [h('p', { class:'muted', text:'Listen, then spell the word you hear.' }), h('button', { class:'btn alt hearbtn', type:'button', onclick:() => sayWord(q.w.w) }, icon('sound'), 'Hear it again')]
+      : q.type === 'say' ? [h('p', { class:'muted', text:'How do you say this word?' }), h('div', { class:'word', text:q.w.w })]
       : q.type === 'pre' ? [h('p', { class:'muted', text:'Pick the right start. Which word means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
       : [h('p', { class:'muted', text:'Spell the word that means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })];
-    const kids = q.type === 'spell' || q.type === 'hear' ? spellQ() : q.type === 'scram' ? scramQ() : choiceQ();
+    const kids = q.type === 'say' ? sayQ() : q.type === 'spell' || q.type === 'hear' ? spellQ() : q.type === 'scram' ? scramQ() : choiceQ();
     if ((q.type === 'hear' || (q.type === 'scram' && !meanOf())) && S.settings.sound) sayWord(q.w.w);   // said straight away (inside the tap, so iPhone allows it)
     put(body, cue(lead), top, kids);
     if (q.type === 'pre' && !S.seenPre){ S.seenPre = true; save(); setTimeout(prefixLesson, 120); }
@@ -1831,7 +1923,7 @@ function finishRound(){
   else if (R.firstTry >= R.total){ const over = (S.points - S.race.mf) - Math.round(leadTarget()), room = R.points - 1 - R.mfish; if (over > 0 && room > 0){ const t = Math.min(over, room); R.mfish += t; S.race.mf += t; } }   // perfect round, already well clear: he still wins it, but the lead grows slowly
   raceFix();
   const stars = acc >= 1 ? 3 : acc >= .8 ? 2 : acc >= .5 ? 1 : 0;
-  S.stats.rounds++;
+  S.stats.rounds++; { const hr = new Date().getHours(); if (hr < 8) S.stats.early = (S.stats.early || 0) + 1; if (hr >= 19) S.stats.owl = (S.stats.owl || 0) + 1; }
   roundRec(true);
   S.last = today(); snapshot();
   const crowned = !S.leader && allDone() && S.points > S.race.mf;
@@ -2156,7 +2248,7 @@ function matchCelebrations(round, badges){
   if (round.rank0 != null && ri.i > round.rank0) list.push({ kicker:'NEW TROPHY', art:h('div', { class:'celtro' }, trophyEl(ri.i, true)), title:TROPHY_NAMES[ri.i] + '!', sub:'You are now ' + ri.cur.name + '. ' + m + ' words mastered.', voice:VOICE.pick('c15'), tune:'win', line:VOICE.can('c15') ? VO.c15 : 'A new trophy. I would like that noted.' });
   for (const b of badges){
     const pw = b.id === 'd7', v = pw ? VOICE.pick('c31') : VOICE.pick('c27');
-    list.push({ kicker:pw ? 'PERFECT WEEK' : 'NEW BADGE', art:h('div', { class:'celbadge' }, icon(b.ic)), title:b.n, sub:b.d, voice:v, line:v ? VO[v] : 'A badge. The puffin community does not hand these out lightly.' });
+    list.push({ kicker:pw ? 'PERFECT WEEK' : 'NEW BADGE', art:h('div', { class:'celbadge' }, b.em ? h('span', { class:'bem big', text:b.em }) : icon(b.ic)), title:b.n, sub:b.d, voice:v, line:v ? VO[v] : 'A badge. The puffin community does not hand these out lightly.' });
   }
   if (S.goal !== today() && todayCount() >= GOAL){
     S.goal = today(); save();
@@ -2175,7 +2267,7 @@ function streakRow(){
   return h('div', { class:'streakrow' },
     h('div', { class:'flame' + (st ? '' : ' out') + (S.history.some(x => x.d === today()) ? '' : ' cold'), title:'Days in a row' }, h('span', { 'aria-hidden':'true', text:'🔥' }), h('b', { text:String(st) }), h('span', { class:'small', text:st === 1 ? 'day' : 'days' })),
     h('div', { class:'goal' + (done ? ' done' : ''), title:'Daily goal' }, h('div', { class:'gwrap' }, ring, h('span', { class:'gtx', text: done ? '✓' : n + '' })), h('span', { class:'small', text: done ? 'Goal done!' : 'Goal: ' + GOAL + ' answers' })),
-    h('div', { class:'cpots', title:'Custard pots' }, h('span', { 'aria-hidden':'true', text:'🍮' }), h('b', { text:String(S.custard || 0) })));
+    h('button', { class:'cpots', type:'button', title:'Custard pots: tap to throw pies at the Mirror', 'aria-label':'Custard pots: ' + (S.custard || 0) + '. Tap to throw pies at the Mirror', onclick:() => { SND.fx('tap'); pieGame(); } }, h('span', { 'aria-hidden':'true', text: spareCustard() ? '🥧' : '🍮' }), h('b', { text:String(S.custard || 0) })));
 }
 
 /* reading the story aloud in the same British voice as the words */
@@ -2223,7 +2315,7 @@ function narrateLines(lines, delay){
 }
 
 /* ---------- Grown-ups → Insights: where Aaron is strong and where he struggles ---------- */
-const TYPE_NAMES = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spelling', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite', hear:'Listen and spell', pre:'Pick the right start' };
+const TYPE_NAMES = { say:'How do you say it?', w2m:'What does it mean?', m2w:'Name the word', spell:'Spelling', scram:'Unscramble', gap:'Fill the gap', sim:'Similar & opposite', hear:'Listen and spell', pre:'Pick the right start' };
 function ago(d){ const n = daysSince(d); return n >= 999 ? 'never' : n === 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago'; }
 function whenDue(r){ const dn = dueIn(r); if (dn == null) return ''; return dn < 0 ? 'review overdue' : dn === 0 ? 'review today' : dn === 1 ? 'review tomorrow' : 'review in ' + dn + ' days'; }
 function insightsPanel(){
@@ -2380,7 +2472,7 @@ function storyTime(done){
       h('p', { class:'muted', text:'In the story, what does “' + w + '” mean?' }), h('div', { class:'answers' }, btns), h('div', { class:'grow' }), nx);
   }
   function finish(){
-    stopNarr();
+    stopNarr(); S.stats.stories = (S.stats.stories || 0) + 1; save();
     put(body, h('div', { class:'storyhead' }, h('div', { class:'eyebrow', text:'📖 THE END' }), h('h2', { text:st.t })),
       sayBlock('com', words.length >= 2 ? (got === 2 ? 'Both right. A story-reading puffin. The community is impressed.' : got === 1 ? 'One out of two. Eventually still counts.' : 'Tricky ones. We will meet those words again.') : 'A good story. Mostly true. Partly custard.', IMG.right),
       words.length >= 2 ? h('p', { class:'line', text:'+' + got + ' 🐟 fresh fish from the story' }) : null,
@@ -2388,6 +2480,84 @@ function storyTime(done){
   }
   mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'STORY TIME' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' }, body))], null);
   read();
+}
+
+/* ---------- Pie the Mirror: spend spare custard pots on pies (2 pots always kept back for streak saving) ---------- */
+const PIE_HIT = ['My FEATHERS! I just had them polished!', 'This is custard abuse!', 'I am not crying. That is custard.', 'Mmm… actually, quite nice custard.', 'How DARE you! …Is there any more?', 'My reflection! It’s all yellow!', 'I demand a rematch! And a towel!', 'You’ll be hearing from my lawyer. He’s a crab.', 'Right in the beak!', 'That’s it. I’m telling Giles!', 'Custard in my EAR. Puffins have ears, you know.', 'I meant to do that. Custard is very fashionable.'];
+const PIE_MISS = ['Ha! Missed! Too fast, too fabulous!', 'Is that all you’ve got, custard boy?', 'Whoosh! Couldn’t touch me!', 'Nearly! Not really.', 'I’ve seen seagulls throw better.', 'Missed me! The puffin community saw that.'];
+const spareCustard = () => Math.max(0, (S.custard || 0) - 2);
+function pieGame(){
+  screen = 'pies'; SND.loop(false);
+  let pies = spareCustard() * 3, thrown = 0, hits = 0, x = 50, vx = 28, last = performance.now(), raf = 0, over = false, duck = 0;
+  const startPies = pies;
+  const left = h('b', { text:String(pies) }), score = h('b', { text:'0' });
+  const mirror = cimg(MIMG.smug, 'piemirror', 120, 'The Mirror');
+  const splats = h('div', { class:'splats' });
+  const mbox = h('div', { class:'mbox' }, mirror, splats);
+  const bubble = h('div', { class:'piebub', text:'Go on then. I bet you can’t hit me.' });
+  const arena = h('div', { class:'arena', role:'button', 'aria-label':'Tap to throw a custard pie at the Mirror' }, bubble, mbox, h('div', { class:'pietray', 'aria-hidden':'true', text:'🥧' }));
+  const endB = h('button', { class:'quit', type:'button', 'aria-label':'Stop and go home', onclick:() => finish() }, icon('x'), h('span', { text:'End' }));
+  function frame(t){
+    const dt = Math.min(.05, (t - last) / 1000); last = t;
+    x += vx * dt; if (x < 12){ x = 12; vx = Math.abs(vx); } if (x > 88){ x = 88; vx = -Math.abs(vx); }
+    if (Math.random() < dt * .7) vx = -vx;   // sudden change of direction
+    if (duck > 0) duck -= dt;
+    mbox.style.left = x + '%'; mbox.classList.toggle('duck', duck > 0);
+    if (!over) raf = requestAnimationFrame(frame);
+  }
+  function throwAt(ev){
+    if (over || pies <= 0) return;
+    const r = arena.getBoundingClientRect(), tx = (ev.clientX || r.left + r.width / 2) - r.left, ty = (ev.clientY || r.top + r.height / 2) - r.top;
+    pies--; thrown++; left.textContent = String(pies);
+    if (thrown % 3 === 1){ S.custard = Math.max(0, (S.custard || 0) - 1); save(); }   // every 3 pies uses up one pot
+    S.stats.pies = (S.stats.pies || 0) + 1;
+    const pie = h('div', { class:'pie', text:'🥧', style:'left:' + (r.width / 2) + 'px;top:' + (r.height - 30) + 'px' });
+    arena.append(pie); SND.fx('flip');
+    requestAnimationFrame(() => { pie.style.left = tx + 'px'; pie.style.top = ty + 'px'; pie.style.transform = 'translate(-50%,-50%) scale(.7) rotate(540deg)'; });
+    setTimeout(() => {
+      const m = mirror.getBoundingClientRect(), ax = tx + r.left, ay = ty + r.top;
+      const hit = duck <= 0 && ax > m.left - 12 && ax < m.right + 12 && ay > m.top - 12 && ay < m.bottom + 12;
+      pie.remove();
+      if (hit){
+        hits++; score.textContent = String(hits); S.stats.splats = (S.stats.splats || 0) + 1;
+        if (S.race.mf > 0) S.race.mf -= 1;   // a splat knocks a fish out of his flipper
+        const sp = h('i', { class:'splat', style:'left:' + Math.round(((ax - m.left) / m.width) * 100) + '%;top:' + Math.round(((ay - m.top) / m.height) * 100) + '%' });
+        splats.append(sp); if (splats.children.length > 6) splats.firstChild.remove();
+        put(bubble, pickOne(PIE_HIT) + '  (−1 🐟)'); bubble.classList.add('hit'); mirror.src = MIMG.sad;
+        SND.fx('custard'); vx = (vx > 0 ? 1 : -1) * Math.min(80, Math.abs(vx) + 6);   // he gets faster
+        if (Math.random() < .35) duck = .6;   // and starts ducking
+        setTimeout(() => { mirror.src = MIMG.smug; bubble.classList.remove('hit'); }, 900);
+        save();
+      } else {
+        const miss = h('div', { class:'pie miss', text:'🥧', style:'left:' + tx + 'px;top:' + ty + 'px' }); arena.append(miss); setTimeout(() => miss.remove(), 500);
+        put(bubble, pickOne(PIE_MISS)); SND.fx('wrong');
+      }
+      if (pies <= 0) setTimeout(finish, 900);
+    }, 380);
+  }
+  arena.addEventListener('pointerdown', throwAt);
+  function finish(){
+    if (over) return; over = true; cancelAnimationFrame(raf); raceFix(); save();
+    const nb = checkBadges(); if (nb.length) save();
+    const res = h('div', { class:'pieres' },
+      h('div', { class:'eyebrow', text:'SPLAT-O-METER' }), h('div', { class:'piebig', text:hits + ' / ' + thrown }),
+      h('p', { class:'line', text: hits === 0 ? (thrown ? 'Not one splat. The Mirror is unbearable now.' : 'No pies thrown. The Mirror looks relieved.') : 'The Mirror dropped ' + hits + ' fish and needs a very long bath.' }),
+      sayBlock('com', hits >= 5 ? 'Magnificent throwing. I would like that noted. In custard.' : hits ? 'Custard justice has been served.' : 'We will practise. Custard waits for no puffin.', IMG.right),
+      nb.length ? h('p', { class:'note' }, '🏅 New badge: ' + nb.map(b => b.n).join(', ')) : null,
+      h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); home(); } }, 'Back to the race'));
+    mount([h('div', { class:'qbar' }, h('span', { class:'qn', text:'PIE THE MIRROR' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' }, res))], null);
+    if (hits) SND.fx('cheer');
+  }
+  if (!startPies){
+    mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'PIE THE MIRROR' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' },
+      sayBlock('com', 'No spare custard yet. Win a pot with 5 right in a row. I always keep 2 pots back to save your streak.', IMG.ask),
+      h('p', { class:'line', text:'You have ' + (S.custard || 0) + ' pot' + ((S.custard || 0) === 1 ? '' : 's') + ' of custard. Pies start once you have 3 or more.' }),
+      h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => home() }, 'Back to the race')))], null);
+    return;
+  }
+  mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn' }, '🥧 ', left, ' · SPLATS ', score), h('div', { class:'tools' }, soundBtns())),
+    h('div', { class:'say' }, cimg(IMG.right, '', 44, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:'Custard. Not for eating. For justice. Tap where you want the pie to go!' }))), arena], null);
+  raf = requestAnimationFrame(frame);
 }
 
 /* ---------- Cuffin's word stories: short, silly, read aloud, each using a few of Aaron's words ---------- */
@@ -2484,6 +2654,181 @@ function pickStory(){
   return pool.slice().sort((a, b) => score(b) - score(a) || Math.random() - .5)[0];
 }
 
+/* ---------- "How do you say it?": the right way (the phone's own British voice) against silly wrong ways ----------
+   Each wrong version: [what the voice says, how it is written on screen, Cuffin's joke]. Words not listed get wrong versions made automatically. */
+const PRON = {
+  align:[['a lig nin', 'a-LIG-nin', 'That is a dinosaur sneezing.'], ['al gay jin', 'al-GAY-jin', 'There is no jin. The g is silent. Like the Mirror should be.']],
+  onomatopoeia:[['on oh mat oh POO ee ah', 'on-oh-mat-oh-POO-ee-a', 'Please do not put poo in it.'], ['oh no mat oh pie ya', 'oh-no-mat-oh-PIE-ya', 'Oh no, a mat, a pie? No.']],
+  personification:[['person if icky shun', 'person-if-ICKY-shun', 'Icky. Very icky.'], ['purse on if eye kay shun', 'PURSE-on-if-eye-kay-shun', 'A purse is for money, not for words.']],
+  alliteration:[['all it ray shun', 'ALL-it-ray-shun', 'Close, but the puffin community winced.'], ['alley tear ay shun', 'ALLEY-tear-ay-shun', 'An alley is a little street. Wrong street.']],
+  simile:[['smile', 'SMILE', 'A simile is not a smile. Though you may smile at one.'], ['sim isle', 'sim-ILE', 'It has three bits: SIM-i-lee.']],
+  metaphor:[['meta four', 'META-FOUR', 'Not a number. Not four of anything.'], ['me tay for', 'me-TAY-for', 'Me? Tay? For? No.']],
+  noun:[['noon', 'NOON', 'That is lunchtime.'], ['nown', 'NOWN', 'Rhymes with clown. A clown would say it like that.']],
+  adjective:[['add jet eve', 'add-JET-eve', 'There is no jet. Or Eve.'], ['adj eck tie vee', 'adj-ECK-tie-vee', 'A tie? On a word?']],
+  adverb:[['add verb', 'ADD-VERB-B', 'Right idea, but too robotic. Say it smoothly.'], ['ad vurb ee', 'ad-VURB-ee', 'Nobody says vurby.']],
+  nauseous:[['naw see oh us', 'naw-see-OH-us', 'That sounds like a Roman emperor.'], ['nouse ee us', 'NOUSE-ee-us', 'A nouse is not a thing. Neither is this.']],
+  colossal:[['coal oh sal', 'COAL-oh-sal', 'Coal is for fires. Wrong word.'], ['col oss al ee', 'col-oss-AL-ee', 'Too many bits.']],
+  adolescent:[['ad oh less kent', 'ad-oh-LESS-kent', 'The c is soft: ad-oh-LESS-ent.'], ['a doll a scent', 'a-DOLL-a-SCENT', 'A doll with perfume?']],
+  ascend:[['ass kend', 'ass-KEND', 'The c is silent: a-SEND.'], ['ay scend', 'AY-scend', 'Ay ay, captain. Still wrong.']],
+  discern:[['dis kern', 'dis-KERN', 'Kern is not a word. Di-SERN.'], ['dice urn', 'DICE-urn', 'Dice in an urn. A strange game.']],
+  helix:[['hell ix', 'HELL-ix', 'The e is long: HEE-lix.'], ['he licks', 'he-LICKS', 'He licks? Who licks? Stop licking.']],
+  mirage:[['my rage', 'MY-RAGE', 'That is the Mirror losing a contest.'], ['mire ah gee', 'MIRE-a-gee', 'Say it French-ish: mi-RAHZH.']],
+  myriad:[['my rad', 'MY-RAD', 'Radical, but wrong.'], ['mere ee ad', 'MERE-ee-ad', 'It starts like mirror: MIRR-ee-ad.']],
+  cautious:[['cow tee us', 'COW-tee-us', 'There are no cows in this word.'], ['caught eye us', 'caught-EYE-us', 'Say it like caught: CAW-shus.']],
+  banal:[['ban ull', 'BAN-ull', 'Close-ish. Say ba-NAHL.'], ['banana l', 'ba-NAN-al', 'Not a banana.']],
+  gaudy:[['gowdy', 'GOW-dee', 'Say it like "gaudy" rhymes with "bawdy": GAW-dee.'], ['gud ee', 'GUD-ee', 'Goody goody. No.']],
+  eccentric:[['ee sen trick', 'EE-sen-trick', 'It starts with ek: ek-SEN-trick.'], ['ess entric', 'ESS-entric', 'Missing a k sound.']],
+  maim:[['mime', 'MIME', 'A mime does silent acting. Very different.'], ['ma eem', 'ma-EEM', 'It rhymes with name.']],
+  revere:[['rev er', 'REV-er', 'It rhymes with near: ri-VEER.'], ['reverie', 'REV-er-ee', 'Too many syllables.']],
+  sincere:[['sin cheer', 'sin-CHEER', 'Cheering is nice, but it is sin-SEER.'], ['sinker', 'SINK-er', 'A sinker sinks. Wrong word.']],
+  supple:[['sup ull', 'SUP-ull', 'Close. Say SUP-ul, short and quick.'], ['soup ull', 'SOUP-ull', 'Soup? No soup. Just flexible.']],
+  turbulent:[['tur bull ant', 'tur-BULL-ant', 'A bull ant? Dangerous.'], ['turbo lent', 'TURBO-lent', 'Too fast.']],
+  ancestor:[['an kest or', 'an-KEST-or', 'The c is soft: AN-sess-tor.'], ['ann sister', 'ANN-sister', 'Ann is not your sister.']],
+  brazen:[['brazz en', 'BRAZZ-en', 'Long a: BRAY-zun.'], ['bra zeen', 'bra-ZEEN', 'No.']],
+  pristine:[['priss tyne', 'priss-TINE', 'It ends in teen: PRISS-teen.'], ['pry steen', 'PRY-steen', 'No prying.']],
+  coherent:[['co hair ent', 'co-HAIR-ent', 'No hair involved. Co-HEER-ent.'], ['cow her ent', 'COW-her-ent', 'More cows. Stop it.']],
+  feud:[['fed', 'FED', 'It sounds like few-d: FYOOD.'], ['foo ed', 'FOO-ed', 'Foo? No.']],
+  sullen:[['sue len', 'SUE-len', 'Short u: SULL-en.'], ['sell un', 'SELL-un', 'Nothing for sale.']],
+  entice:[['en tiss', 'en-TISS', 'Long i: en-TICE, like ice.'], ['ant ice', 'ANT-ice', 'An ant on ice. Cold ant.']],
+  tantalising:[['tan tall is ing', 'tan-TALL-is-ing', 'Say TAN-ta-lie-zing.'], ['tant a liss ing', 'tant-a-LISS-ing', 'The i is long: lie.']],
+  fragrant:[['frag rant', 'FRAG-rant', 'Long a: FRAY-grunt.'], ['fridge rant', 'FRIDGE-rant', 'A fridge having a rant. Quite funny.']],
+  routine:[['row tine', 'ROW-tine', 'It ends in teen: roo-TEEN.'], ['rout in', 'ROUT-in', 'Say roo-TEEN.']],
+  thwart:[['thuh wart', 'thuh-WART', 'One quick sound: THWORT.'], ['th wart ee', 'th-WART-ee', 'A warty thing. Yuck.']],
+  serene:[['sereen ee', 'se-REEN-ee', 'No extra ee: se-REEN.'], ['sir en', 'SIR-en', 'That is a siren, nee-naw.']],
+  unkempt:[['un kemped', 'un-KEMP-ed', 'Just un-KEMPT.'], ['unk empty', 'UNK-empty', 'Empty? No.']],
+  glisten:[['gliss ten', 'gliss-TEN', 'The t is silent: GLISS-en.'], ['glister', 'GLIST-er', 'Close, but no.']],
+  hasten:[['has ten', 'has-TEN', 'The t is silent: HAY-sen.'], ['haste en', 'HASTE-en', 'Long a, silent t.']],
+  harass:[['hair ass', 'HAIR-ass', 'Say HA-russ, or ha-RASS.'], ['harr iss', 'HARR-iss', 'A pirate saying it. Arr.']],
+  nostalgic:[['nose tal jick', 'NOSE-tal-jick', 'Short o: noss-TAL-jick.'], ['nost al gick', 'nost-al-GICK', 'The g is soft: jick.']],
+  rehearse:[['re hearse', 're-HEARSE', 'A hearse is a funeral car! ri-HURSS.'], ['ree hare see', 'ree-HARE-see', 'No hares.']],
+  envelop:[['envelope', 'EN-ve-lope', 'That is the paper thing! This is en-VEL-up.'], ['en vee lop', 'en-VEE-lop', 'Say en-VEL-up.']],
+  balk:[['bal k', 'BAL-K', 'The l is silent: BAWK.'], ['bulk', 'BULK', 'Bulk means lots. Wrong.']],
+  conquer:[['con kwer', 'con-KWER', 'Say CON-ker, like a conker!'], ['con queer', 'con-QUEER', 'No.']],
+  awe:[['a wee', 'a-WEE', 'Wee! No. Just AW.'], ['ow', 'OW', 'Ow is pain. Awe is wow.']],
+  thorough:[['through', 'THROUGH', 'That is a different word. THUH-ruh.'], ['thor oh', 'THOR-oh', 'Thor has a hammer. Not this.']],
+  purchase:[['pur chase', 'pur-CHASE', 'No chasing: PUR-chiss.'], ['purr chase', 'PURR-chase', 'A cat chasing. Nope.']],
+  exhausted:[['ex hoss ted', 'ex-HOSS-ted', 'The h is silent: ig-ZAW-stid.'], ['ex house ted', 'ex-HOUSE-ted', 'Ted left the house.']],
+  malleable:[['mall able', 'MALL-able', 'Say MAL-ee-uh-bul.'], ['may lee able', 'MAY-lee-able', 'Short a: MAL.']],
+  vulgar:[['vool gar', 'VOOL-gar', 'Say VULL-ger.'], ['vul gare', 'vul-GARE', 'No.']],
+  boisterous:[['boyster us', 'BOYSTER-us', 'Say BOY-ster-us, three bits.'], ['boys tear us', 'BOYS-tear-us', 'Boys, stop tearing things.']],
+  interrogate:[['inter row gate', 'inter-ROW-gate', 'Say in-TERR-uh-gate.'], ['inter rog at', 'inter-ROG-at', 'Nope.']],
+  flourish:[['flour ish', 'FLOUR-ish', 'Not flour for cakes! FLURR-ish.'], ['floor ish', 'FLOOR-ish', 'On the floor. No.']],
+  solace:[['so lace', 'SO-LACE', 'Not a shoe lace! SOLL-iss.'], ['sole ass', 'SOLE-ass', 'Say SOLL-iss.']],
+  derelict:[['der ee lick', 'der-EE-lick', 'Say DERR-uh-likt.'], ['dairy lict', 'DAIRY-lict', 'No cows. Again.']],
+  volatile:[['vol a teel', 'vol-a-TEEL', 'Say VOLL-uh-tile.'], ['vole a tile', 'VOLE-a-tile', 'A vole on a tile. Cute. Wrong.']],
+  insolent:[['in so lent', 'in-SO-lent', 'Say IN-suh-lunt.'], ['in sole ent', 'in-SOLE-ent', 'Not your shoe.']],
+  gripe:[['grip ee', 'GRIP-ee', 'One bit: GRIPE, rhymes with ripe.'], ['grape', 'GRAPE', 'A grape is a fruit.']],
+  ardent:[['art dent', 'ART-dent', 'Say AR-dunt.'], ['are dent', 'ARE-dent', 'Close-ish. AR-dunt.']],
+  humiliate:[['hum ill ee ate', 'HUM-ill-ee-ate', 'Say hew-MILL-ee-ate.'], ['who mile ate', 'who-MILE-ate', 'Who ate a mile? Not me.']],
+  deprive:[['dep rive', 'DEP-rive', 'Say di-PRIVE.'], ['deep riv', 'DEEP-riv', 'Long i: PRIVE.']],
+  oppress:[['oh press', 'OH-PRESS', 'Say uh-PRESS.'], ['op ress', 'OP-ress', 'Quick first bit: uh.']],
+  truce:[['truck', 'TRUCK', 'A truck is a lorry! TROOSE.'], ['true see', 'TRUE-see', 'One bit: TROOSE.']],
+  component:[['com poe nent', 'com-POE-nent', 'Say cum-POH-nunt.'], ['compo nent', 'COMPO-nent', 'No.']],
+  evaporate:[['ee vap oh rate', 'EE-vap-oh-rate', 'Say ih-VAP-uh-rate.'], ['eva pour ate', 'EVA-pour-ate', 'Eva poured and ate? No.']],
+  agitate:[['ag ee tate', 'ag-EE-tate', 'Say AJ-ih-tate.'], ['a gite ate', 'a-GITE-ate', 'No.']],
+  tranquil:[['tran kwill', 'tran-KWILL', 'Say TRANG-kwill.'], ['train quill', 'TRAIN-quill', 'A train with a feather pen. Odd.']],
+  gravitate:[['grav ee tate', 'grav-EE-tate', 'Say GRAV-ih-tate.'], ['gravy tate', 'GRAVY-tate', 'Gravy! Tasty, but wrong.']],
+  retrieve:[['re tree vee', 're-TREE-vee', 'Say ri-TREEV.'], ['ret riv', 'RET-riv', 'Long e: TREEV.']],
+  relish:[['re lish', 'REE-lish', 'Short e: RELL-ish.'], ['rel ish ee', 'rel-ISH-ee', 'No.']],
+  covet:[['co vet', 'CO-VET', 'Not a vet for cows! CUV-it.'], ['cove ay', 'COVE-ay', 'Say CUV-it.']],
+  disarray:[['dis array', 'DIS-ar-ray', 'Say diss-uh-RAY.'], ['dizzy ray', 'DIZZY-ray', 'Dizzy Ray. Sounds like a pirate.']],
+  sparse:[['spar see', 'SPAR-see', 'One bit: SPARSS.'], ['spars', 'SPARZ', 'It ends in ss: SPARSS.']],
+  stern:[['steer n', 'STEER-n', 'Say STURN.'], ['stair n', 'STAIR-n', 'No stairs.']],
+  ramble:[['ram bull', 'RAM-BULL', 'A ram and a bull. A farm. RAM-bul.'], ['rumble', 'RUMBLE', 'Rumble is a tummy noise.']],
+  banish:[['ban ish', 'BAN-ISH', 'Say BAN-ish, quick and smooth.'], ['bay nish', 'BAY-nish', 'Short a: BAN.']],
+  guarantee:[['gwa ran tee', 'gwa-ran-TEE', 'The u is silent: garr-un-TEE.'], ['guar ant ee', 'GUAR-ant-ee', 'Say garr-un-TEE.']],
+  struggle:[['strug glee', 'strug-GLEE', 'Say STRUG-ul.'], ['stroo gull', 'STROO-gull', 'No seagulls.']],
+  comprehend:[['com pree hend', 'com-PREE-hend', 'Say com-prih-HEND.'], ['comp rehend', 'COMP-rehend', 'No.']],
+  wayward:[['way ward', 'WAY-WARD', 'Say WAY-wud, quick ending.'], ['why ward', 'WHY-ward', 'Why? Because no.']],
+  contempt:[['con tempt ee', 'con-TEMPT-ee', 'Say cun-TEMPT.'], ['con temp', 'con-TEMP', 'Missing the t at the end.']],
+  acquire:[['ack wire', 'ACK-wire', 'Say uh-KWIRE.'], ['a queer', 'a-QUEER', 'No.']],
+  earnest:[['ear nest', 'EAR-nest', 'A nest in your ear! UR-nist.'], ['ernest', 'ER-NEST', 'Ernest is a name.']],
+  obscure:[['ob scoor', 'ob-SCOOR', 'Say ub-SKYOOR.'], ['obs cure', 'OBS-cure', 'No.']],
+  dismal:[['dizz mal', 'DIZZ-mal', 'Say DIZ-mul.'], ['dis mall', 'dis-MALL', 'Not a shopping mall.']],
+  nominal:[['no mine al', 'no-MINE-al', 'Say NOM-in-ul.'], ['gnome in al', 'GNOME-in-al', 'A gnome! No.']],
+  wane:[['wan ee', 'WAN-ee', 'One bit: WAYN.'], ['wan', 'WAN', 'Long a: WAYN.']],
+  concur:[['con cure', 'con-CURE', 'Say cun-KUR.'], ['conk er', 'CONK-er', 'A conker is a nut.']],
+  ponder:[['pond er', 'POND-ER', 'Say PON-der, smooth.'], ['pon dare', 'pon-DARE', 'No dares.']],
+  validate:[['val ee date', 'val-EE-date', 'Say VAL-ih-date.'], ['valid ate', 'VALID-ate', 'No.']],
+  frail:[['fray all', 'FRAY-all', 'One bit: FRAYL.'], ['frill', 'FRILL', 'A frill is frilly.']],
+  stingy:[['sting ee', 'STING-ee', 'Like a bee! No: STIN-jee.'], ['sting guy', 'STING-guy', 'No.']],
+  kindle:[['kind ull', 'KIND-ull', 'Short i: KIN-dul.'], ['kin dee lee', 'kin-DEE-lee', 'No.']],
+  idle:[['id lee', 'ID-lee', 'Say EYE-dul.'], ['id ull', 'ID-ull', 'Long i: EYE-dul.']],
+  endure:[['end your', 'END-YOUR', 'Say in-DYOOR.'], ['en doo ray', 'en-DOO-ray', 'No.']],
+  deliberate:[['deli bear ate', 'DELI-bear-ate', 'A bear ate the deli! dih-LIB-ur-ut.'], ['dee lie brate', 'dee-LIE-brate', 'No.']],
+  surplus:[['sir plus', 'SIR-PLUS', 'Say SUR-plus, smooth.'], ['sur ploo', 'sur-PLOO', 'No.']],
+  inferior:[['in fear ee or', 'in-FEAR-ee-or', 'Close: in-FEER-ee-uh.'], ['infer ee or', 'INFER-ee-or', 'No.']],
+  deceive:[['dee kive', 'dee-KIVE', 'Say dih-SEEV.'], ['deck eve', 'DECK-eve', 'No.']],
+  fluctuate:[['fluck tu ate', 'FLUCK-tu-ate', 'Say FLUCK-choo-ate.'], ['flute ate', 'FLUTE-ate', 'Someone ate a flute.']],
+  waft:[['wayft', 'WAYFT', 'Short a: WOFT.'], ['waffed', 'WAFFED', 'No.']],
+  allay:[['alley', 'ALLEY', 'Say uh-LAY.'], ['all eye', 'ALL-EYE', 'No.']],
+  smother:[['smoe ther', 'SMOE-ther', 'Say SMUTH-er.'], ['smooth er', 'SMOOTH-er', 'Close, but SMUTH-er.']],
+  prosperous:[['pros peer us', 'pros-PEER-us', 'Say PROSS-pur-us.'], ['prosper ooze', 'PROSPER-ooze', 'Ooze. Yuck.']],
+  duplicate:[['dupe lick ate', 'DUPE-lick-ate', 'Say DYOO-plih-kate.'], ['dew plicket', 'DEW-plicket', 'No.']],
+  confide:[['con fiddy', 'con-FIDDY', 'Say cun-FIDE.'], ['con feed', 'con-FEED', 'No feeding.']],
+  soiled:[['soy led', 'SOY-LED', 'One bit: SOYLD.'], ['solid', 'SOLID', 'Solid is hard. Wrong.']],
+  alluring:[['all your ring', 'ALL-your-RING', 'Say uh-LOOR-ing.'], ['allure ing', 'AL-lure-ing', 'Close: uh-LOOR-ing.']],
+  despair:[['dess pair', 'DESS-pair', 'Say dih-SPAIR.'], ['desperate', 'DESP-er-ate', 'Different word.']],
+  humid:[['hum id', 'HUM-id', 'Say HYOO-mid.'], ['hoo mid', 'HOO-mid', 'Close-ish. HYOO-mid.']],
+  akin:[['ache in', 'ACHE-in', 'Say uh-KIN.'], ['ak in', 'AK-in', 'Quick first bit: uh-KIN.']],
+  hostile:[['host isle', 'HOST-isle', 'Say HOSS-tile.'], ['hoe steel', 'HOE-steel', 'No.']],
+  accomplishment:[['ack om plish ment', 'ack-OM-plish-ment', 'Say uh-KUM-plish-ment.'], ['a comp lish ment', 'a-COMP-lish-ment', 'No.']],
+  discernible:[['dis kern able', 'dis-KERN-able', 'Soft c: dih-SURN-uh-bul.'], ['dice urn able', 'DICE-urn-able', 'No.']],
+  uncanny:[['un kay nee', 'un-KAY-nee', 'Say un-KAN-ee.'], ['un candy', 'un-CANDY', 'Not candy.']],
+  examine:[['ex a mine', 'ex-a-MINE', 'Say ig-ZAM-in.'], ['egg zam een', 'egg-ZAM-een', 'Close-ish: ig-ZAM-in.']],
+  illegible:[['ill eg ible', 'ill-EGG-ible', 'An egg! No. ih-LEJ-uh-bul.'], ['eye leg ible', 'eye-LEG-ible', 'No legs.']],
+  irreparable:[['ear repair able', 'ear-re-PAIR-able', 'Sneaky one: ih-REP-ur-uh-bul.'], ['ire pair a bull', 'IRE-pair-a-bull', 'A pair of bulls?']],
+  irresistible:[['ear re zist able', 'ear-re-ZIST-able', 'Say irr-ih-ZIST-uh-bul.'], ['ire ress tiny bull', 'IRE-ress-tiny-bull', 'A tiny bull. Aww.']],
+  inadequate:[['in add eh kwate', 'in-ADD-eh-kwate', 'Say in-AD-ih-kwut.'], ['in a dee quate', 'in-a-DEE-quate', 'No.']],
+  inoffensive:[['in off end sieve', 'in-off-END-sieve', 'Say in-uh-FEN-siv.'], ['in oh fen sive', 'in-OH-fen-sive', 'No.']],
+  antibiotic:[['anti bee ottick', 'anti-BEE-ottick', 'Say an-tee-bye-OT-ik.'], ['ant eye bio tick', 'ANT-eye-bio-tick', 'An ant with an eye and a tick. Busy.']],
+  anticlimax:[['anti climb ax', 'anti-CLIMB-ax', 'Say an-tee-KLY-max.'], ['ant ick lim ax', 'ANT-ick-lim-ax', 'No.']],
+  antiseptic:[['anti sceptic', 'anti-SCEPTIC', 'Say an-tee-SEP-tik.'], ['ant eye septic', 'ANT-eye-septic', 'No.']],
+  autograph:[['auto graf ee', 'auto-GRAF-ee', 'Say AW-tuh-graf.'], ['out o graph', 'OUT-o-graph', 'No.']],
+  autobiography:[['auto bio graffy', 'auto-BIO-graffy', 'Close! aw-toe-bye-OG-ruh-fee.'], ['out a bee graphy', 'OUT-a-bee-graphy', 'No bees.']],
+  automobile:[['auto mobile', 'AUTO-MOBILE', 'Say AW-tuh-muh-beel.'], ['auto mobil lee', 'auto-mo-BILL-ee', 'Bill who?']],
+  reemerge:[['ree mer gee', 'ree-MER-gee', 'Say ree-ih-MURJ.'], ['remmer jay', 'REMMER-jay', 'No.']],
+  rephrase:[['ref raise', 'REF-raise', 'Say ree-FRAYZ.'], ['rep hraze', 'REP-hraze', 'The ph says f: ree-FRAYZ.']],
+  disappointed:[['dis a point ed', 'DIS-a-POINT-ed', 'Smoother: diss-uh-POYN-tid.'], ['dizzy pointed', 'DIZZY-pointed', 'No.']],
+  disbelief:[['dis bell eef', 'dis-BELL-eef', 'Say diss-bih-LEEF.'], ['dis bee life', 'dis-BEE-life', 'A bee\'s life. Busy.']],
+  dishonest:[['dis hone est', 'dis-HONE-est', 'The h is silent: diss-ON-ist.'], ['dish on est', 'DISH-on-est', 'A dish? No.']],
+  mishear:[['mish ear', 'MISH-EAR', 'Ha: mis-HEER.'], ['my sheer', 'my-SHEER', 'No.']],
+  misjudge:[['mis jud gee', 'mis-JUD-gee', 'Say mis-JUJ.'], ['mice judge', 'MICE-judge', 'Mice in court. Funny.']],
+  mispronounced:[['miss pro noun ced', 'miss-pro-NOUN-ced', 'Ironic! mis-pruh-NOWNST.'], ['my spoon owned', 'my-SPOON-owned', 'My spoon is owned? No.']],
+  misinform:[['mice in form', 'MICE-in-form', 'Say mis-in-FORM.'], ['miss inform ay', 'miss-in-FORM-ay', 'No.']],
+  disadvantage:[['dis add van tag', 'dis-add-VAN-tag', 'Say diss-ud-VAHN-tij.'], ['dizzy van tag', 'DIZZY-van-tag', 'No.']],
+  antifreeze:[['anti frizz', 'anti-FRIZZ', 'Frizz is hair. an-tee-FREEZ.'], ['ant eye freeze', 'ANT-eye-freeze', 'A frozen ant.']],
+  antisocial:[['anti soak ial', 'anti-SOAK-ial', 'Say an-tee-SOH-shul.'], ['ant eye so kial', 'ANT-eye-so-kial', 'No.']],
+  impolite:[['imp oh light', 'IMP-oh-light', 'An imp with a light. Say im-puh-LITE.'], ['impo lit ee', 'impo-LIT-ee', 'No.']],
+  immortal:[['im mor tall', 'im-mor-TALL', 'Say ih-MOR-tul.'], ['eye mortal', 'EYE-mortal', 'No.']],
+  inaccurate:[['in a cure ate', 'in-a-CURE-ate', 'Say in-AK-yur-ut.'], ['in ack you rate', 'in-ACK-you-rate', 'No.']],
+  irrational:[['ear ray shun al', 'ear-RAY-shun-al', 'Say ih-RASH-uh-nul.'], ['eye rational', 'EYE-rational', 'No.']],
+  irresponsible:[['ire response able', 'IRE-response-able', 'Say irr-ih-SPON-suh-bul.'], ['ear ree spawn sible', 'ear-ree-SPAWN-sible', 'No fish spawning here.']],
+};
+/* automatic wrong versions for any other word: say the silent letters, or make a vowel say its name */
+function autoWrong(w){
+  const out = [], seen = new Set([w.toLowerCase()]);
+  const add = (s, d) => { const k = s.toLowerCase(); if (s && !seen.has(k)){ seen.add(k); out.push([s, d, '']); } };
+  const lw = w.toLowerCase();
+  const silent = [[/^kn/, 'k nn'], [/^gn/, 'g nn'], [/^wr/, 'w rr'], [/^ps/, 'p ss'], [/mb$/, 'm b'], [/gn$/, 'g n'], [/ght/, 'g h t'], [/stle$/, 's t ull'], [/sten$/, 's ten'], [/ph/, 'p h']];
+  for (const [re, rep] of silent) if (re.test(lw)) add(lw.replace(re, rep), lw.replace(re, rep.replace(/ /g, '').toUpperCase()));
+  const longV = { a:'ay', e:'ee', i:'eye', o:'oh', u:'you' };
+  const m = lw.match(/[aeiou]/);
+  if (m){ const i = m.index; add(lw.slice(0, i) + ' ' + longV[m[0]] + ' ' + lw.slice(i + 1), lw.slice(0, i) + '-' + longV[m[0]].toUpperCase() + '-' + lw.slice(i + 1)); }
+  const vs = [...lw.matchAll(/[aeiou]/g)];
+  if (vs.length > 1){ const v = vs[vs.length - 1], i = v.index; add(lw.slice(0, i) + ' ' + longV[v[0]] + ' ' + lw.slice(i + 1), lw.slice(0, i) + '-' + longV[v[0]].toUpperCase() + '-' + lw.slice(i + 1)); }
+  if (/e$/.test(lw) && lw.length > 3) add(lw.slice(0, -1) + ' ee', lw.slice(0, -1) + '-EE');
+  if (/ch/.test(lw)) add(lw.replace('ch', 'k'), lw.replace('ch', 'K'));
+  if (/c[eiy]/.test(lw)) add(lw.replace(/c([eiy])/, 'k$1'), lw.replace(/c([eiy])/, 'K$1'));
+  if (/g[eiy]/.test(lw)) add(lw.replace(/g([eiy])/, 'g g$1'), lw.replace(/g([eiy])/, 'G$1'));
+  return out;
+}
+function pronOptions(w){
+  const k = norm(w), hand = (PRON[k] || []).filter(x => x && x.length);
+  const list = hand.concat(autoWrong(w)).slice(0, 2);
+  return list.length >= 2 ? list : null;
+}
+
 /* ---------- Home: the scoreboard and one big button ---------- */
 function homeLine(){
   const now = new Date();
@@ -2532,6 +2877,7 @@ function moreSheet(){
   openSheet([h('h2', { text:'More matches' }), h('div', { class:'mlist' },
     item('🤝', 'Cards match', 'Just the similar & opposite cards', () => startRound('cards')),
     item('🎯', 'Training', tricky ? tricky + ' tricky words to fix' : 'No tricky words yet', () => startRound('tricky'), !tricky),
+    item('🥧', 'Pie the Mirror', spareCustard() ? spareCustard() * 3 + ' custard pies to throw' : 'Win more custard first (2 pots kept for streaks)', () => pieGame()),
     item('📖', 'Story time', 'A Cuffin story using your words', () => storyTime(() => home())),
     item('💡', 'Word-building tip', 'How il-, im-, in-, ir- and friends work', () => { home(); prefixLesson(); }),
     item('📺', 'Today’s chapter', 'Watch the match report again', () => chapter(() => home())),
@@ -2771,8 +3117,9 @@ function badgeSheet(){
   const grid = h('div', { class:'bgrid' }, BADGES.map(b => { const got = !!S.badges[b.id];
     const el = h('button', { class:'bdg' + (got ? '' : ' locked'), type:'button', 'aria-pressed':'false', 'aria-label':b.n + (got ? ', won' : ', not won yet'), onclick:() => {
       grid.querySelectorAll('.bdg').forEach(x => x.setAttribute('aria-pressed', 'false')); el.setAttribute('aria-pressed', 'true'); SND.fx('tap');
-      put(info2, h('b', { text:b.n }), ' · ' + b.d + (got ? ' Won!' : '')); } }, icon(got ? b.ic : 'lock')); return el; }));
-  openSheet([h('h2', { text:'Badges' }), grid, info2, h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Close')], true);
+      put(info2, h('b', { text:b.n }), ' · ' + b.d + (got ? ' Won!' : '')); } }, got ? (b.em ? h('span', { class:'bem', 'aria-hidden':'true', text:b.em }) : icon(b.ic)) : icon('lock')); return el; }));
+  const won = BADGES.filter(b => S.badges[b.id]).length;
+  openSheet([h('h2', {}, 'Badges ', h('span', { class:'muted', style:'font-size:.8em', text:won + ' of ' + BADGES.length })), h('div', { class:'bscroll' }, grid), info2, h('button', { class:'btn alt wide', type:'button', onclick:closeSheet }, 'Close')], true);
 }
 function prizeSheet(){
   const m = masteredCount(), list = S.prizes.slice().sort((a, b) => a.at - b.at);

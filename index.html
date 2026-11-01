@@ -564,6 +564,31 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .bw,.celword,.word{overflow-wrap:normal}
 .hintbtn{min-height:36px} .bnav button,.skip{min-height:38px} .subtabs button{min-height:38px} .wbtns .btn{min-height:38px} .seg button{min-height:38px}
 .say .nm{font-size:.72rem}
+.bscroll{max-height:46dvh;overflow-y:auto;padding:2px}
+.bem{font-size:1.35rem;line-height:1} .bem.big{font-size:3rem}
+.bdg.locked{opacity:.5}
+.peekbox{height:3.1em;overflow:hidden;border-radius:12px;border:2px dashed var(--line);padding:5px 10px;font-size:.84rem;line-height:1.3;color:var(--muted);flex:none}
+.peekbox.on{border-style:solid;border-color:var(--sim);color:var(--ink);background:var(--surface-2)}
+.answers.hazard{padding:6px;border-radius:16px;background:repeating-linear-gradient(-45deg,#FFD23F 0 10px,#0B1533 10px 20px)}
+.answers.hazard .ans,.answers.hazard .peek{box-shadow:none}
+.oppflash{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:repeating-linear-gradient(-45deg,rgba(255,210,63,.96) 0 26px,rgba(11,21,51,.96) 26px 52px);padding:16px}
+.ofin{background:#FFD23F;color:#0B1533;border:6px solid #0B1533;border-radius:24px;padding:18px 20px;text-align:center;max-width:340px;box-shadow:0 10px 0 rgba(0,0,0,.35)}
+.ofarrows{font-size:2.2rem} .oftitle{font:400 clamp(2.4rem,11vw,3.4rem)/1 var(--font-display);letter-spacing:.03em} .ofsub{font-weight:700;margin-top:6px;font-size:1.05rem}
+@media (prefers-reduced-motion: no-preference){ .ofin{animation:popin .35s ease-out} .ofarrows{animation:wob .5s ease-in-out 3} }
+.sayopt.sel{border-color:var(--sim);background:var(--surface-2);box-shadow:0 0 0 3px var(--sim) inset}
+.sayopt .t{display:flex !important;flex-direction:row !important;align-items:center;gap:8px} .sayopt .t svg{width:22px;height:22px}
+.sayans{display:flex;flex-direction:column;gap:3px} .saynow{font-weight:800;border-radius:10px;background:var(--gold-soft);border:2px solid var(--gold);padding:5px 9px}
+.arena{position:relative;flex:1;min-height:0;border-radius:22px;overflow:hidden;background:linear-gradient(#9FD3FF,#D9F0FF 60%,#7BC47F 60%,#5DAA62);touch-action:manipulation;cursor:crosshair;user-select:none;-webkit-user-select:none}
+.mbox{position:absolute;top:28%;transform:translateX(-50%);width:clamp(90px,26vw,130px)} .mbox.duck{transform:translateX(-50%) translateY(38%) scale(.75)}
+.piemirror{width:100%;height:auto;display:block;filter:drop-shadow(0 6px 4px rgba(0,0,0,.25))}
+.splats{position:absolute;inset:0;pointer-events:none} .splat{position:absolute;width:44%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at 40% 40%,#FFF4B0,#FFD23F 45%,#F2B705 70%,transparent 72%);filter:drop-shadow(0 2px 1px rgba(0,0,0,.2))}
+.pie{position:absolute;font-size:2.2rem;transform:translate(-50%,-50%);transition:left .38s ease-out,top .38s cubic-bezier(.3,-.4,.6,1),transform .38s;pointer-events:none}
+.pie.miss{animation:fade .5s forwards} @keyframes fade{to{opacity:0;transform:translate(-50%,-50%) scale(1.6)}}
+.pietray{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:2.4rem;pointer-events:none}
+.piebub{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:max-content;max-width:88%;background:#fff;color:#0B1533;border:3px solid #7B3FE4;border-radius:16px;padding:6px 12px;font-weight:700;font-size:.9rem;text-align:center}
+.piebub.hit{border-color:#F2B705;background:#FFF4CF}
+.pieres{display:flex;flex-direction:column;gap:10px;flex:1;align-items:stretch;text-align:center} .piebig{font:400 3rem/1 var(--font-display);color:var(--team)}
+button.cpots{font:inherit;color:inherit;cursor:pointer}
 </style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -605,5 +630,5 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=721085228d"></script>
+<script src="app.js?v=0c0c18be85"></script>
 </body></html>
