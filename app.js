@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "0128c67b86";
+const APPV = "3263b61538";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -2557,23 +2557,24 @@ function pieGame(){
     flying.push({ el, x0, y0, x1:tx, y1:ty, t0:performance.now(), dur:Math.max(320, Math.min(620, dist * 1.3)), arc:Math.min(90, dist * .25) });
     SND.fx('flip');
   }
-  /* tap where you want it to land, or flick the pie towards the Mirror */
-  let start = null;
-  arena.addEventListener('pointerdown', ev => { ev.preventDefault(); const r = arena.getBoundingClientRect(); start = { x:ev.clientX - r.left, y:ev.clientY - r.top, t:performance.now() }; });
-  arena.addEventListener('pointerup', ev => {
-    if (!start) return; ev.preventDefault();
-    const r = arena.getBoundingClientRect(), ex = ev.clientX - r.left, ey = ev.clientY - r.top, dx = ex - start.x, dy = ey - start.y;
+  /* tap where you want it to land, or flick the pie towards the Mirror. Finger (touch) and mouse/pen (pointer) are both read; whichever comes first wins */
+  let start = null, lastTouch = 0;
+  const begin = (cx, cy) => { const r = arena.getBoundingClientRect(); start = { x:cx - r.left, y:cy - r.top }; };
+  const finishThrow = (cx, cy) => {
+    if (!start) return;
+    const r = arena.getBoundingClientRect(), ex = cx - r.left, ey = cy - r.top, dx = ex - start.x, dy = ey - start.y;
     const m = mirror.getBoundingClientRect(), targetY = m.top - r.top + m.height / 2;
     let tx = ex, ty = ey;
-    if (Math.hypot(dx, dy) > 24 && dy < -10){ const k = (targetY - start.y) / dy; tx = start.x + dx * k; ty = targetY; }   // a flick: carry on in that direction up to the Mirror
-    else if (start.y > r.height - 110){ tx = start.x; ty = targetY; }                                                     // a tap on the pie at the bottom: throw straight up
+    if (Math.hypot(dx, dy) > 20 && dy < -8){ const k = (targetY - start.y) / dy; tx = start.x + dx * k; ty = targetY; }   // a flick: carry on in that direction up to the Mirror
+    else if (start.y > r.height - 110){ tx = start.x; ty = targetY; }                                                    // a tap on the pie at the bottom: throw straight up
     start = null; launch(Math.max(10, Math.min(r.width - 10, tx)), Math.max(10, ty));
-  });
-  arena.addEventListener('pointercancel', () => { start = null; });
-  /* stop iPhone treating a flick as "scroll the page" */
-  const stopScroll = ev => { if (ev.cancelable) ev.preventDefault(); };
-  arena.addEventListener('touchstart', stopScroll, { passive:false });
-  arena.addEventListener('touchmove', stopScroll, { passive:false });
+  };
+  arena.addEventListener('touchstart', ev => { if (ev.cancelable) ev.preventDefault(); lastTouch = Date.now(); const t = ev.changedTouches[0]; begin(t.clientX, t.clientY); }, { passive:false });
+  arena.addEventListener('touchmove', ev => { if (ev.cancelable) ev.preventDefault(); lastTouch = Date.now(); }, { passive:false });
+  arena.addEventListener('touchend', ev => { if (ev.cancelable) ev.preventDefault(); lastTouch = Date.now(); const t = ev.changedTouches[0]; finishThrow(t.clientX, t.clientY); }, { passive:false });
+  arena.addEventListener('touchcancel', () => { start = null; });
+  arena.addEventListener('pointerdown', ev => { if (Date.now() - lastTouch < 800 || ev.pointerType === 'touch') return; ev.preventDefault(); begin(ev.clientX, ev.clientY); });
+  arena.addEventListener('pointerup', ev => { if (Date.now() - lastTouch < 800 || ev.pointerType === 'touch') return; ev.preventDefault(); finishThrow(ev.clientX, ev.clientY); });
   document.documentElement.classList.add('noscroll');
   const unlock = () => document.documentElement.classList.remove('noscroll');
   setTimeout(() => { const t = setInterval(() => { if (!arena.isConnected){ unlock(); clearInterval(t); } }, 500); }, 0);
@@ -3285,6 +3286,7 @@ function grownups(){
     const arch = archived();
     put(panel,
       h('div', { class:'row' }, h('label', { for:'namein', text:'Name' }), nameIn),
+      h('p', { class:'small muted', text:'Game version: ' + APPV }),
       h('div', { class:'notice' }, h('b', { text:'Family code: ' }), (familyCode() && familyCode() !== 'LOCAL') ? familyCode() : 'not set (this device only)', ' ',
         h('button', { class:'linkbtn', type:'button', onclick:() => { setFamily(''); location.reload(); } }, 'Change')),
       (() => { const lg = (() => { try { return JSON.parse(localStorage.getItem(KEY + '-synclog') || 'null'); } catch (e) { return null; } })();
