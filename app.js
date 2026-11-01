@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "d2b56548e9";
+const APPV = "3d4a3a38e5";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -2495,48 +2495,81 @@ function pieGame(){
   const splats = h('div', { class:'splats' });
   const mbox = h('div', { class:'mbox' }, mirror, splats);
   const bubble = h('div', { class:'piebub', text:'Go on then. I bet you can’t hit me.' });
-  const arena = h('div', { class:'arena', role:'button', 'aria-label':'Tap to throw a custard pie at the Mirror' }, bubble, mbox, h('div', { class:'pietray', 'aria-hidden':'true', text:'🥧' }));
+  const tray = h('div', { class:'pietray', 'aria-hidden':'true', text:'🥧' });
+  const arena = h('div', { class:'arena', role:'button', 'aria-label':'Flick or tap to throw a custard pie at the Mirror' }, bubble, mbox, tray);
   const endB = h('button', { class:'quit', type:'button', 'aria-label':'Stop and go home', onclick:() => { if (startPies) finish(); else home(); } }, icon('x'), h('span', { text:'End' }));
+  /* pies are animated by hand every frame (works the same on every phone) */
+  const flying = []; let combo = 0;
+  const WORDS = ['SPLAT!', 'SPLOSH!', 'KER-SPLAT!', 'GLOOP!', 'SPLODGE!', 'WALLOP!', 'SPLUDGE!'];
   function frame(t){
     const dt = Math.min(.05, (t - last) / 1000); last = t;
     x += vx * dt; if (x < 12){ x = 12; vx = Math.abs(vx); } if (x > 88){ x = 88; vx = -Math.abs(vx); }
     if (Math.random() < dt * .7) vx = -vx;   // sudden change of direction
     if (duck > 0) duck -= dt;
     mbox.style.left = x + '%'; mbox.classList.toggle('duck', duck > 0);
+    for (let i = flying.length - 1; i >= 0; i--){
+      const p = flying[i], k = Math.min(1, (t - p.t0) / p.dur);
+      const px = p.x0 + (p.x1 - p.x0) * k, py = p.y0 + (p.y1 - p.y0) * k - Math.sin(k * Math.PI) * p.arc;
+      p.el.style.transform = 'translate(' + (px - 22) + 'px,' + (py - 22) + 'px) rotate(' + (k * 600) + 'deg) scale(' + (1.25 - .55 * k) + ')';
+      if (k >= 1){ flying.splice(i, 1); land(p, px, py); }
+    }
     if (!over) raf = requestAnimationFrame(frame);
   }
-  function throwAt(ev){
+  function burst(cls, txt, px, py){ const e = h('div', { class:cls, text:txt, style:'left:' + px + 'px;top:' + py + 'px' }); arena.append(e); setTimeout(() => e.remove(), 1100); return e; }
+  function droplets(px, py){ for (let i = 0; i < 10; i++){ const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 50; const e = h('i', { class:'drop', style:'left:' + px + 'px;top:' + py + 'px;--dx:' + Math.round(Math.cos(a) * d) + 'px;--dy:' + Math.round(Math.sin(a) * d) + 'px' }); arena.append(e); setTimeout(() => e.remove(), 800); } }
+  function land(p, px, py){
+    p.el.remove(); if (over) return;
+    const r = arena.getBoundingClientRect(), m = mirror.getBoundingClientRect();
+    const mx = m.left - r.left, my = m.top - r.top, pad = 22;
+    const hit = duck <= 0 && px > mx - pad && px < mx + m.width + pad && py > my - pad && py < my + m.height + pad;
+    if (hit){
+      hits++; combo++; score.textContent = String(hits); S.stats.splats = (S.stats.splats || 0) + 1;
+      const dropped = S.race.mf > 0; if (dropped){ S.race.mf -= 1; dropT++; }   // a splat knocks a fish out of his flipper (if he has one)
+      const sp = h('i', { class:'splat', style:'left:' + Math.max(10, Math.min(90, Math.round(((px - mx) / m.width) * 100))) + '%;top:' + Math.max(10, Math.min(90, Math.round(((py - my) / m.height) * 100))) + '%' });
+      splats.append(sp); if (splats.children.length > 7) splats.firstChild.remove();
+      burst('splatword', pickOne(WORDS), px, py - 30); droplets(px, py);
+      if (dropped) burst('fishpop', '−1 🐟', mx + m.width / 2, my);
+      if (combo >= 2) burst('combo', combo === 2 ? 'DOUBLE SPLAT!' : combo === 3 ? 'TRIPLE SPLAT!' : 'CUSTARD-TASTROPHE! ×' + combo, r.width / 2, r.height * .62);
+      arena.classList.remove('shake'); void arena.offsetWidth; arena.classList.add('shake');
+      mbox.classList.remove('hitwob'); void mbox.offsetWidth; mbox.classList.add('hitwob');
+      put(bubble, pickOne(PIE_HIT)); bubble.classList.add('hit'); mirror.src = MIMG.sad;
+      SND.fx('custard'); if (combo >= 2) SND.fx('cheer');
+      if (hits % 3 === 1 && Math.random() < .7){ const v = VOICE.pick('m04', 'm05', 'm07'); if (v) VOICE.play(v); }
+      vx = (vx > 0 ? 1 : -1) * Math.min(80, Math.abs(vx) + 5);   // he gets faster
+      if (Math.random() < .3) duck = .55;   // and starts ducking
+      clearTimeout(p.reset); setTimeout(() => { mirror.src = MIMG.smug; bubble.classList.remove('hit'); }, 1000);
+      save();
+    } else {
+      combo = 0;
+      burst('plop', 'plop', px, py); const g = h('i', { class:'groundsplat', style:'left:' + px + 'px;top:' + py + 'px' }); arena.append(g); setTimeout(() => g.remove(), 1400);
+      put(bubble, pickOne(PIE_MISS)); SND.fx('wrong');
+    }
+    if (pies <= 0 && !flying.length) setTimeout(finish, 1100);
+  }
+  function launch(tx, ty){
     if (over || pies <= 0) return;
-    const r = arena.getBoundingClientRect(), tx = (ev.clientX || r.left + r.width / 2) - r.left, ty = (ev.clientY || r.top + r.height / 2) - r.top;
-    pies--; thrown++; left.textContent = String(pies);
+    const r = arena.getBoundingClientRect();
+    pies--; thrown++; left.textContent = String(pies); tray.textContent = pies ? '🥧' : '';
     if (thrown % 3 === 1){ S.custard = Math.max(0, (S.custard || 0) - 1); save(); }   // every 3 pies uses up one pot
     S.stats.pies = (S.stats.pies || 0) + 1;
-    const pie = h('div', { class:'pie', text:'🥧', style:'left:' + (r.width / 2) + 'px;top:' + (r.height - 30) + 'px' });
-    arena.append(pie); SND.fx('flip');
-    requestAnimationFrame(() => { pie.style.left = tx + 'px'; pie.style.top = ty + 'px'; pie.style.transform = 'translate(-50%,-50%) scale(.7) rotate(540deg)'; });
-    setTimeout(() => {
-      if (over){ pie.remove(); return; }
-      const m = mirror.getBoundingClientRect(), ax = tx + r.left, ay = ty + r.top;
-      const hit = duck <= 0 && ax > m.left - 12 && ax < m.right + 12 && ay > m.top - 12 && ay < m.bottom + 12;
-      pie.remove();
-      if (hit){
-        hits++; score.textContent = String(hits); S.stats.splats = (S.stats.splats || 0) + 1;
-        const dropped = S.race.mf > 0; if (dropped){ S.race.mf -= 1; dropT++; }   // a splat knocks a fish out of his flipper (if he has one)
-        const sp = h('i', { class:'splat', style:'left:' + Math.round(((ax - m.left) / m.width) * 100) + '%;top:' + Math.round(((ay - m.top) / m.height) * 100) + '%' });
-        splats.append(sp); if (splats.children.length > 6) splats.firstChild.remove();
-        put(bubble, pickOne(PIE_HIT) + (dropped ? '  (−1 🐟)' : '')); bubble.classList.add('hit'); mirror.src = MIMG.sad;
-        SND.fx('custard'); vx = (vx > 0 ? 1 : -1) * Math.min(80, Math.abs(vx) + 6);   // he gets faster
-        if (Math.random() < .35) duck = .6;   // and starts ducking
-        setTimeout(() => { mirror.src = MIMG.smug; bubble.classList.remove('hit'); }, 900);
-        save();
-      } else {
-        const miss = h('div', { class:'pie miss', text:'🥧', style:'left:' + tx + 'px;top:' + ty + 'px' }); arena.append(miss); setTimeout(() => miss.remove(), 500);
-        put(bubble, pickOne(PIE_MISS)); SND.fx('wrong');
-      }
-      if (pies <= 0) setTimeout(finish, 900);
-    }, 380);
+    const el = h('div', { class:'pie', text:'🥧' }); arena.append(el);
+    const x0 = r.width / 2, y0 = r.height - 34, dist = Math.hypot(tx - x0, ty - y0);
+    flying.push({ el, x0, y0, x1:tx, y1:ty, t0:performance.now(), dur:Math.max(320, Math.min(620, dist * 1.3)), arc:Math.min(90, dist * .25) });
+    SND.fx('flip');
   }
-  arena.addEventListener('pointerdown', throwAt);
+  /* tap where you want it to land, or flick the pie towards the Mirror */
+  let start = null;
+  arena.addEventListener('pointerdown', ev => { ev.preventDefault(); const r = arena.getBoundingClientRect(); start = { x:ev.clientX - r.left, y:ev.clientY - r.top, t:performance.now() }; });
+  arena.addEventListener('pointerup', ev => {
+    if (!start) return; ev.preventDefault();
+    const r = arena.getBoundingClientRect(), ex = ev.clientX - r.left, ey = ev.clientY - r.top, dx = ex - start.x, dy = ey - start.y;
+    const m = mirror.getBoundingClientRect(), targetY = m.top - r.top + m.height / 2;
+    let tx = ex, ty = ey;
+    if (Math.hypot(dx, dy) > 24 && dy < -10){ const k = (targetY - start.y) / dy; tx = start.x + dx * k; ty = targetY; }   // a flick: carry on in that direction up to the Mirror
+    else if (start.y > r.height - 110){ tx = start.x; ty = targetY; }                                                     // a tap on the pie at the bottom: throw straight up
+    start = null; launch(Math.max(10, Math.min(r.width - 10, tx)), Math.max(10, ty));
+  });
+  arena.addEventListener('pointercancel', () => { start = null; });
   function finish(){
     if (over) return; over = true; cancelAnimationFrame(raf); raceFix(); save();
     const nb = checkBadges(); if (nb.length) save();
@@ -2557,7 +2590,7 @@ function pieGame(){
     return;
   }
   mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn' }, '🥧 ', left, ' · SPLATS ', score), h('div', { class:'tools' }, soundBtns())),
-    h('div', { class:'say' }, cimg(IMG.right, '', 44, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:'Custard. Not for eating. For justice. Tap where you want the pie to go!' }))), arena], null);
+    h('div', { class:'say' }, cimg(IMG.right, '', 44, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:'Custard. Not for eating. For justice. Flick the pie at the Mirror, or tap where you want it to land!' }))), arena], null);
   raf = requestAnimationFrame(frame);
 }
 

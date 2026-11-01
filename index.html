@@ -582,7 +582,21 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .mbox{position:absolute;top:28%;transform:translateX(-50%);width:clamp(90px,26vw,130px)} .mbox.duck{transform:translateX(-50%) translateY(38%) scale(.75)}
 .piemirror{width:100%;height:auto;display:block;filter:drop-shadow(0 6px 4px rgba(0,0,0,.25))}
 .splats{position:absolute;inset:0;pointer-events:none} .splat{position:absolute;width:44%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at 40% 40%,#FFF4B0,#FFD23F 45%,#F2B705 70%,transparent 72%);filter:drop-shadow(0 2px 1px rgba(0,0,0,.2))}
-.pie{position:absolute;font-size:2.2rem;transform:translate(-50%,-50%);transition:left .38s ease-out,top .38s cubic-bezier(.3,-.4,.6,1),transform .38s;pointer-events:none}
+.pie{position:absolute;left:0;top:0;width:44px;height:44px;font-size:2.4rem;line-height:44px;text-align:center;pointer-events:none;will-change:transform;z-index:3}
+.splatword{position:absolute;transform:translate(-50%,-50%);font:400 2rem/1 var(--font-display);color:#FFD23F;-webkit-text-stroke:2px #9E1328;text-shadow:0 4px 0 #9E1328;pointer-events:none;z-index:4;animation:pow 1s ease-out forwards}
+@keyframes pow{0%{transform:translate(-50%,-50%) scale(.3) rotate(-12deg);opacity:0}20%{transform:translate(-50%,-50%) scale(1.35) rotate(6deg);opacity:1}60%{transform:translate(-50%,-70%) scale(1) rotate(-4deg);opacity:1}100%{transform:translate(-50%,-110%) scale(.9);opacity:0}}
+.combo{position:absolute;transform:translate(-50%,-50%);font:400 1.5rem/1.1 var(--font-display);color:#fff;background:#D7263D;padding:6px 12px;border-radius:14px;border:3px solid #FFD23F;white-space:nowrap;z-index:4;pointer-events:none;animation:pow 1.1s ease-out forwards}
+.fishpop{position:absolute;transform:translate(-50%,-50%);font-weight:800;font-size:1.2rem;color:#0B1533;background:#fff;border-radius:10px;padding:2px 8px;z-index:4;pointer-events:none;animation:rise 1s ease-out forwards}
+@keyframes rise{to{transform:translate(-50%,-260%);opacity:0}}
+.plop{position:absolute;transform:translate(-50%,-50%);font-weight:800;color:#5B4300;z-index:2;pointer-events:none;animation:rise 1s ease-out forwards}
+.drop{position:absolute;width:12px;height:12px;border-radius:50%;background:#FFD23F;box-shadow:inset -2px -2px 0 #F2B705;transform:translate(-50%,-50%);z-index:3;pointer-events:none;animation:fly .75s ease-out forwards}
+@keyframes fly{to{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy) + 30px)) scale(.4);opacity:0}}
+.groundsplat{position:absolute;width:46px;height:18px;border-radius:50%;background:radial-gradient(#FFE38A,#F2B705 60%,transparent 62%);transform:translate(-50%,-50%);z-index:1;pointer-events:none;animation:fade2 1.4s forwards}
+@keyframes fade2{70%{opacity:1}to{opacity:0}}
+.arena.shake{animation:shake .35s}
+@keyframes shake{20%{transform:translate(-6px,3px)}40%{transform:translate(6px,-3px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+.mbox.hitwob .piemirror{animation:wobh .7s ease-out}
+@keyframes wobh{15%{transform:rotate(-18deg) scale(1.1,.85)}35%{transform:rotate(14deg) scale(.9,1.12)}55%{transform:rotate(-8deg)}75%{transform:rotate(4deg)}100%{transform:none}}
 .pie.miss{animation:fade .5s forwards} @keyframes fade{to{opacity:0;transform:translate(-50%,-50%) scale(1.6)}}
 .pietray{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:2.4rem;pointer-events:none}
 .piebub{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:max-content;max-width:88%;background:#fff;color:#0B1533;border:3px solid #7B3FE4;border-radius:16px;padding:6px 12px;font-weight:700;font-size:.9rem;text-align:center}
@@ -630,5 +644,5 @@ button.cpots{font:inherit;color:inherit;cursor:pointer}
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=d2b56548e9"></script>
+<script src="app.js?v=3d4a3a38e5"></script>
 </body></html>
