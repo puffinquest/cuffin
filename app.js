@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "0c0c18be85";
+const APPV = "d2b56548e9";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -880,7 +880,7 @@ const BADGES = [
   { id:'d3',     n:'Three-Day Flyer', d:'Play 3 days in a row.',                      ic:'wave',   t:c => c.days >= 3 },
   { id:'d7',     n:'Perfect Week',    d:'Play 7 days in a row.',                      ic:'trophy', t:c => c.days >= 7 },
   { id:'r10',    n:'Regular',         d:'Finish 10 rounds.',                          ic:'flame',  t:c => c.S.stats.rounds >= 10 },
-  { id:'cust5',  n:'Custard Collector', d:'Win 5 pots of custard.',             ic:'custard', t:c => (c.S.custard || 0) >= 5 },
+  { id:'cust5',  n:'Custard Collector', d:'Win 5 pots of custard.',             ic:'custard', t:c => Math.max(c.S.custard || 0, c.S.stats.cwon || 0) >= 5 },
   { id:'leader', n:'Crowned',         d:'Beat the Mirror and become Leader.',         ic:'crown',  t:c => !!c.S.leader },
   /* more to chase */
   { id:'m25',  n:'Quarter Century', d:'Master 25 words.', em:'🎯', t:c => c.m >= 25 },
@@ -912,10 +912,10 @@ const BADGES = [
   { id:'cw10', n:'Custard Connoisseur', d:'Win 10 pots of custard (ever).', em:'🍮', t:c => (c.S.stats.cwon || 0) >= 10 },
   { id:'cw25', n:'Custard Factory', d:'Win 25 pots of custard (ever).', em:'🏭', t:c => (c.S.stats.cwon || 0) >= 25 },
   { id:'splat1', n:'First Splat', d:'Hit the Mirror with a custard pie.', em:'🥧', t:c => (c.S.stats.splats || 0) >= 1 },
-  { id:'splat10', n:'Pie Sniper', d:'Hit the Mirror with 10 custard pies.', em:'🎯', t:c => (c.S.stats.splats || 0) >= 10 },
+  { id:'splat10', n:'Pie Sniper', d:'Hit the Mirror with 10 custard pies.', em:'🥇', t:c => (c.S.stats.splats || 0) >= 10 },
   { id:'splat50', n:'Custard Commander', d:'Hit the Mirror with 50 custard pies.', em:'🫡', t:c => (c.S.stats.splats || 0) >= 50 },
   { id:'story1', n:'Bookworm', d:'Read a Cuffin story.', em:'📖', t:c => (c.S.stats.stories || 0) >= 1 },
-  { id:'story10', n:'Story Collector', d:'Read 10 Cuffin stories.', em:'📚', t:c => (c.S.stats.stories || 0) >= 10 },
+  { id:'story10', n:'Story Collector', d:'Read 10 Cuffin stories.', em:'🗃️', t:c => (c.S.stats.stories || 0) >= 10 },
   { id:'say10', n:'Smooth Talker', d:'Pick the right way to say 10 words.', em:'🗣️', t:c => ((c.S.tstat || {}).say || [0])[0] >= 10 },
   { id:'say40', n:'Golden Voice', d:'Pick the right way to say 40 words.', em:'🎤', t:c => ((c.S.tstat || {}).say || [0])[0] >= 40 },
   { id:'pre10', n:'Word Builder', d:'Pick the right start 10 times.', em:'🧱', t:c => ((c.S.tstat || {}).pre || [0])[0] >= 10 },
@@ -1875,7 +1875,7 @@ function question(){
     const kids = q.type === 'say' ? sayQ() : q.type === 'spell' || q.type === 'hear' ? spellQ() : q.type === 'scram' ? scramQ() : choiceQ();
     if ((q.type === 'hear' || (q.type === 'scram' && !meanOf())) && S.settings.sound) sayWord(q.w.w);   // said straight away (inside the tap, so iPhone allows it)
     put(body, cue(lead), top, kids);
-    if (q.type === 'pre' && !S.seenPre){ S.seenPre = true; save(); setTimeout(prefixLesson, 120); }
+    if (q.type === 'pre' && !S.seenPre){ S.seenPre = true; save(); setTimeout(() => { if (!done && !sheetEl) prefixLesson(); }, 120); }   // never over the top of an answer
   }
   const quit = h('button', { class:'quit', type:'button', 'aria-label':'End this match and go home', onclick:() => quitMatch() }, icon('x'), h('span', { text:'End' }));
   put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length));
@@ -2483,12 +2483,12 @@ function storyTime(done){
 }
 
 /* ---------- Pie the Mirror: spend spare custard pots on pies (2 pots always kept back for streak saving) ---------- */
-const PIE_HIT = ['My FEATHERS! I just had them polished!', 'This is custard abuse!', 'I am not crying. That is custard.', 'Mmm… actually, quite nice custard.', 'How DARE you! …Is there any more?', 'My reflection! It’s all yellow!', 'I demand a rematch! And a towel!', 'You’ll be hearing from my lawyer. He’s a crab.', 'Right in the beak!', 'That’s it. I’m telling Giles!', 'Custard in my EAR. Puffins have ears, you know.', 'I meant to do that. Custard is very fashionable.'];
+const PIE_HIT = ['My FEATHERS! I just had them polished!', 'This is custard CHAOS!', 'I am not crying. That is custard.', 'Mmm… actually, quite nice custard.', 'How DARE you! …Is there any more?', 'My reflection! It’s all yellow!', 'I demand a rematch! And a towel!', 'You’ll be hearing from my lawyer. He’s a crab.', 'Right in the beak!', 'That’s it. I’m telling Giles!', 'Custard in my EAR. Puffins have ears, you know.', 'I meant to do that. Custard is very fashionable.'];
 const PIE_MISS = ['Ha! Missed! Too fast, too fabulous!', 'Is that all you’ve got, custard boy?', 'Whoosh! Couldn’t touch me!', 'Nearly! Not really.', 'I’ve seen seagulls throw better.', 'Missed me! The puffin community saw that.'];
 const spareCustard = () => Math.max(0, (S.custard || 0) - 2);
 function pieGame(){
   screen = 'pies'; SND.loop(false);
-  let pies = spareCustard() * 3, thrown = 0, hits = 0, x = 50, vx = 28, last = performance.now(), raf = 0, over = false, duck = 0;
+  let dropT = 0, pies = spareCustard() * 3, thrown = 0, hits = 0, x = 50, vx = 28, last = performance.now(), raf = 0, over = false, duck = 0;
   const startPies = pies;
   const left = h('b', { text:String(pies) }), score = h('b', { text:'0' });
   const mirror = cimg(MIMG.smug, 'piemirror', 120, 'The Mirror');
@@ -2496,7 +2496,7 @@ function pieGame(){
   const mbox = h('div', { class:'mbox' }, mirror, splats);
   const bubble = h('div', { class:'piebub', text:'Go on then. I bet you can’t hit me.' });
   const arena = h('div', { class:'arena', role:'button', 'aria-label':'Tap to throw a custard pie at the Mirror' }, bubble, mbox, h('div', { class:'pietray', 'aria-hidden':'true', text:'🥧' }));
-  const endB = h('button', { class:'quit', type:'button', 'aria-label':'Stop and go home', onclick:() => finish() }, icon('x'), h('span', { text:'End' }));
+  const endB = h('button', { class:'quit', type:'button', 'aria-label':'Stop and go home', onclick:() => { if (startPies) finish(); else home(); } }, icon('x'), h('span', { text:'End' }));
   function frame(t){
     const dt = Math.min(.05, (t - last) / 1000); last = t;
     x += vx * dt; if (x < 12){ x = 12; vx = Math.abs(vx); } if (x > 88){ x = 88; vx = -Math.abs(vx); }
@@ -2515,15 +2515,16 @@ function pieGame(){
     arena.append(pie); SND.fx('flip');
     requestAnimationFrame(() => { pie.style.left = tx + 'px'; pie.style.top = ty + 'px'; pie.style.transform = 'translate(-50%,-50%) scale(.7) rotate(540deg)'; });
     setTimeout(() => {
+      if (over){ pie.remove(); return; }
       const m = mirror.getBoundingClientRect(), ax = tx + r.left, ay = ty + r.top;
       const hit = duck <= 0 && ax > m.left - 12 && ax < m.right + 12 && ay > m.top - 12 && ay < m.bottom + 12;
       pie.remove();
       if (hit){
         hits++; score.textContent = String(hits); S.stats.splats = (S.stats.splats || 0) + 1;
-        if (S.race.mf > 0) S.race.mf -= 1;   // a splat knocks a fish out of his flipper
+        const dropped = S.race.mf > 0; if (dropped){ S.race.mf -= 1; dropT++; }   // a splat knocks a fish out of his flipper (if he has one)
         const sp = h('i', { class:'splat', style:'left:' + Math.round(((ax - m.left) / m.width) * 100) + '%;top:' + Math.round(((ay - m.top) / m.height) * 100) + '%' });
         splats.append(sp); if (splats.children.length > 6) splats.firstChild.remove();
-        put(bubble, pickOne(PIE_HIT) + '  (−1 🐟)'); bubble.classList.add('hit'); mirror.src = MIMG.sad;
+        put(bubble, pickOne(PIE_HIT) + (dropped ? '  (−1 🐟)' : '')); bubble.classList.add('hit'); mirror.src = MIMG.sad;
         SND.fx('custard'); vx = (vx > 0 ? 1 : -1) * Math.min(80, Math.abs(vx) + 6);   // he gets faster
         if (Math.random() < .35) duck = .6;   // and starts ducking
         setTimeout(() => { mirror.src = MIMG.smug; bubble.classList.remove('hit'); }, 900);
@@ -2541,7 +2542,7 @@ function pieGame(){
     const nb = checkBadges(); if (nb.length) save();
     const res = h('div', { class:'pieres' },
       h('div', { class:'eyebrow', text:'SPLAT-O-METER' }), h('div', { class:'piebig', text:hits + ' / ' + thrown }),
-      h('p', { class:'line', text: hits === 0 ? (thrown ? 'Not one splat. The Mirror is unbearable now.' : 'No pies thrown. The Mirror looks relieved.') : 'The Mirror dropped ' + hits + ' fish and needs a very long bath.' }),
+      h('p', { class:'line', text: hits === 0 ? (thrown ? 'Not one splat. The Mirror is unbearable now.' : 'No pies thrown. The Mirror looks relieved.') : (dropT ? 'The Mirror dropped ' + dropT + ' fish and needs a very long bath.' : 'Splat! He has no fish left to drop, but he needs a very long bath.') }),
       sayBlock('com', hits >= 5 ? 'Magnificent throwing. I would like that noted. In custard.' : hits ? 'Custard justice has been served.' : 'We will practise. Custard waits for no puffin.', IMG.right),
       nb.length ? h('p', { class:'note' }, '🏅 New badge: ' + nb.map(b => b.n).join(', ')) : null,
       h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); home(); } }, 'Back to the race'));
@@ -2657,7 +2658,7 @@ function pickStory(){
 /* ---------- "How do you say it?": the right way (the phone's own British voice) against silly wrong ways ----------
    Each wrong version: [what the voice says, how it is written on screen, Cuffin's joke]. Words not listed get wrong versions made automatically. */
 const PRON = {
-  align:[['a lig nin', 'a-LIG-nin', 'That is a dinosaur sneezing.'], ['al gay jin', 'al-GAY-jin', 'There is no jin. The g is silent. Like the Mirror should be.']],
+  align:[['a lig nin', 'a-LIG-nin', 'That is a dinosaur sneezing.'], ['al jay jin', 'al-JAY-jin', 'There is no jin. The g is silent. Like the Mirror should be.']],
   onomatopoeia:[['on oh mat oh POO ee ah', 'on-oh-mat-oh-POO-ee-a', 'Please do not put poo in it.'], ['oh no mat oh pie ya', 'oh-no-mat-oh-PIE-ya', 'Oh no, a mat, a pie? No.']],
   personification:[['person if icky shun', 'person-if-ICKY-shun', 'Icky. Very icky.'], ['purse on if eye kay shun', 'PURSE-on-if-eye-kay-shun', 'A purse is for money, not for words.']],
   alliteration:[['all it ray shun', 'ALL-it-ray-shun', 'Close, but the puffin community winced.'], ['alley tear ay shun', 'ALLEY-tear-ay-shun', 'An alley is a little street. Wrong street.']],
@@ -2665,26 +2666,26 @@ const PRON = {
   metaphor:[['meta four', 'META-FOUR', 'Not a number. Not four of anything.'], ['me tay for', 'me-TAY-for', 'Me? Tay? For? No.']],
   noun:[['noon', 'NOON', 'That is lunchtime.'], ['nown', 'NOWN', 'Rhymes with clown. A clown would say it like that.']],
   adjective:[['add jet eve', 'add-JET-eve', 'There is no jet. Or Eve.'], ['adj eck tie vee', 'adj-ECK-tie-vee', 'A tie? On a word?']],
-  adverb:[['add verb', 'ADD-VERB-B', 'Right idea, but too robotic. Say it smoothly.'], ['ad vurb ee', 'ad-VURB-ee', 'Nobody says vurby.']],
+  adverb:[['ad vurb oh', 'ad-VURB-oh', 'Vurbo is not a word.'], ['ad vurb ee', 'ad-VURB-ee', 'Nobody says vurby.']],
   nauseous:[['naw see oh us', 'naw-see-OH-us', 'That sounds like a Roman emperor.'], ['nouse ee us', 'NOUSE-ee-us', 'A nouse is not a thing. Neither is this.']],
   colossal:[['coal oh sal', 'COAL-oh-sal', 'Coal is for fires. Wrong word.'], ['col oss al ee', 'col-oss-AL-ee', 'Too many bits.']],
   adolescent:[['ad oh less kent', 'ad-oh-LESS-kent', 'The c is soft: ad-oh-LESS-ent.'], ['a doll a scent', 'a-DOLL-a-SCENT', 'A doll with perfume?']],
-  ascend:[['ass kend', 'ass-KEND', 'The c is silent: a-SEND.'], ['ay scend', 'AY-scend', 'Ay ay, captain. Still wrong.']],
+  ascend:[['a skend', 'a-SKEND', 'The c is silent: uh-SEND.'], ['ay scend', 'AY-scend', 'Ay ay, captain. Still wrong.']],
   discern:[['dis kern', 'dis-KERN', 'Kern is not a word. Di-SERN.'], ['dice urn', 'DICE-urn', 'Dice in an urn. A strange game.']],
-  helix:[['hell ix', 'HELL-ix', 'The e is long: HEE-lix.'], ['he licks', 'he-LICKS', 'He licks? Who licks? Stop licking.']],
-  mirage:[['my rage', 'MY-RAGE', 'That is the Mirror losing a contest.'], ['mire ah gee', 'MIRE-a-gee', 'Say it French-ish: mi-RAHZH.']],
+  helix:[['hee likes', 'hee-LIKES', 'Say HEE-lix.'], ['he licks', 'he-LICKS', 'He licks? Who licks? Stop licking.']],
+  mirage:[['my rage', 'MY-RAGE', 'That is the Mirror losing a contest.'], ['mire ah gee', 'MIRE-a-gee', 'Say MIRR-ahzh.']],
   myriad:[['my rad', 'MY-RAD', 'Radical, but wrong.'], ['mere ee ad', 'MERE-ee-ad', 'It starts like mirror: MIRR-ee-ad.']],
   cautious:[['cow tee us', 'COW-tee-us', 'There are no cows in this word.'], ['caught eye us', 'caught-EYE-us', 'Say it like caught: CAW-shus.']],
   banal:[['ban ull', 'BAN-ull', 'Close-ish. Say ba-NAHL.'], ['banana l', 'ba-NAN-al', 'Not a banana.']],
-  gaudy:[['gowdy', 'GOW-dee', 'Say it like "gaudy" rhymes with "bawdy": GAW-dee.'], ['gud ee', 'GUD-ee', 'Goody goody. No.']],
+  gaudy:[['gowdy', 'GOW-dee', 'Say GAW-dee.'], ['gud ee', 'GUD-ee', 'Goody goody. No.']],
   eccentric:[['ee sen trick', 'EE-sen-trick', 'It starts with ek: ek-SEN-trick.'], ['ess entric', 'ESS-entric', 'Missing a k sound.']],
   maim:[['mime', 'MIME', 'A mime does silent acting. Very different.'], ['ma eem', 'ma-EEM', 'It rhymes with name.']],
   revere:[['rev er', 'REV-er', 'It rhymes with near: ri-VEER.'], ['reverie', 'REV-er-ee', 'Too many syllables.']],
   sincere:[['sin cheer', 'sin-CHEER', 'Cheering is nice, but it is sin-SEER.'], ['sinker', 'SINK-er', 'A sinker sinks. Wrong word.']],
-  supple:[['sup ull', 'SUP-ull', 'Close. Say SUP-ul, short and quick.'], ['soup ull', 'SOUP-ull', 'Soup? No soup. Just flexible.']],
+  supple:[['sup lie', 'sup-LIE', 'That is nearly supply. Say SUP-ul.'], ['soup ull', 'SOUP-ull', 'Soup? No soup. Just flexible.']],
   turbulent:[['tur bull ant', 'tur-BULL-ant', 'A bull ant? Dangerous.'], ['turbo lent', 'TURBO-lent', 'Too fast.']],
   ancestor:[['an kest or', 'an-KEST-or', 'The c is soft: AN-sess-tor.'], ['ann sister', 'ANN-sister', 'Ann is not your sister.']],
-  brazen:[['brazz en', 'BRAZZ-en', 'Long a: BRAY-zun.'], ['bra zeen', 'bra-ZEEN', 'No.']],
+  brazen:[['brazz en', 'BRAZZ-en', 'Long a: BRAY-zun.'], ['bra zeen', 'bra-ZEEN', '']],
   pristine:[['priss tyne', 'priss-TINE', 'It ends in teen: PRISS-teen.'], ['pry steen', 'PRY-steen', 'No prying.']],
   coherent:[['co hair ent', 'co-HAIR-ent', 'No hair involved. Co-HEER-ent.'], ['cow her ent', 'COW-her-ent', 'More cows. Stop it.']],
   feud:[['fed', 'FED', 'It sounds like few-d: FYOOD.'], ['foo ed', 'FOO-ed', 'Foo? No.']],
@@ -2698,129 +2699,133 @@ const PRON = {
   unkempt:[['un kemped', 'un-KEMP-ed', 'Just un-KEMPT.'], ['unk empty', 'UNK-empty', 'Empty? No.']],
   glisten:[['gliss ten', 'gliss-TEN', 'The t is silent: GLISS-en.'], ['glister', 'GLIST-er', 'Close, but no.']],
   hasten:[['has ten', 'has-TEN', 'The t is silent: HAY-sen.'], ['haste en', 'HASTE-en', 'Long a, silent t.']],
-  harass:[['hair ass', 'HAIR-ass', 'Say HA-russ, or ha-RASS.'], ['harr iss', 'HARR-iss', 'A pirate saying it. Arr.']],
+  harass:[['hair ess', 'HAIR-ess', 'Say HA-russ.'], ['harr iss', 'HARR-iss', 'A pirate saying it. Arr.']],
   nostalgic:[['nose tal jick', 'NOSE-tal-jick', 'Short o: noss-TAL-jick.'], ['nost al gick', 'nost-al-GICK', 'The g is soft: jick.']],
   rehearse:[['re hearse', 're-HEARSE', 'A hearse is a funeral car! ri-HURSS.'], ['ree hare see', 'ree-HARE-see', 'No hares.']],
   envelop:[['envelope', 'EN-ve-lope', 'That is the paper thing! This is en-VEL-up.'], ['en vee lop', 'en-VEE-lop', 'Say en-VEL-up.']],
   balk:[['bal k', 'BAL-K', 'The l is silent: BAWK.'], ['bulk', 'BULK', 'Bulk means lots. Wrong.']],
-  conquer:[['con kwer', 'con-KWER', 'Say CON-ker, like a conker!'], ['con queer', 'con-QUEER', 'No.']],
+  conquer:[['con kwer', 'con-KWER', 'Say CON-ker, like a conker!'], ['con kwair', 'con-KWAIR', 'Say CON-ker, like a conker!']],
   awe:[['a wee', 'a-WEE', 'Wee! No. Just AW.'], ['ow', 'OW', 'Ow is pain. Awe is wow.']],
   thorough:[['through', 'THROUGH', 'That is a different word. THUH-ruh.'], ['thor oh', 'THOR-oh', 'Thor has a hammer. Not this.']],
   purchase:[['pur chase', 'pur-CHASE', 'No chasing: PUR-chiss.'], ['purr chase', 'PURR-chase', 'A cat chasing. Nope.']],
   exhausted:[['ex hoss ted', 'ex-HOSS-ted', 'The h is silent: ig-ZAW-stid.'], ['ex house ted', 'ex-HOUSE-ted', 'Ted left the house.']],
   malleable:[['mall able', 'MALL-able', 'Say MAL-ee-uh-bul.'], ['may lee able', 'MAY-lee-able', 'Short a: MAL.']],
-  vulgar:[['vool gar', 'VOOL-gar', 'Say VULL-ger.'], ['vul gare', 'vul-GARE', 'No.']],
-  boisterous:[['boyster us', 'BOYSTER-us', 'Say BOY-ster-us, three bits.'], ['boys tear us', 'BOYS-tear-us', 'Boys, stop tearing things.']],
+  vulgar:[['vool gar', 'VOOL-gar', 'Say VULL-ger.'], ['vul gare', 'vul-GARE', '']],
+  boisterous:[['boo ster us', 'BOO-ster-us', 'It has an oi sound: BOY-ster-us.'], ['boys tear us', 'BOYS-tear-us', 'Boys, stop tearing things.']],
   interrogate:[['inter row gate', 'inter-ROW-gate', 'Say in-TERR-uh-gate.'], ['inter rog at', 'inter-ROG-at', 'Nope.']],
   flourish:[['flour ish', 'FLOUR-ish', 'Not flour for cakes! FLURR-ish.'], ['floor ish', 'FLOOR-ish', 'On the floor. No.']],
-  solace:[['so lace', 'SO-LACE', 'Not a shoe lace! SOLL-iss.'], ['sole ass', 'SOLE-ass', 'Say SOLL-iss.']],
+  solace:[['so lace', 'SO-LACE', 'Not a shoe lace! SOLL-iss.'], ['sole ace', 'SOLE-ace', 'Say SOLL-iss.']],
   derelict:[['der ee lick', 'der-EE-lick', 'Say DERR-uh-likt.'], ['dairy lict', 'DAIRY-lict', 'No cows. Again.']],
   volatile:[['vol a teel', 'vol-a-TEEL', 'Say VOLL-uh-tile.'], ['vole a tile', 'VOLE-a-tile', 'A vole on a tile. Cute. Wrong.']],
   insolent:[['in so lent', 'in-SO-lent', 'Say IN-suh-lunt.'], ['in sole ent', 'in-SOLE-ent', 'Not your shoe.']],
   gripe:[['grip ee', 'GRIP-ee', 'One bit: GRIPE, rhymes with ripe.'], ['grape', 'GRAPE', 'A grape is a fruit.']],
-  ardent:[['art dent', 'ART-dent', 'Say AR-dunt.'], ['are dent', 'ARE-dent', 'Close-ish. AR-dunt.']],
+  ardent:[['art dent', 'ART-dent', 'Say AR-dunt.'], ['ar deen', 'ar-DEEN', 'Say AR-dunt.']],
   humiliate:[['hum ill ee ate', 'HUM-ill-ee-ate', 'Say hew-MILL-ee-ate.'], ['who mile ate', 'who-MILE-ate', 'Who ate a mile? Not me.']],
   deprive:[['dep rive', 'DEP-rive', 'Say di-PRIVE.'], ['deep riv', 'DEEP-riv', 'Long i: PRIVE.']],
   oppress:[['oh press', 'OH-PRESS', 'Say uh-PRESS.'], ['op ress', 'OP-ress', 'Quick first bit: uh.']],
   truce:[['truck', 'TRUCK', 'A truck is a lorry! TROOSE.'], ['true see', 'TRUE-see', 'One bit: TROOSE.']],
-  component:[['com poe nent', 'com-POE-nent', 'Say cum-POH-nunt.'], ['compo nent', 'COMPO-nent', 'No.']],
+  component:[['com poe nent', 'com-POE-nent', 'Say cum-POH-nunt.'], ['compo nent', 'COMPO-nent', '']],
   evaporate:[['ee vap oh rate', 'EE-vap-oh-rate', 'Say ih-VAP-uh-rate.'], ['eva pour ate', 'EVA-pour-ate', 'Eva poured and ate? No.']],
-  agitate:[['ag ee tate', 'ag-EE-tate', 'Say AJ-ih-tate.'], ['a gite ate', 'a-GITE-ate', 'No.']],
+  agitate:[['ag ee tate', 'ag-EE-tate', 'Say AJ-ih-tate.'], ['a gite ate', 'a-GITE-ate', '']],
   tranquil:[['tran kwill', 'tran-KWILL', 'Say TRANG-kwill.'], ['train quill', 'TRAIN-quill', 'A train with a feather pen. Odd.']],
   gravitate:[['grav ee tate', 'grav-EE-tate', 'Say GRAV-ih-tate.'], ['gravy tate', 'GRAVY-tate', 'Gravy! Tasty, but wrong.']],
   retrieve:[['re tree vee', 're-TREE-vee', 'Say ri-TREEV.'], ['ret riv', 'RET-riv', 'Long e: TREEV.']],
-  relish:[['re lish', 'REE-lish', 'Short e: RELL-ish.'], ['rel ish ee', 'rel-ISH-ee', 'No.']],
+  relish:[['re lish', 'REE-lish', 'Short e: RELL-ish.'], ['rel ish ee', 'rel-ISH-ee', '']],
   covet:[['co vet', 'CO-VET', 'Not a vet for cows! CUV-it.'], ['cove ay', 'COVE-ay', 'Say CUV-it.']],
-  disarray:[['dis array', 'DIS-ar-ray', 'Say diss-uh-RAY.'], ['dizzy ray', 'DIZZY-ray', 'Dizzy Ray. Sounds like a pirate.']],
+  disarray:[['dis ar ree', 'dis-AR-ree', 'It ends in ray: diss-uh-RAY.'], ['dizzy ray', 'DIZZY-ray', 'Dizzy Ray. Sounds like a pirate.']],
   sparse:[['spar see', 'SPAR-see', 'One bit: SPARSS.'], ['spars', 'SPARZ', 'It ends in ss: SPARSS.']],
   stern:[['steer n', 'STEER-n', 'Say STURN.'], ['stair n', 'STAIR-n', 'No stairs.']],
-  ramble:[['ram bull', 'RAM-BULL', 'A ram and a bull. A farm. RAM-bul.'], ['rumble', 'RUMBLE', 'Rumble is a tummy noise.']],
-  banish:[['ban ish', 'BAN-ISH', 'Say BAN-ish, quick and smooth.'], ['bay nish', 'BAY-nish', 'Short a: BAN.']],
+  ramble:[['rahm blay', 'rahm-BLAY', 'Too fancy. Just RAM-bul.'], ['rumble', 'RUMBLE', 'Rumble is a tummy noise.']],
+  banish:[['ban eesh', 'ban-EESH', 'Sounds French. It is not. BAN-ish.'], ['bay nish', 'BAY-nish', 'Short a: BAN.']],
   guarantee:[['gwa ran tee', 'gwa-ran-TEE', 'The u is silent: garr-un-TEE.'], ['guar ant ee', 'GUAR-ant-ee', 'Say garr-un-TEE.']],
   struggle:[['strug glee', 'strug-GLEE', 'Say STRUG-ul.'], ['stroo gull', 'STROO-gull', 'No seagulls.']],
-  comprehend:[['com pree hend', 'com-PREE-hend', 'Say com-prih-HEND.'], ['comp rehend', 'COMP-rehend', 'No.']],
-  wayward:[['way ward', 'WAY-WARD', 'Say WAY-wud, quick ending.'], ['why ward', 'WHY-ward', 'Why? Because no.']],
+  comprehend:[['com pree hend', 'com-PREE-hend', 'Say com-prih-HEND.'], ['com pree hen dee', 'com-pree-HEN-dee', 'No dee on the end.']],
+  wayward:[['way war dee', 'way-WAR-dee', 'Just WAY-wud.'], ['why ward', 'WHY-ward', 'Why? Because no.']],
   contempt:[['con tempt ee', 'con-TEMPT-ee', 'Say cun-TEMPT.'], ['con temp', 'con-TEMP', 'Missing the t at the end.']],
-  acquire:[['ack wire', 'ACK-wire', 'Say uh-KWIRE.'], ['a queer', 'a-QUEER', 'No.']],
+  acquire:[['ack wire', 'ACK-wire', 'Say uh-KWIRE.'], ['ack why er', 'ACK-why-er', 'Say uh-KWIRE.']],
   earnest:[['ear nest', 'EAR-nest', 'A nest in your ear! UR-nist.'], ['ernest', 'ER-NEST', 'Ernest is a name.']],
-  obscure:[['ob scoor', 'ob-SCOOR', 'Say ub-SKYOOR.'], ['obs cure', 'OBS-cure', 'No.']],
-  dismal:[['dizz mal', 'DIZZ-mal', 'Say DIZ-mul.'], ['dis mall', 'dis-MALL', 'Not a shopping mall.']],
+  obscure:[['ob scoor', 'ob-SCOOR', 'Say ub-SKYOOR.'], ['obs cure', 'OBS-cure', '']],
+  dismal:[['dice mal', 'DICE-mal', 'Short i: DIZ-mul.'], ['dis mall', 'dis-MALL', 'Not a shopping mall.']],
   nominal:[['no mine al', 'no-MINE-al', 'Say NOM-in-ul.'], ['gnome in al', 'GNOME-in-al', 'A gnome! No.']],
   wane:[['wan ee', 'WAN-ee', 'One bit: WAYN.'], ['wan', 'WAN', 'Long a: WAYN.']],
   concur:[['con cure', 'con-CURE', 'Say cun-KUR.'], ['conk er', 'CONK-er', 'A conker is a nut.']],
-  ponder:[['pond er', 'POND-ER', 'Say PON-der, smooth.'], ['pon dare', 'pon-DARE', 'No dares.']],
-  validate:[['val ee date', 'val-EE-date', 'Say VAL-ih-date.'], ['valid ate', 'VALID-ate', 'No.']],
+  ponder:[['pone der', 'PONE-der', 'Short o: PON-der.'], ['pon dare', 'pon-DARE', 'No dares.']],
+  validate:[['val ee date', 'val-EE-date', 'Say VAL-ih-date.'], ['valid ate', 'VALID-ate', '']],
   frail:[['fray all', 'FRAY-all', 'One bit: FRAYL.'], ['frill', 'FRILL', 'A frill is frilly.']],
-  stingy:[['sting ee', 'STING-ee', 'Like a bee! No: STIN-jee.'], ['sting guy', 'STING-guy', 'No.']],
-  kindle:[['kind ull', 'KIND-ull', 'Short i: KIN-dul.'], ['kin dee lee', 'kin-DEE-lee', 'No.']],
+  stingy:[['sting ee', 'STING-ee', 'Like a bee! No: STIN-jee.'], ['sting guy', 'STING-guy', '']],
+  kindle:[['kind ull', 'KIND-ull', 'Short i: KIN-dul.'], ['kin dee lee', 'kin-DEE-lee', '']],
   idle:[['id lee', 'ID-lee', 'Say EYE-dul.'], ['id ull', 'ID-ull', 'Long i: EYE-dul.']],
-  endure:[['end your', 'END-YOUR', 'Say in-DYOOR.'], ['en doo ray', 'en-DOO-ray', 'No.']],
-  deliberate:[['deli bear ate', 'DELI-bear-ate', 'A bear ate the deli! dih-LIB-ur-ut.'], ['dee lie brate', 'dee-LIE-brate', 'No.']],
-  surplus:[['sir plus', 'SIR-PLUS', 'Say SUR-plus, smooth.'], ['sur ploo', 'sur-PLOO', 'No.']],
-  inferior:[['in fear ee or', 'in-FEAR-ee-or', 'Close: in-FEER-ee-uh.'], ['infer ee or', 'INFER-ee-or', 'No.']],
-  deceive:[['dee kive', 'dee-KIVE', 'Say dih-SEEV.'], ['deck eve', 'DECK-eve', 'No.']],
+  endure:[['end your', 'END-YOUR', 'Say in-DYOOR.'], ['en doo ray', 'en-DOO-ray', '']],
+  deliberate:[['deli bear ate', 'DELI-bear-ate', 'A bear ate the deli! dih-LIB-ur-ut.'], ['dee lie brate', 'dee-LIE-brate', '']],
+  surplus:[['sur ploose', 'sur-PLOOSE', 'Say SUR-plus.'], ['sir plussy', 'sir-PLUSS-ee', 'No extra ee on the end.']],
+  inferior:[['in fear ee or', 'in-FEAR-ee-or', 'Close: in-FEER-ee-uh.'], ['infer ee or', 'INFER-ee-or', '']],
+  deceive:[['dee kive', 'dee-KIVE', 'Say dih-SEEV.'], ['deck eve', 'DECK-eve', '']],
   fluctuate:[['fluck tu ate', 'FLUCK-tu-ate', 'Say FLUCK-choo-ate.'], ['flute ate', 'FLUTE-ate', 'Someone ate a flute.']],
-  waft:[['wayft', 'WAYFT', 'Short a: WOFT.'], ['waffed', 'WAFFED', 'No.']],
-  allay:[['alley', 'ALLEY', 'Say uh-LAY.'], ['all eye', 'ALL-EYE', 'No.']],
+  waft:[['wayft', 'WAYFT', 'Short a: WOFT.'], ['waffed', 'WAFFED', '']],
+  allay:[['alley', 'ALLEY', 'Say uh-LAY.'], ['all eye', 'ALL-EYE', '']],
   smother:[['smoe ther', 'SMOE-ther', 'Say SMUTH-er.'], ['smooth er', 'SMOOTH-er', 'Close, but SMUTH-er.']],
   prosperous:[['pros peer us', 'pros-PEER-us', 'Say PROSS-pur-us.'], ['prosper ooze', 'PROSPER-ooze', 'Ooze. Yuck.']],
-  duplicate:[['dupe lick ate', 'DUPE-lick-ate', 'Say DYOO-plih-kate.'], ['dew plicket', 'DEW-plicket', 'No.']],
+  duplicate:[['dupe lick ate', 'DUPE-lick-ate', 'Say DYOO-plih-kate.'], ['dew plicket', 'DEW-plicket', '']],
   confide:[['con fiddy', 'con-FIDDY', 'Say cun-FIDE.'], ['con feed', 'con-FEED', 'No feeding.']],
-  soiled:[['soy led', 'SOY-LED', 'One bit: SOYLD.'], ['solid', 'SOLID', 'Solid is hard. Wrong.']],
+  soiled:[['say led', 'SAY-led', 'It has an oi sound: SOYLD.'], ['solid', 'SOLID', 'Solid is hard. Wrong.']],
   alluring:[['all your ring', 'ALL-your-RING', 'Say uh-LOOR-ing.'], ['allure ing', 'AL-lure-ing', 'Close: uh-LOOR-ing.']],
   despair:[['dess pair', 'DESS-pair', 'Say dih-SPAIR.'], ['desperate', 'DESP-er-ate', 'Different word.']],
   humid:[['hum id', 'HUM-id', 'Say HYOO-mid.'], ['hoo mid', 'HOO-mid', 'Close-ish. HYOO-mid.']],
-  akin:[['ache in', 'ACHE-in', 'Say uh-KIN.'], ['ak in', 'AK-in', 'Quick first bit: uh-KIN.']],
-  hostile:[['host isle', 'HOST-isle', 'Say HOSS-tile.'], ['hoe steel', 'HOE-steel', 'No.']],
-  accomplishment:[['ack om plish ment', 'ack-OM-plish-ment', 'Say uh-KUM-plish-ment.'], ['a comp lish ment', 'a-COMP-lish-ment', 'No.']],
-  discernible:[['dis kern able', 'dis-KERN-able', 'Soft c: dih-SURN-uh-bul.'], ['dice urn able', 'DICE-urn-able', 'No.']],
+  akin:[['ache in', 'ACHE-in', 'Say uh-KIN.'], ['ak eye n', 'ak-EYEN', 'Say uh-KIN.']],
+  hostile:[['host isle', 'HOST-isle', 'Say HOSS-tile.'], ['hoe steel', 'HOE-steel', '']],
+  accomplishment:[['ack om plish ment', 'ack-OM-plish-ment', 'Say uh-KUM-plish-ment.'], ['a comp lish ment', 'a-COMP-lish-ment', '']],
+  discernible:[['dis kern able', 'dis-KERN-able', 'Soft c: dih-SURN-uh-bul.'], ['dice urn able', 'DICE-urn-able', '']],
   uncanny:[['un kay nee', 'un-KAY-nee', 'Say un-KAN-ee.'], ['un candy', 'un-CANDY', 'Not candy.']],
   examine:[['ex a mine', 'ex-a-MINE', 'Say ig-ZAM-in.'], ['egg zam een', 'egg-ZAM-een', 'Close-ish: ig-ZAM-in.']],
   illegible:[['ill eg ible', 'ill-EGG-ible', 'An egg! No. ih-LEJ-uh-bul.'], ['eye leg ible', 'eye-LEG-ible', 'No legs.']],
   irreparable:[['ear repair able', 'ear-re-PAIR-able', 'Sneaky one: ih-REP-ur-uh-bul.'], ['ire pair a bull', 'IRE-pair-a-bull', 'A pair of bulls?']],
   irresistible:[['ear re zist able', 'ear-re-ZIST-able', 'Say irr-ih-ZIST-uh-bul.'], ['ire ress tiny bull', 'IRE-ress-tiny-bull', 'A tiny bull. Aww.']],
-  inadequate:[['in add eh kwate', 'in-ADD-eh-kwate', 'Say in-AD-ih-kwut.'], ['in a dee quate', 'in-a-DEE-quate', 'No.']],
-  inoffensive:[['in off end sieve', 'in-off-END-sieve', 'Say in-uh-FEN-siv.'], ['in oh fen sive', 'in-OH-fen-sive', 'No.']],
+  inadequate:[['in add eh kwate', 'in-ADD-eh-kwate', 'Say in-AD-ih-kwut.'], ['in a dee quate', 'in-a-DEE-quate', '']],
+  inoffensive:[['in off end sieve', 'in-off-END-sieve', 'Say in-uh-FEN-siv.'], ['in oh fen sive', 'in-OH-fen-sive', '']],
   antibiotic:[['anti bee ottick', 'anti-BEE-ottick', 'Say an-tee-bye-OT-ik.'], ['ant eye bio tick', 'ANT-eye-bio-tick', 'An ant with an eye and a tick. Busy.']],
-  anticlimax:[['anti climb ax', 'anti-CLIMB-ax', 'Say an-tee-KLY-max.'], ['ant ick lim ax', 'ANT-ick-lim-ax', 'No.']],
-  antiseptic:[['anti sceptic', 'anti-SCEPTIC', 'Say an-tee-SEP-tik.'], ['ant eye septic', 'ANT-eye-septic', 'No.']],
-  autograph:[['auto graf ee', 'auto-GRAF-ee', 'Say AW-tuh-graf.'], ['out o graph', 'OUT-o-graph', 'No.']],
+  anticlimax:[['anti climb ax', 'anti-CLIMB-ax', 'Say an-tee-KLY-max.'], ['ant ick lim ax', 'ANT-ick-lim-ax', '']],
+  antiseptic:[['anti sceptic', 'anti-SCEPTIC', 'Say an-tee-SEP-tik.'], ['ant eye septic', 'ANT-eye-septic', '']],
+  autograph:[['auto graf ee', 'auto-GRAF-ee', 'Say AW-tuh-graf.'], ['out o graph', 'OUT-o-graph', '']],
   autobiography:[['auto bio graffy', 'auto-BIO-graffy', 'Close! aw-toe-bye-OG-ruh-fee.'], ['out a bee graphy', 'OUT-a-bee-graphy', 'No bees.']],
   automobile:[['auto mobile', 'AUTO-MOBILE', 'Say AW-tuh-muh-beel.'], ['auto mobil lee', 'auto-mo-BILL-ee', 'Bill who?']],
-  reemerge:[['ree mer gee', 'ree-MER-gee', 'Say ree-ih-MURJ.'], ['remmer jay', 'REMMER-jay', 'No.']],
+  reemerge:[['ree mer gee', 'ree-MER-gee', 'Say ree-ih-MURJ.'], ['remmer jay', 'REMMER-jay', '']],
   rephrase:[['ref raise', 'REF-raise', 'Say ree-FRAYZ.'], ['rep hraze', 'REP-hraze', 'The ph says f: ree-FRAYZ.']],
-  disappointed:[['dis a point ed', 'DIS-a-POINT-ed', 'Smoother: diss-uh-POYN-tid.'], ['dizzy pointed', 'DIZZY-pointed', 'No.']],
+  disappointed:[['dis a poyn teed', 'dis-a-POYN-teed', 'It ends in tid: diss-uh-POYN-tid.'], ['dizzy pointed', 'DIZZY-pointed', '']],
   disbelief:[['dis bell eef', 'dis-BELL-eef', 'Say diss-bih-LEEF.'], ['dis bee life', 'dis-BEE-life', 'A bee\'s life. Busy.']],
   dishonest:[['dis hone est', 'dis-HONE-est', 'The h is silent: diss-ON-ist.'], ['dish on est', 'DISH-on-est', 'A dish? No.']],
-  mishear:[['mish ear', 'MISH-EAR', 'Ha: mis-HEER.'], ['my sheer', 'my-SHEER', 'No.']],
+  mishear:[['mish ear', 'MISH-EAR', 'Ha: mis-HEER.'], ['my sheer', 'my-SHEER', '']],
   misjudge:[['mis jud gee', 'mis-JUD-gee', 'Say mis-JUJ.'], ['mice judge', 'MICE-judge', 'Mice in court. Funny.']],
   mispronounced:[['miss pro noun ced', 'miss-pro-NOUN-ced', 'Ironic! mis-pruh-NOWNST.'], ['my spoon owned', 'my-SPOON-owned', 'My spoon is owned? No.']],
-  misinform:[['mice in form', 'MICE-in-form', 'Say mis-in-FORM.'], ['miss inform ay', 'miss-in-FORM-ay', 'No.']],
-  disadvantage:[['dis add van tag', 'dis-add-VAN-tag', 'Say diss-ud-VAHN-tij.'], ['dizzy van tag', 'DIZZY-van-tag', 'No.']],
+  misinform:[['mice in form', 'MICE-in-form', 'Say mis-in-FORM.'], ['miss inform ay', 'miss-in-FORM-ay', '']],
+  disadvantage:[['dis add van tag', 'dis-add-VAN-tag', 'Say diss-ud-VAHN-tij.'], ['dizzy van tag', 'DIZZY-van-tag', '']],
   antifreeze:[['anti frizz', 'anti-FRIZZ', 'Frizz is hair. an-tee-FREEZ.'], ['ant eye freeze', 'ANT-eye-freeze', 'A frozen ant.']],
-  antisocial:[['anti soak ial', 'anti-SOAK-ial', 'Say an-tee-SOH-shul.'], ['ant eye so kial', 'ANT-eye-so-kial', 'No.']],
-  impolite:[['imp oh light', 'IMP-oh-light', 'An imp with a light. Say im-puh-LITE.'], ['impo lit ee', 'impo-LIT-ee', 'No.']],
-  immortal:[['im mor tall', 'im-mor-TALL', 'Say ih-MOR-tul.'], ['eye mortal', 'EYE-mortal', 'No.']],
-  inaccurate:[['in a cure ate', 'in-a-CURE-ate', 'Say in-AK-yur-ut.'], ['in ack you rate', 'in-ACK-you-rate', 'No.']],
-  irrational:[['ear ray shun al', 'ear-RAY-shun-al', 'Say ih-RASH-uh-nul.'], ['eye rational', 'EYE-rational', 'No.']],
+  antisocial:[['anti soak ial', 'anti-SOAK-ial', 'Say an-tee-SOH-shul.'], ['ant eye so kial', 'ANT-eye-so-kial', '']],
+  impolite:[['imp oh light', 'IMP-oh-light', 'An imp with a light. Say im-puh-LITE.'], ['impo lit ee', 'impo-LIT-ee', '']],
+  immortal:[['im mor tall', 'im-mor-TALL', 'Say ih-MOR-tul.'], ['eye mortal', 'EYE-mortal', '']],
+  inaccurate:[['in a cure ate', 'in-a-CURE-ate', 'Say in-AK-yur-ut.'], ['in ack you rate', 'in-ACK-you-rate', '']],
+  irrational:[['ear ray shun al', 'ear-RAY-shun-al', 'Say ih-RASH-uh-nul.'], ['eye rational', 'EYE-rational', '']],
   irresponsible:[['ire response able', 'IRE-response-able', 'Say irr-ih-SPON-suh-bul.'], ['ear ree spawn sible', 'ear-ree-SPAWN-sible', 'No fish spawning here.']],
 };
-/* automatic wrong versions for any other word: say the silent letters, or make a vowel say its name */
+/* automatic wrong versions for any other word: sound out the silent letters, or make a vowel say its name */
 function autoWrong(w){
-  const out = [], seen = new Set([w.toLowerCase()]);
-  const add = (s, d) => { const k = s.toLowerCase(); if (s && !seen.has(k)){ seen.add(k); out.push([s, d, '']); } };
-  const lw = w.toLowerCase();
-  const silent = [[/^kn/, 'k nn'], [/^gn/, 'g nn'], [/^wr/, 'w rr'], [/^ps/, 'p ss'], [/mb$/, 'm b'], [/gn$/, 'g n'], [/ght/, 'g h t'], [/stle$/, 's t ull'], [/sten$/, 's ten'], [/ph/, 'p h']];
-  for (const [re, rep] of silent) if (re.test(lw)) add(lw.replace(re, rep), lw.replace(re, rep.replace(/ /g, '').toUpperCase()));
+  const out = [], lw = w.toLowerCase(), seen = new Set([lw.replace(/\s/g, '')]);
+  const tidy = d => d.replace(/^-+|-+$/g, '').replace(/--+/g, '-');
+  const add = (sp, d, j) => { const k = sp.replace(/\s/g, ''); if (sp && !seen.has(k)){ seen.add(k); out.push([sp.trim(), tidy(d), j || '']); } };
+  const silent = [[/^kn/, 'kuh n', 'KUH-n', 'The k is silent!'], [/^gn/, 'guh n', 'GUH-n', 'The g is silent!'], [/^wr/, 'wuh r', 'WUH-r', 'The w is silent!'], [/^ps/, 'puh s', 'PUH-s', 'The p is silent!'],
+    [/mb$/, 'm buh', 'm-BUH', 'The b is silent!'], [/^isl/, 'iz l', 'IZ-l', 'The s is silent!'], [/ght/, 'g hut', 'G-HUT', 'The gh is silent!'], [/stle$/, 's tull', 's-TULL', 'The t is silent!'],
+    [/sten$/, 's ten', 's-TEN', 'The t is silent!'], [/ph/, 'p', 'P', 'ph says f, not p!'], [/bt$/, 'b tuh', 'b-TUH', 'The b is silent!'], [/^rh/, 'ruh h', 'RUH-h', 'The h is silent!'], [/ruary$/, 'roo airy', 'ROO-airy', 'Feb-roo-ary has two r sounds.']];
+  for (const [re, sp, d, j] of silent) if (re.test(lw)){ const m = lw.match(re); add(lw.slice(0, m.index) + ' ' + sp + ' ' + lw.slice(m.index + m[0].length), lw.slice(0, m.index) + d + lw.slice(m.index + m[0].length), j); }
   const longV = { a:'ay', e:'ee', i:'eye', o:'oh', u:'you' };
-  const m = lw.match(/[aeiou]/);
-  if (m){ const i = m.index; add(lw.slice(0, i) + ' ' + longV[m[0]] + ' ' + lw.slice(i + 1), lw.slice(0, i) + '-' + longV[m[0]].toUpperCase() + '-' + lw.slice(i + 1)); }
-  const vs = [...lw.matchAll(/[aeiou]/g)];
-  if (vs.length > 1){ const v = vs[vs.length - 1], i = v.index; add(lw.slice(0, i) + ' ' + longV[v[0]] + ' ' + lw.slice(i + 1), lw.slice(0, i) + '-' + longV[v[0]].toUpperCase() + '-' + lw.slice(i + 1)); }
-  if (/e$/.test(lw) && lw.length > 3) add(lw.slice(0, -1) + ' ee', lw.slice(0, -1) + '-EE');
-  if (/ch/.test(lw)) add(lw.replace('ch', 'k'), lw.replace('ch', 'K'));
-  if (/c[eiy]/.test(lw)) add(lw.replace(/c([eiy])/, 'k$1'), lw.replace(/c([eiy])/, 'K$1'));
-  if (/g[eiy]/.test(lw)) add(lw.replace(/g([eiy])/, 'g g$1'), lw.replace(/g([eiy])/, 'G$1'));
+  const vs = [...lw.matchAll(/[aeiou]/g)].filter(v => !(v.index === 1 && /^(re|de|be|pre)/.test(lw)));   // leave re-/de-/be-/pre- alone: those are said that way
+  const swapAt = v => { const i = v.index; add(lw.slice(0, i) + ' ' + longV[v[0]] + ' ' + lw.slice(i + 1), lw.slice(0, i) + '-' + longV[v[0]].toUpperCase() + '-' + lw.slice(i + 1)); };
+  if (vs.length) swapAt(vs[0]);
+  if (vs.length > 1) swapAt(vs[vs.length - 1]);
+  if (/e$/.test(lw) && lw.length > 3) add(lw.slice(0, -1) + ' ee', lw.slice(0, -1) + '-EE', 'That e on the end is silent.');
+  if (/ch/.test(lw)) add(lw.replace('ch', ' k '), lw.replace('ch', 'K'));
+  if (/c[eiy]/.test(lw)) add(lw.replace(/c([eiy])/, ' k$1'), lw.replace(/c([eiy])/, 'K$1'));
+  if (/g[eiy]/.test(lw)) add(lw.replace(/g([eiy])/, ' gg$1'), lw.replace(/g([eiy])/, 'G$1'));
+  add(lw + ' ah', lw + '-AH', 'There is no ah on the end.');
+  add('ee ' + lw, 'EE-' + lw, 'No extra ee at the start.');
   return out;
 }
 function pronOptions(w){
