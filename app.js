@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "448c3ef30e";
+const APPV = "6cfb3e12c5";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -616,6 +616,8 @@ function mergeStates(a, b, base){
   const bl = {}; ((r.book || {}).list || []).concat((o.book || {}).list || []).forEach(e => { const c = bl[e.k]; bl[e.k] = c ? Object.assign({}, c, e, { ok:c.ok || e.ok, pinky:c.pinky || e.pinky, chk:c.chk || e.chk, s:e.s || c.s, o:e.o || c.o }) : e; });
   o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
   o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
+  o.pieDay = [a.pieDay || '', r.pieDay || ''].sort().pop();
+  for (const k of ['pieN', 'pieBonus']){ const x = a[k], y = r[k]; o[k] = !x ? y : !y ? x : x.d !== y.d ? (x.d > y.d ? x : y) : { d:x.d, n:Math.max(x.n || 0, y.n || 0) }; }
   if ((a.bank || '') === (r.bank || '')){ const wm = {}; (r.words || []).concat(o.words || []).forEach(w => { const k = norm(w.w), c = wm[k]; wm[k] = !c || (!c.m && w.m) ? w : c; }); o.words = Object.values(wm); }
   if (r.school && (!o.school || (r.school.d || '') > (o.school.d || ''))) o.school = r.school;
   else if (r.school && o.school && r.school.d === o.school.d) o.school = { d:o.school.d, list:[...new Set((o.school.list || []).concat(r.school.list || []))] };
@@ -927,6 +929,9 @@ const BADGES = [
   { id:'early', n:'Early Bird', d:'Finish a match before 8am.', em:'🐦', t:c => (c.S.stats.early || 0) >= 1 },
   { id:'owl', n:'Night Owl', d:'Finish a match after 7pm.', em:'🦉', t:c => (c.S.stats.owl || 0) >= 1 }
 ];
+/* show badges easiest first, hardest (every word, then the crown) last */
+const BADGE_ORDER = ["first", "splat1", "story1", "d3", "s5", "m10", "fix5", "spell10", "cust5", "clear", "perf", "f100", "hear10", "pre10", "say10", "pinky10", "book10", "early", "owl", "school1", "d5", "r10", "s10", "m25", "spell25", "cw10", "d7", "splat10", "cards10", "f250", "s15", "perf3", "fix20", "m50", "story10", "clear20", "r25", "d14", "spell50", "s20", "say40", "m75", "f500", "cw25", "d21", "splat50", "r50", "m100", "half", "perf10", "d30", "m150", "f1000", "r100", "m200", "mall", "leader"];
+BADGES.sort((x, y) => { const i = BADGE_ORDER.indexOf(x.id), j = BADGE_ORDER.indexOf(y.id); return (i < 0 ? 999 : i) - (j < 0 ? 999 : j); });
 function checkBadges(){
   const ctx = { S, m:masteredCount(), days:dayStreak(), total:allItems().length }, got = [];
   for (const b of BADGES) if (!S.badges[b.id] && b.t(ctx)){ S.badges[b.id] = today(); got.push(b); }
@@ -2267,7 +2272,7 @@ function streakRow(){
   return h('div', { class:'streakrow' },
     h('div', { class:'flame' + (st ? '' : ' out') + (S.history.some(x => x.d === today()) ? '' : ' cold'), title:'Days in a row' }, h('span', { 'aria-hidden':'true', text:'🔥' }), h('b', { text:String(st) }), h('span', { class:'small', text:st === 1 ? 'day' : 'days' })),
     h('div', { class:'goal' + (done ? ' done' : ''), title:'Daily goal' }, h('div', { class:'gwrap' }, ring, h('span', { class:'gtx', text: done ? '✓' : n + '' })), h('span', { class:'small', text: done ? 'Goal done!' : 'Goal: ' + GOAL + ' answers' })),
-    h('button', { class:'cpots', type:'button', title:'Custard pots: tap to throw pies at the Mirror', 'aria-label':'Custard pots: ' + (S.custard || 0) + '. Tap to throw pies at the Mirror', onclick:() => { SND.fx('tap'); pieGame(); } }, h('span', { 'aria-hidden':'true', text: spareCustard() ? '🥧' : '🍮' }), h('b', { text:String(S.custard || 0) })));
+    h('button', { class:'cpots', type:'button', title:'Custard pots. Pie the Mirror: ' + ({ ready:'ready!', locked:'after today’s goal', done:'done today' })[pieState()], 'aria-label':'Custard pots: ' + (S.custard || 0) + '. Pie the Mirror', onclick:() => { SND.fx('tap'); pieGame(); } }, h('span', { class: pieState() === 'ready' ? 'pieready' : '', 'aria-hidden':'true', text: pieState() === 'ready' ? '🥧' : '🍮' }), h('b', { text:String(S.custard || 0) })));
 }
 
 /* reading the story aloud in the same British voice as the words */
@@ -2482,28 +2487,36 @@ function storyTime(done){
   read();
 }
 
-/* ---------- Pie the Mirror: spend spare custard pots on pies (2 pots always kept back for streak saving) ---------- */
+/* ---------- Pie the Mirror: a free daily reward once the day's goal is done ---------- */
 const PIE_HIT = ['My FEATHERS! I just had them polished!', 'This is custard CHAOS!', 'I am not crying. That is custard.', 'Mmm… actually, quite nice custard.', 'How DARE you! …Is there any more?', 'My reflection! It’s all yellow!', 'I demand a rematch! And a towel!', 'You’ll be hearing from my lawyer. He’s a crab.', 'Right in the beak!', 'That’s it. I’m telling Giles!', 'Custard in my EAR. Puffins have ears, you know.', 'I meant to do that. Custard is very fashionable.'];
 const PIE_MISS = ['Ha! Missed! Too fast, too fabulous!', 'Is that all you’ve got, custard boy?', 'Whoosh! Couldn’t touch me!', 'Nearly! Not really.', 'I’ve seen seagulls throw better.', 'Missed me! The puffin community saw that.'];
-const spareCustard = () => Math.max(0, (S.custard || 0) - 2);
+/* once a day, free, after the daily goal; a grown-up can give one extra go */
+const PIE_HITS = 6, PIE_SECS = 120;
+const pieUsed = () => (S.pieN && S.pieN.d === today()) ? S.pieN.n : 0;
+const pieAllowed = () => 1 + ((S.pieBonus && S.pieBonus.d === today()) ? S.pieBonus.n : 0);   // 1 a day, plus any extra a grown-up gives
+const pieState = () => todayCount() < GOAL ? 'locked' : pieUsed() < pieAllowed() ? 'ready' : 'done';
+let PIE_GAME = 0;
 function pieGame(){
   screen = 'pies'; SND.loop(false);
-  let dropT = 0, pies = spareCustard() * 3, thrown = 0, hits = 0, x = 50, vx = 28, last = performance.now(), raf = 0, over = false, duck = 0;
+  const st0 = pieState();
+  const gameId = ++PIE_GAME; let lastThrow = 0;
+  let dropT = 0, pies = st0 === 'ready' ? 1e9 : 0, thrown = 0, secs = PIE_SECS, timerT = 0, hits = 0, x = 50, vx = 28, last = performance.now(), raf = 0, over = false, duck = 0;
   const startPies = pies;
-  const left = h('b', { text:String(pies) }), score = h('b', { text:'0' });
+  const clock = h('b', { class:'pieclock', text:'2:00' }), score = h('b', { text:'0' });
   const mirror = cimg(MIMG.smug, 'piemirror', 120, 'The Mirror');
   const splats = h('div', { class:'splats' });
   const mbox = h('div', { class:'mbox' }, mirror, splats);
   const bubble = h('div', { class:'piebub', text:'Go on then. I bet you can’t hit me.' });
   const tray = h('div', { class:'pietray', 'aria-hidden':'true', text:'🥧' });
   const arena = h('div', { class:'arena', role:'button', 'aria-label':'Flick or tap to throw a custard pie at the Mirror' }, bubble, mbox, tray);
-  const endB = h('button', { class:'quit', type:'button', 'aria-label':'Stop and go home', onclick:() => { if (startPies) finish(); else home(); } }, icon('x'), h('span', { text:'End' }));
+  const endB = h('button', { class:'quit', type:'button', 'aria-label':'Stop and go home', onclick:() => { if (thrown) finish('end'); else { over = true; cancelAnimationFrame(raf); home(); } } }, icon('x'), h('span', { text:'End' }));
   /* pies are animated by hand every frame (works the same on every phone) */
   const flying = []; let combo = 0;
   const WORDS = ['SPLAT!', 'SPLOSH!', 'KER-SPLAT!', 'GLOOP!', 'SPLODGE!', 'WALLOP!', 'SPLUDGE!'];
   function frame(t){
     const dt = Math.min(.05, (t - last) / 1000); last = t;
-    x += vx * dt; if (x < 12){ x = 12; vx = Math.abs(vx); } if (x > 88){ x = 88; vx = -Math.abs(vx); }
+    const half = arena.clientWidth ? (mbox.offsetWidth / 2 + 4) / arena.clientWidth * 100 : 18;
+    x += vx * dt; if (x < half){ x = half; vx = Math.abs(vx); } if (x > 100 - half){ x = 100 - half; vx = -Math.abs(vx); }
     if (Math.random() < dt * .7) vx = -vx;   // sudden change of direction
     if (duck > 0) duck -= dt;
     mbox.style.left = x + '%'; mbox.classList.toggle('duck', duck > 0);
@@ -2515,7 +2528,7 @@ function pieGame(){
     }
     if (!over) raf = requestAnimationFrame(frame);
   }
-  function burst(cls, txt, px, py){ const e = h('div', { class:cls, text:txt, style:'left:' + px + 'px;top:' + py + 'px' }); arena.append(e); setTimeout(() => e.remove(), 1100); return e; }
+  function burst(cls, txt, px, py, ms){ const e = h('div', { class:cls, text:txt, style:'left:' + px + 'px;top:' + py + 'px' }); arena.append(e); setTimeout(() => e.remove(), ms || 1100); return e; }
   function droplets(px, py){ for (let i = 0; i < 10; i++){ const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 50; const e = h('i', { class:'drop', style:'left:' + px + 'px;top:' + py + 'px;--dx:' + Math.round(Math.cos(a) * d) + 'px;--dy:' + Math.round(Math.sin(a) * d) + 'px' }); arena.append(e); setTimeout(() => e.remove(), 800); } }
   function land(p, px, py){
     p.el.remove(); if (over) return;
@@ -2537,20 +2550,39 @@ function pieGame(){
       if (hits % 3 === 1 && Math.random() < .7){ const v = VOICE.pick('m04', 'm05', 'm07'); if (v) VOICE.play(v); }
       vx = (vx > 0 ? 1 : -1) * Math.min(80, Math.abs(vx) + 5);   // he gets faster
       if (Math.random() < .3) duck = .55;   // and starts ducking
-      clearTimeout(p.reset); setTimeout(() => { mirror.src = MIMG.smug; bubble.classList.remove('hit'); }, 1000);
+      clearTimeout(p.reset);
+      if (hits >= PIE_HITS){ save(); return knockout(); }
+      setTimeout(() => { if (!over) { mirror.src = MIMG.smug; bubble.classList.remove('hit'); } }, 1000);
       save();
     } else {
       combo = 0;
       burst('plop', 'plop', px, py); const g = h('i', { class:'groundsplat', style:'left:' + px + 'px;top:' + py + 'px' }); arena.append(g); setTimeout(() => g.remove(), 1400);
       put(bubble, pickOne(PIE_MISS)); SND.fx('wrong');
     }
-    if (pies <= 0 && !flying.length) setTimeout(finish, 1100);
+  }
+  /* six splats: the Mirror keels over, and that's pies for today */
+  function knockout(){
+    if (over) return; over = true; cancelAnimationFrame(raf); clearInterval(timerT); endB.disabled = true;
+    flying.forEach(p => p.el.remove()); flying.length = 0;
+    mirror.src = MIMG.sad; mbox.classList.add('ko'); arena.classList.remove('shake'); void arena.offsetWidth; arena.classList.add('shake');
+    mbox.append(h('div', { class:'kostars', 'aria-hidden':'true', text:'💫 ⭐ 💫' }));
+    burst('kobig', 'K.O.!', arena.clientWidth / 2, arena.clientHeight * .4, 2500);
+    put(bubble, pickOne(['I’ll… be… back… tomorrow…', 'Tell my reflection… I loved it…', 'Is it… bath time… now?', 'Custard… everywhere… so… yellow…']));
+    SND.fx('cheer'); const v = VOICE.pick('m07', 'm04'); if (v) setTimeout(() => VOICE.play(v), 500);
+    setTimeout(() => results('ko'), 2600);
+  }
+  function tick(){
+    if (over) return; secs--; clock.textContent = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+    if (secs === 15) clock.classList.add('low');
+    if (secs <= 0){ clearInterval(timerT); put(bubble, 'Ha! Time’s up! Saved by the bell!'); setTimeout(() => finish('time'), 900); over = true; cancelAnimationFrame(raf); }
   }
   function launch(tx, ty){
     if (over || pies <= 0) return;
     const r = arena.getBoundingClientRect();
-    pies--; thrown++; left.textContent = String(pies); tray.textContent = pies ? '🥧' : '';
-    if (thrown % 3 === 1){ S.custard = Math.max(0, (S.custard || 0) - 1); save(); }   // every 3 pies uses up one pot
+    if (thrown === 0){ timerT = setInterval(tick, 1000); }
+    if (performance.now() - lastThrow < 220) return; lastThrow = performance.now();   // no machine-gunning
+    if (thrown === 0){ S.pieN = { d:today(), n:pieUsed() + 1 }; S.pieDay = today(); save(); }   // the session counts from the first pie
+    pies--; thrown++;
     S.stats.pies = (S.stats.pies || 0) + 1;
     const el = h('div', { class:'pie', text:'🥧' }); arena.append(el);
     const x0 = r.width / 2, y0 = r.height - 34, dist = Math.hypot(tx - x0, ty - y0);
@@ -2565,7 +2597,7 @@ function pieGame(){
     const r = arena.getBoundingClientRect(), ex = cx - r.left, ey = cy - r.top, dx = ex - start.x, dy = ey - start.y;
     const m = mirror.getBoundingClientRect(), targetY = m.top - r.top + m.height / 2;
     let tx = ex, ty = ey;
-    if (Math.hypot(dx, dy) > 20 && dy < -8){ const k = (targetY - start.y) / dy; tx = start.x + dx * k; ty = targetY; }   // a flick: carry on in that direction up to the Mirror
+    if (Math.hypot(dx, dy) > 20 && dy < -8 && start.y > targetY + 20){ const k = (targetY - start.y) / dy; tx = start.x + dx * k; ty = targetY; }   // a flick from below: carry on in that direction up to the Mirror
     else if (start.y > r.height - 110){ tx = start.x; ty = targetY; }                                                    // a tap on the pie at the bottom: throw straight up
     start = null; launch(Math.max(10, Math.min(r.width - 10, tx)), Math.max(10, ty));
   };
@@ -2576,29 +2608,31 @@ function pieGame(){
   arena.addEventListener('pointerdown', ev => { if (Date.now() - lastTouch < 800 || ev.pointerType === 'touch') return; ev.preventDefault(); begin(ev.clientX, ev.clientY); });
   arena.addEventListener('pointerup', ev => { if (Date.now() - lastTouch < 800 || ev.pointerType === 'touch') return; ev.preventDefault(); finishThrow(ev.clientX, ev.clientY); });
   document.documentElement.classList.add('noscroll');
-  const unlock = () => document.documentElement.classList.remove('noscroll');
-  setTimeout(() => { const t = setInterval(() => { if (!arena.isConnected){ unlock(); clearInterval(t); } }, 500); }, 0);
-  function finish(){
-    if (over) return; over = true; cancelAnimationFrame(raf); raceFix(); save();
+  const t = setInterval(() => { if (!arena.isConnected){ clearInterval(t); if (PIE_GAME === gameId) document.documentElement.classList.remove('noscroll'); } }, 200);   // only the latest game unlocks scrolling
+  function finish(why){ over = true; cancelAnimationFrame(raf); clearInterval(timerT); results(why); }
+  function results(why){
+    if (results.done) return; results.done = true; raceFix(); save();
     const nb = checkBadges(); if (nb.length) save();
     const res = h('div', { class:'pieres' },
-      h('div', { class:'eyebrow', text:'SPLAT-O-METER' }), h('div', { class:'piebig', text:hits + ' / ' + thrown }),
+      h('div', { class:'eyebrow', text: why === 'ko' ? 'KNOCKOUT!' : 'SPLAT-O-METER' }), h('div', { class:'piebig', text: why === 'ko' ? '💫 K.O. 💫' : hits + ' / ' + thrown }),
       h('p', { class:'line', text: hits === 0 ? (thrown ? 'Not one splat. The Mirror is unbearable now.' : 'No pies thrown. The Mirror looks relieved.') : (dropT ? 'The Mirror dropped ' + dropT + ' fish and needs a very long bath.' : 'Splat! He has no fish left to drop, but he needs a very long bath.') }),
-      sayBlock('com', hits >= 5 ? 'Magnificent throwing. I would like that noted. In custard.' : hits ? 'Custard justice has been served.' : 'We will practise. Custard waits for no puffin.', IMG.right),
+      sayBlock('com', why === 'ko' ? 'Six splats. He is having a little lie down. Pies again tomorrow, after your words.' : hits ? 'Custard justice has been served. More pies tomorrow, after your words.' : 'We will practise. Pies again tomorrow, after your words.', IMG.right),
       nb.length ? h('p', { class:'note' }, '🏅 New badge: ' + nb.map(b => b.n).join(', ')) : null,
       h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); home(); } }, 'Back to the race'));
     mount([h('div', { class:'qbar' }, h('span', { class:'qn', text:'PIE THE MIRROR' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' }, res))], null);
     if (hits) SND.fx('cheer');
   }
   if (!startPies){
-    mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'PIE THE MIRROR' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' },
-      sayBlock('com', 'No spare custard yet. Win a pot with 5 right in a row. I always keep 2 pots back to save your streak.', IMG.ask),
-      h('p', { class:'line', text:'You have ' + (S.custard || 0) + ' pot' + ((S.custard || 0) === 1 ? '' : 's') + ' of custard. Pies start once you have 3 or more.' }),
-      h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => home() }, 'Back to the race')))], null);
+    const n = todayCount(), locked = st0 === 'locked';
+    mount([h('div', { class:'qbar' }, h('span', { class:'qn', text:'PIE THE MIRROR' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' },
+      sayBlock('com', locked ? 'Words first, custard second. Finish today’s goal and the pies are ready.' : 'The Mirror is still lying down after today’s custard. Pies again tomorrow, after your words.', locked ? IMG.ask : IMG.right),
+      locked ? h('p', { class:'line', text:'Today’s goal: ' + Math.min(n, GOAL) + ' of ' + GOAL + ' answers. ' + (GOAL - n) + ' to go!' }) : h('p', { class:'line', text:'💫 Today’s pie session is done.' }),
+      h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => locked ? startRound('mixed') : home() }, locked ? '⚽ KICK OFF' : 'Back to the race'),
+      locked ? h('button', { class:'btn alt wide', type:'button', onclick:() => home() }, 'Home') : null))], null);
     return;
   }
-  mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn' }, '🥧 ', left, ' · SPLATS ', score), h('div', { class:'tools' }, soundBtns())),
-    h('div', { class:'say' }, cimg(IMG.right, '', 44, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:'Custard. Not for eating. For justice. Flick the pie at the Mirror, or tap where you want it to land!' }))), arena], null);
+  mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn' }, '⏱ ', clock, ' · SPLATS ', score, '/' + PIE_HITS), h('div', { class:'tools' }, soundBtns())),
+    h('div', { class:'say' }, cimg(IMG.right, '', 44, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:'Your reward for today’s words! Flick pies at the Mirror. Six splats and he’s down. You have 2 minutes!' }))), arena], null);
   raf = requestAnimationFrame(frame);
 }
 
@@ -2923,7 +2957,7 @@ function moreSheet(){
   openSheet([h('h2', { text:'More matches' }), h('div', { class:'mlist' },
     item('🤝', 'Cards match', 'Just the similar & opposite cards', () => startRound('cards')),
     item('🎯', 'Training', tricky ? tricky + ' tricky words to fix' : 'No tricky words yet', () => startRound('tricky'), !tricky),
-    item('🥧', 'Pie the Mirror', spareCustard() ? spareCustard() * 3 + ' custard pies to throw' : 'Win more custard first (2 pots kept for streaks)', () => pieGame()),
+    item('🥧', 'Pie the Mirror', ({ ready:'Ready! Your reward for today’s words', locked:'Unlocks when today’s goal is done (' + Math.min(todayCount(), GOAL) + '/' + GOAL + ')', done:'Done for today. Back tomorrow' })[pieState()], () => pieGame()),
     item('📖', 'Story time', 'A Cuffin story using your words', () => storyTime(() => home())),
     item('💡', 'Word-building tip', 'How il-, im-, in-, ir- and friends work', () => { home(); prefixLesson(); }),
     item('📺', 'Today’s chapter', 'Watch the match report again', () => chapter(() => home())),
@@ -3212,6 +3246,8 @@ function grownups(){
       sw('sw-mv', S.settings.mvoice !== false, 'The Mirror’s voice', 'The recorded Mirror lines.', v => { S.settings.mvoice = v; if (!v) VOICE.stop(); save(); grownups(); }),
       remindBlock(),
       sw('sw-music', S.settings.music, 'Music', 'Story fanfare, chapter sting, crowning anthem, match groove.', v => { S.settings.music = v; if (v) S.settings.sound = true; save(); grownups(); if (!v){ SND.stop(); SND.loop(false); } else { SND.prime(); SND.tune('win'); } }),
+      h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:'Pie the Mirror' }), h('span', { class:'small muted', text:'Once a day, after the daily goal: 6 splats or 2 minutes. Sessions today: ' + pieUsed() + ' of ' + pieAllowed() + '.' })),
+        h('button', { class:'btn alt small', type:'button', onclick:() => { S.pieBonus = { d:today(), n:((S.pieBonus && S.pieBonus.d === today()) ? S.pieBonus.n : 0) + 1 }; save(); toast('Extra pie session added for today'); grownups(); } }, '🥧 Extra session today')),
       h('div', { class:'set' }, h('div', { class:'lbl' }, h('b', { text:'Previews' }), h('span', { class:'small muted', text:'These do not change any progress.' }))),
       h('div', { class:'row' }, h('button', { class:'btn alt small', type:'button', onclick:() => intro(() => grownups()) }, 'The story'), h('button', { class:'btn alt small', type:'button', onclick:() => chapter(() => grownups()) }, 'Today’s chapter'), h('button', { class:'btn alt small', type:'button', onclick:() => ceremony(true, () => grownups()) }, 'The crowning')));
   } else if (gTab === 'school'){

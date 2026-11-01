@@ -604,6 +604,12 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 .pieres{display:flex;flex-direction:column;gap:10px;flex:1;align-items:stretch;text-align:center} .piebig{font:400 3rem/1 var(--font-display);color:var(--team)}
 button.cpots{font:inherit;color:inherit;cursor:pointer}
 html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-action:none;position:fixed;inset:0;width:100%}
+.mbox.ko{transition:transform .9s cubic-bezier(.5,-.3,.6,1.4);transform:translateX(-50%) translateY(60%) rotate(90deg)}
+.kostars{position:absolute;top:-28px;left:50%;transform:translateX(-50%);font-size:1.4rem;white-space:nowrap;animation:spin 1.2s linear infinite}
+@keyframes spin{from{transform:translateX(-50%) rotate(0)}to{transform:translateX(-50%) rotate(360deg)}}
+.kobig{position:absolute;transform:translate(-50%,-50%);font:400 4.5rem/1 var(--font-display);color:#D7263D;-webkit-text-stroke:3px #FFD23F;text-shadow:0 6px 0 #0B1533;z-index:5;pointer-events:none;animation:pow 2.4s ease-out forwards}
+.pieclock{font-variant-numeric:tabular-nums} .pieclock.low{color:var(--team)}
+.pieready{display:inline-block;animation:bump 1.2s ease-in-out infinite}
 </style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -645,5 +651,5 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=448c3ef30e"></script>
+<script src="app.js?v=6cfb3e12c5"></script>
 </body></html>
