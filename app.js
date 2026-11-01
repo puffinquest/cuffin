@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "3263b61538";
+const APPV = "448c3ef30e";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -3431,6 +3431,6 @@ raceFix();
   } else syncStart();
   home();
 })();
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).catch(() => {});
 
 })();
