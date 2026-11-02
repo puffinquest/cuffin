@@ -7,6 +7,31 @@ const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone:'Eu
   .formatToParts(new Date()).map(p => [p.type, p.value]));
 const today = `${parts.year}-${parts.month}-${parts.day}`, hour = +parts.hour;
 console.log('UK time', today, hour + ':xx', force ? '(forced test)' : '');
+/* every hour: tell grown-up devices about any prize Aaron has just unlocked */
+async function prizeNotes(){
+  const fams = await db.collection('families').listDocuments();
+  for (const fam of fams) {
+    let S = {};
+    try { S = JSON.parse((await fam.collection('state').doc('progress').get()).data().s || '{}'); } catch (e) { continue; }
+    const name = S.name || 'Aaron', m = Object.values(S.prog || {}).filter(r => r && r.m && !r.wob).length;
+    const ref = fam.collection('state').doc('prizenotes'), done = ((await ref.get()).data() || {}).sent || [];
+    const fresh = (S.prizes || []).filter(p => m >= p.at && !p.given && !done.includes(p.at + '|' + (p.text || '')));
+    if (!fresh.length) continue;
+    const toks = (await fam.collection('tokens').get()).docs.filter(t => t.data().grownup && t.data().t);
+    for (const p of fresh) {
+      const body = `${name} has mastered ${m} words and unlocked a prize: ${p.text || 'a surprise'}! 🎉 Tick it as given in Grown-ups → Prizes.`;
+      for (const t of toks) {
+        try { await fcm.send({ token:t.data().t, data:{ title:'🎁 Prize unlocked!', body, url:'./', tag:'cuffin-prize-' + p.at }, webpush:{ headers:{ Urgency:'high', TTL:'86400' } } }); }
+        catch (e) { console.log('send failed', e.code); }
+      }
+      done.push(p.at + '|' + (p.text || ''));
+      console.log(fam.id.slice(0, 4) + '…: prize note', JSON.stringify(body));
+    }
+    await ref.set({ sent:done });
+  }
+}
+if (process.env.MODE === 'prizes' || !process.env.MODE || process.env.MODE === 'reminder') { try { await prizeNotes(); } catch (e) { console.log('prize check failed', e.message); } }
+if (process.env.MODE === 'prizes') process.exit(0);
 const isSun = new Intl.DateTimeFormat('en-GB', { timeZone:'Europe/London', weekday:'short' }).format(new Date()) === 'Sun';
 if (!force && process.env.MODE !== 'report' && !(isSun && hour >= 18 && hour <= 21) && (hour < 16 || hour > 18)) { console.log('Not 4pm in the UK yet, nothing to do.'); process.exit(0); }
 const addDays = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };

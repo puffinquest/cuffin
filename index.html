@@ -610,6 +610,14 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-
 .kobig{position:absolute;transform:translate(-50%,-50%);font:400 4.5rem/1 var(--font-display);color:#D7263D;-webkit-text-stroke:3px #FFD23F;text-shadow:0 6px 0 #0B1533;z-index:5;pointer-events:none;animation:pow 2.4s ease-out forwards}
 .pieclock{font-variant-numeric:tabular-nums} .pieclock.low{color:var(--team)}
 .pieready{display:inline-block;animation:bump 1.2s ease-in-out infinite}
+.celeb.prize{background:radial-gradient(circle at 50% 40%,#3A1D7A,#0B0420 75%)}
+.celgift{font-size:clamp(4.5rem,14dvh,7rem);line-height:1;animation:giftbounce 1s ease-in-out infinite}
+@keyframes giftbounce{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-14px) rotate(4deg) scale(1.08)}}
+.celeb.prize h2{font-size:clamp(1.5rem,5dvh,2.2rem);color:#FFD23F}
+.fireworks{position:absolute;inset:0;pointer-events:none;z-index:1}
+.fw{position:absolute;width:0;height:0}
+.fw i{position:absolute;width:7px;height:7px;border-radius:50%;opacity:0;box-shadow:0 0 8px currentColor;animation:fwb 1.6s ease-out infinite}
+@keyframes fwb{0%{transform:translate(0,0) scale(.4);opacity:1}70%{opacity:1}100%{transform:translate(var(--dx),calc(var(--dy) + 40px)) scale(.9);opacity:0}}
 </style>
 </head><body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -651,5 +659,5 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=9bd2d5f3a9"></script>
+<script src="app.js?v=7f63c83086"></script>
 </body></html>

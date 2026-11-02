@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "9bd2d5f3a9";
+const APPV = "7f63c83086";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -617,6 +617,7 @@ function mergeStates(a, b, base){
   o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
   o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
   o.pieDay = [a.pieDay || '', r.pieDay || ''].sort().pop();
+  (o.prizes || []).forEach(p => { const q = (r.prizes || []).find(x => x.at === p.at && (x.text || '') === (p.text || '')); if (q){ p.announced = p.announced || q.announced; p.seen = p.seen || q.seen; p.given = p.given || q.given; } });
   for (const k of ['pieN', 'pieBonus']){ const x = a[k], y = r[k]; o[k] = !x ? y : !y ? x : x.d !== y.d ? (x.d > y.d ? x : y) : { d:x.d, n:Math.max(x.n || 0, y.n || 0) }; }
   if ((a.bank || '') === (r.bank || '')){ const wm = {}; (r.words || []).concat(o.words || []).forEach(w => { const k = norm(w.w), c = wm[k]; wm[k] = !c || (!c.m && w.m) ? w : c; }); o.words = Object.values(wm); }
   if (r.school && (!o.school || (r.school.d || '') > (o.school.d || ''))) o.school = r.school;
@@ -2155,10 +2156,20 @@ function confettiBox(n){
   for (let k = 0; k < (n || 50); k++) box.append(h('i', { style:'left:' + rnd(100) + '%;background:' + cols[k % cols.length] + ';animation-delay:' + (Math.random() * 1.4).toFixed(2) + 's' }));
   return box;
 }
+function fireworksBox(){
+  const box = h('div', { class:'fireworks', 'aria-hidden':'true' }), cols = ['#FFD23F', '#FF4D5E', '#3DDC84', '#4DA3FF', '#B48BFF', '#FFFFFF'];
+  for (let b = 0; b < 7; b++){
+    const burst = h('div', { class:'fw', style:'left:' + (10 + rnd(80)) + '%;top:' + (8 + rnd(45)) + '%;animation-delay:' + (b * .45).toFixed(2) + 's' });
+    for (let k = 0; k < 18; k++){ const a = k / 18 * Math.PI * 2, d = 60 + rnd(50);
+      burst.append(h('i', { style:'--dx:' + Math.round(Math.cos(a) * d) + 'px;--dy:' + Math.round(Math.sin(a) * d) + 'px;background:' + cols[(b + k) % cols.length] + ';animation-delay:' + (b * .45).toFixed(2) + 's' })); }
+    box.append(burst);
+  }
+  return box;
+}
 function celebrate(o, next){
   closeSheet();
-  const go = h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); ov.remove(); if (R) R.keys = prev; next && next(); } }, o.button || 'Brilliant!');
-  const ov = h('div', { class:'celeb', role:'dialog', 'aria-modal':'true', 'aria-labelledby':'celebh' }, confettiBox(o.confetti || 50),
+  const go = h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); ov.remove(); if (R) R.keys = prev; if (o.onDone) o.onDone(); next && next(); } }, o.button || 'Brilliant!');
+  const ov = h('div', { class:'celeb' + (o.fireworks ? ' prize' : ''), role:'dialog', 'aria-modal':'true', 'aria-labelledby':'celebh' }, o.fireworks ? fireworksBox() : null, confettiBox(o.confetti || 50),
     h('div', { class:'celin' },
       h('div', { class:'eyebrow', style:'color:#FFD23F', text:o.kicker || '' }),
       o.art || null,
@@ -2170,6 +2181,7 @@ function celebrate(o, next){
   document.body.append(ov); requestAnimationFrame(() => fitWords(ov));
   const prev = R ? R.keys : null; if (R) R.keys = null;
   SND.fx(o.sound || 'cheer'); if (o.tune) SND.tune(o.tune);
+  if (o.fireworks){ [400, 900, 1500, 2100, 2800].forEach(t => setTimeout(() => { if (ov.isConnected) SND.fx('cheer'); }, t)); if (S.settings.sound) setTimeout(() => sayWord('Prize unlocked! ' + (o.title || '')), 700); }
   if (o.voice) setTimeout(() => VOICE.play(o.voice), 900);
   if (o.voice2) setTimeout(() => VOICE.play(o.voice2), 1000);
   setTimeout(() => go.focus({ preventScroll:true }), 80);
@@ -2249,8 +2261,21 @@ function celebrateMastered(x, next){
     line:v ? VO.c10 : 'Mastered. The puffin community will be informed.', button:'Keep going' }, next);
 }
 /* end-of-match celebrations: new trophy, badges, daily goal, streak */
+/* prizes from Mum and Dad: a big fireworks moment, shown once (and replayed if it was missed) */
+function prizeParties(){
+  const m = masteredCount(), out = [];
+  for (const p of (S.prizes || []).slice().sort((a, b) => a.at - b.at)){
+    if (m < p.at || p.seen || p.given) continue;
+    p.announced = true;
+    out.push({ kicker:'🎁 PRIZE UNLOCKED! 🎁', fireworks:true, confetti:90, tune:'anthem', art:h('div', { class:'celgift', 'aria-hidden':'true', text:'🎁' }),
+      title:p.text || 'A surprise prize!', sub:'For mastering ' + p.at + ' words. Go and show a grown-up!',
+      line:'A prize. From the grown-ups. The puffin community is beside itself. I may need a lie down.', who:'c', button:'🎉 I’ll tell a grown-up!', onDone:() => { p.seen = true; save(); } });
+  }
+  if (out.length) save();
+  return out;
+}
 function matchCelebrations(round, badges){
-  const list = [], m = masteredCount(), ri = rankInfo(m);
+  const list = prizeParties(), m = masteredCount(), ri = rankInfo(m);
   if (round.rank0 != null && ri.i > round.rank0) list.push({ kicker:'NEW TROPHY', art:h('div', { class:'celtro' }, trophyEl(ri.i, true)), title:TROPHY_NAMES[ri.i] + '!', sub:'You are now ' + ri.cur.name + '. ' + m + ' words mastered.', voice:VOICE.pick('c15'), tune:'win', line:VOICE.can('c15') ? VO.c15 : 'A new trophy. I would like that noted.' });
   for (const b of badges){
     const pw = b.id === 'd7', v = pw ? VOICE.pick('c31') : VOICE.pick('c27');
@@ -2937,6 +2962,7 @@ function home(greeting){
   if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); if (storyDue()) storyTime(() => home()); else home(); }); }
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
   { const nb = checkBadges(); if (nb.length){ save(); toast('🏅 New badge: ' + nb.map(b => b.n).join(', ')); } }   // catch up on badges earned in an unfinished match
+  if (!home.prizeShowing){ const pz = prizeParties(); if (pz.length){ home.prizeShowing = true; setTimeout(() => celebrateAll(pz, () => { home.prizeShowing = false; home(); }), 400); } }   // a prize reached but never celebrated: show it now
   autoDaily();
   let greet = greeting || null;
   if (!home.greeted && S.stats.answered && (S.history || []).some(x => x.d < today())){ home.greeted = true; if (VOICE.play('c02')) greet = VO.c02.replace('Aaron', S.name); }

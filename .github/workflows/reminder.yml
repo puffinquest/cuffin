@@ -5,13 +5,14 @@ on:
     - cron: '0 16 * * *'   # 4pm UK in winter
     - cron: '0 17 * * 0'   # Sunday 6pm report (summer time)
     - cron: '0 18 * * 0'   # Sunday 6pm report (winter)
+    - cron: '23 * * * *'   # every hour: prize notifications
   workflow_dispatch:
     inputs:
       force:
         description: 'Send a test now, even if Aaron has played (yes/no)'
         default: 'no'
       mode:
-        description: 'What to send: reminder or report'
+        description: 'What to send: reminder, report or prizes'
         default: 'reminder'
 jobs:
   remind:
