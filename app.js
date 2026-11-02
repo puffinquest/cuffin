@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "7f63c83086";
+const APPV = "094dcb6c9a";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -617,7 +617,7 @@ function mergeStates(a, b, base){
   o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
   o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
   o.pieDay = [a.pieDay || '', r.pieDay || ''].sort().pop();
-  (o.prizes || []).forEach(p => { const q = (r.prizes || []).find(x => x.at === p.at && (x.text || '') === (p.text || '')); if (q){ p.announced = p.announced || q.announced; p.seen = p.seen || q.seen; p.given = p.given || q.given; } });
+  (o.prizes || []).forEach(p => { const q = (r.prizes || []).find(x => x.at === p.at && (x.text || '') === (p.text || '')); if (q){ p.announced = p.announced || q.announced; p.seen = p.seen || q.seen; p.kidSeen = p.kidSeen || q.kidSeen; p.given = p.given || q.given; } });
   for (const k of ['pieN', 'pieBonus']){ const x = a[k], y = r[k]; o[k] = !x ? y : !y ? x : x.d !== y.d ? (x.d > y.d ? x : y) : { d:x.d, n:Math.max(x.n || 0, y.n || 0) }; }
   if ((a.bank || '') === (r.bank || '')){ const wm = {}; (r.words || []).concat(o.words || []).forEach(w => { const k = norm(w.w), c = wm[k]; wm[k] = !c || (!c.m && w.m) ? w : c; }); o.words = Object.values(wm); }
   if (r.school && (!o.school || (r.school.d || '') > (o.school.d || ''))) o.school = r.school;
@@ -2262,14 +2262,16 @@ function celebrateMastered(x, next){
 }
 /* end-of-match celebrations: new trophy, badges, daily goal, streak */
 /* prizes from Mum and Dad: a big fireworks moment, shown once (and replayed if it was missed) */
+const onGrownupDev = () => { try { return typeof isGrownupDev === 'function' && isGrownupDev(); } catch (e) { return false; } };
 function prizeParties(){
   const m = masteredCount(), out = [];
+  if (onGrownupDev()) return out;   // the party is for Aaron: a grown-up's phone never uses it up
   for (const p of (S.prizes || []).slice().sort((a, b) => a.at - b.at)){
-    if (m < p.at || p.seen || p.given) continue;
+    if (m < p.at || p.kidSeen || p.given) continue;
     p.announced = true;
     out.push({ kicker:'🎁 PRIZE UNLOCKED! 🎁', fireworks:true, confetti:90, tune:'anthem', art:h('div', { class:'celgift', 'aria-hidden':'true', text:'🎁' }),
       title:p.text || 'A surprise prize!', sub:'For mastering ' + p.at + ' words. Go and show a grown-up!',
-      line:'A prize. From the grown-ups. The puffin community is beside itself. I may need a lie down.', who:'c', button:'🎉 I’ll tell a grown-up!', onDone:() => { p.seen = true; save(); } });
+      line:'A prize. From the grown-ups. The puffin community is beside itself. I may need a lie down.', who:'c', button:'🎉 I’ll tell a grown-up!', onDone:() => { p.seen = true; if (!onGrownupDev()) p.kidSeen = true; save(); } });
   }
   if (out.length) save();
   return out;
