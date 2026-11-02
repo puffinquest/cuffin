@@ -613,7 +613,10 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-
 .celeb.prize{background:radial-gradient(circle at 50% 40%,#3A1D7A,#0B0420 75%)}
 .celgift{font-size:clamp(4.5rem,14dvh,7rem);line-height:1;animation:giftbounce 1s ease-in-out infinite}
 @keyframes giftbounce{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-14px) rotate(4deg) scale(1.08)}}
-.celeb.prize h2{font-size:clamp(1.5rem,5dvh,2.2rem);color:#FFD23F}
+.celeb.prize h2{font-size:clamp(1.5rem,5dvh,2.2rem);color:#FFD23F;overflow-wrap:anywhere}
+.celeb.prize h2.long{font-size:clamp(1.1rem,3.6dvh,1.6rem)}
+.celeb.prize{overflow-y:auto;align-items:flex-start;-webkit-overflow-scrolling:touch} .celeb.prize .celin{margin:auto 0}
+.celeb.prize .btn.kick{white-space:nowrap;font-size:clamp(.95rem,4.6vw,1.25rem)}
 .fireworks{position:absolute;inset:0;pointer-events:none;z-index:1}
 .fw{position:absolute;width:0;height:0}
 .fw i{position:absolute;width:7px;height:7px;border-radius:50%;opacity:0;box-shadow:0 0 8px currentColor;animation:fwb 1.6s ease-out infinite}
@@ -659,5 +662,5 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=094dcb6c9a"></script>
+<script src="app.js?v=618c9a1e9a"></script>
 </body></html>

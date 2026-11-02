@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "094dcb6c9a";
+const APPV = "618c9a1e9a";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -594,7 +594,7 @@ const setBase = v => { try { localStorage.setItem(BASEKEY, String(v || 0)); } ca
 /* what the family copy looked like when this device last agreed with it: lets a merge add up both devices' gains */
 const BASESKEY = KEY + '-basestate';
 const getBaseState = () => { try { return JSON.parse(localStorage.getItem(BASESKEY) || 'null'); } catch (e) { return null; } };
-function setBaseAll(o){ setBase(o.upd || 0); try { localStorage.setItem(BASESKEY, JSON.stringify({ points:o.points || 0, custard:o.custard || 0, stats:o.stats || {}, race:{ mf:(o.race || {}).mf || 0, mm:(o.race || {}).mm || 0 }, tstat:o.tstat || {} })); } catch (e) {} }
+function setBaseAll(o){ setBase(o.upd || 0); try { localStorage.setItem(BASESKEY, JSON.stringify({ points:o.points || 0, custard:o.custard || 0, stats:o.stats || {}, race:{ mf:(o.race || {}).mf || 0, mm:(o.race || {}).mm || 0 }, tstat:o.tstat || {}, prizes:(o.prizes || []).map(p => ({ at:p.at, text:p.text || '' })) })); } catch (e) {} }
 const roundKey = x => x.id || (x.d + '|' + x.a + '|' + x.r + '|' + x.n);
 /* two devices played while apart: add up what each one gained since they last agreed, so no answers are lost */
 function mergeStates(a, b, base){
@@ -617,6 +617,12 @@ function mergeStates(a, b, base){
   o.book = { list:Object.values(bl).sort((x, y) => x.d < y.d ? 1 : -1).slice(0, 200), next:[...new Set(((o.book || {}).next || []).concat((r.book || {}).next || []))].slice(-20) };
   o.freeze = [...new Set((o.freeze || []).concat(r.freeze || []))];
   o.pieDay = [a.pieDay || '', r.pieDay || ''].sort().pop();
+  if (base && Array.isArray(base.prizes)){   // three-way: keep prizes on both sides, plus ones newly added on either side (a prize edited or deleted on one side stays that way)
+    const pk = p => p.at + '|' + (p.text || ''), inB = new Set((base.prizes || []).map(pk)), inA = new Set((a.prizes || []).map(pk)), inR = new Set((r.prizes || []).map(pk));
+    o.prizes = (o.prizes || []).filter(p => inR.has(pk(p)) || !inB.has(pk(p))).concat(JSON.parse(JSON.stringify((r.prizes || []).filter(p => !inA.has(pk(p)) && !inB.has(pk(p)))))).sort((x, y) => x.at - y.at);
+    const kept = new Set(o.prizes.map(pk));
+    (a.prizes || []).concat(r.prizes || []).filter(d => !kept.has(pk(d))).forEach(d => o.prizes.filter(p => p.at === d.at).forEach(n => { n.announced = n.announced || d.announced; n.seen = n.seen || d.seen; n.kidSeen = n.kidSeen || d.kidSeen; }));   // text tidied on either device: already celebrated stays celebrated
+  }
   (o.prizes || []).forEach(p => { const q = (r.prizes || []).find(x => x.at === p.at && (x.text || '') === (p.text || '')); if (q){ p.announced = p.announced || q.announced; p.seen = p.seen || q.seen; p.kidSeen = p.kidSeen || q.kidSeen; p.given = p.given || q.given; } });
   for (const k of ['pieN', 'pieBonus']){ const x = a[k], y = r[k]; o[k] = !x ? y : !y ? x : x.d !== y.d ? (x.d > y.d ? x : y) : { d:x.d, n:Math.max(x.n || 0, y.n || 0) }; }
   if ((a.bank || '') === (r.bank || '')){ const wm = {}; (r.words || []).concat(o.words || []).forEach(w => { const k = norm(w.w), c = wm[k]; wm[k] = !c || (!c.m && w.m) ? w : c; }); o.words = Object.values(wm); }
@@ -2177,7 +2183,8 @@ function celebrate(o, next){
       o.big ? wordWithSpeak(o.big, 'celword') : null,
       o.sub ? h('p', { class:'celsub', text:o.sub }) : null,
       o.line ? h('div', { class:'mline', style:'background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff' }, cimg(o.who === 'm' ? MIMG.smug : IMG.right, '', 34, ''), h('span', { class:'q', text:o.line })) : null,
-      go, h('button', { class:'endlink', type:'button', onclick:() => { ov.remove(); if (R) R.keys = prev; if (R && R.queue && R.queue.length) quitMatch(); else home(); } }, '✕ End')));
+      go, h('button', { class:'endlink', type:'button', onclick:() => { if (o.onEnd) return go.click(); ov.remove(); if (R) R.keys = prev; if (R && R.queue && R.queue.length) quitMatch(); else home(); } }, '✕ End')));
+  if (o.fireworks && (o.title || '').length > 45){ const t = ov.querySelector('#celebh'); if (t) t.classList.add('long'); }
   document.body.append(ov); requestAnimationFrame(() => fitWords(ov));
   const prev = R ? R.keys : null; if (R) R.keys = null;
   SND.fx(o.sound || 'cheer'); if (o.tune) SND.tune(o.tune);
@@ -2268,12 +2275,11 @@ function prizeParties(){
   if (onGrownupDev()) return out;   // the party is for Aaron: a grown-up's phone never uses it up
   for (const p of (S.prizes || []).slice().sort((a, b) => a.at - b.at)){
     if (m < p.at || p.kidSeen || p.given) continue;
-    p.announced = true;
+    const mark = () => { p.announced = true; p.seen = true; if (!onGrownupDev()) p.kidSeen = true; save(); };
     out.push({ kicker:'🎁 PRIZE UNLOCKED! 🎁', fireworks:true, confetti:90, tune:'anthem', art:h('div', { class:'celgift', 'aria-hidden':'true', text:'🎁' }),
       title:p.text || 'A surprise prize!', sub:'For mastering ' + p.at + ' words. Go and show a grown-up!',
-      line:'A prize. From the grown-ups. The puffin community is beside itself. I may need a lie down.', who:'c', button:'🎉 I’ll tell a grown-up!', onDone:() => { p.seen = true; if (!onGrownupDev()) p.kidSeen = true; save(); } });
+      line:'A prize. From the grown-ups. The puffin community is beside itself. I may need a lie down.', who:'c', button:'🎉 I’ll tell a grown-up!', onDone:mark, onEnd:mark });
   }
-  if (out.length) save();
   return out;
 }
 function matchCelebrations(round, badges){
@@ -2963,8 +2969,13 @@ function home(greeting){
   if (!S.intro) return intro(() => { S.intro = true; S.lastVisit = visitSnap(); save(); home(); });
   if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); if (storyDue()) storyTime(() => home()); else home(); }); }
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
-  { const nb = checkBadges(); if (nb.length){ save(); toast('🏅 New badge: ' + nb.map(b => b.n).join(', ')); } }   // catch up on badges earned in an unfinished match
-  if (!home.prizeShowing){ const pz = prizeParties(); if (pz.length){ home.prizeShowing = true; setTimeout(() => celebrateAll(pz, () => { home.prizeShowing = false; home(); }), 400); } }   // a prize reached but never celebrated: show it now
+  if (home.prizeShowing && !document.querySelector('.celeb')) home.prizeShowing = false;   // a party closed with End
+  const pz = home.prizeShowing ? [] : prizeParties();
+  { const nb = checkBadges(); if (nb.length){ save(); const msg = '🏅 New badge: ' + nb.map(b => b.n).join(', '); if (pz.length) home.badgeMsg = msg; else toast(msg); } }   // catch up on badges earned in an unfinished match
+  if (pz.length){ home.prizeShowing = true; setTimeout(() => {   // a prize reached but never celebrated: show it now (only if Aaron is still on Home)
+    if (screen !== 'home' || document.querySelector('.celeb') || (typeof R !== 'undefined' && R && R.queue && R.queue.length)){ home.prizeShowing = false; return; }
+    celebrateAll(pz, () => { home.prizeShowing = false; const m = home.badgeMsg; home.badgeMsg = null; home(); if (m) toast(m); });
+  }, 400); }
   autoDaily();
   let greet = greeting || null;
   if (!home.greeted && S.stats.answered && (S.history || []).some(x => x.d < today())){ home.greeted = true; if (VOICE.play('c02')) greet = VO.c02.replace('Aaron', S.name); }
@@ -3324,7 +3335,7 @@ function grownups(){
     const drawPrizes = () => {
       put(list, S.prizes.slice().sort((a, b) => a.at - b.at).map((p, i) => h('div', { class:'prize-row' },
         h('input', { class:'fld', id:'prz-at-' + i, type:'number', min:1, value:p.at, 'aria-label':'Words mastered', onchange:e => { p.at = Math.max(1, parseInt(e.target.value, 10) || 1); p.announced = masteredCount() >= p.at ? p.announced : false; save(); drawPrizes(); } }),
-        h('input', { class:'fld', id:'prz-tx-' + i, type:'text', value:p.text, placeholder:'e.g. Film night', 'aria-label':'Prize', onchange:e => { p.text = e.target.value; save(); } }),
+        h('input', { class:'fld', id:'prz-tx-' + i, type:'text', maxlength:80, value:p.text, placeholder:'e.g. Film night', 'aria-label':'Prize', onchange:e => { p.text = e.target.value; save(); } }),
         h('label', { class:'chk' }, h('input', { type:'checkbox', checked:p.given, onchange:e => { p.given = e.target.checked; save(); } }), 'Given'),
         h('button', { class:'linkbtn', type:'button', 'aria-label':'Remove prize', onclick:() => { S.prizes = S.prizes.filter(x => x !== p); save(); drawPrizes(); } }, '✕'))));
       if (!S.prizes.length) list.append(h('p', { class:'muted small', text:'No prizes yet. For example: 25 words mastered, ice cream trip.' }));
