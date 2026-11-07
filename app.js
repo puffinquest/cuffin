@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "d7e299fa28";
+const APPV = "fb29045a67";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -3156,11 +3156,11 @@ function intro(finish){
 }
 /* ---------- the Rabbit: Cuffin's other nemesis, who sneaks new school words in ---------- */
 const rabbitPack = () => SCHOOL_PACKS.length ? SCHOOL_PACKS[SCHOOL_PACKS.length - 1] : null;
-const rabbitDue = () => { const pk = rabbitPack(); if (!pk || !(S.packs || []).includes(pk.d)) return false; const n = S.rabbitNews || {}; return n.d !== pk.d; };
+const rabbitDue = () => { const pk = rabbitPack(); if (!pk || !(S.packs || []).includes(pk.d)) return false; const n = S.rabbitNews || {}; return n.d !== pk.d || !n.v; };   // v: shown since the blank-slide fix
 const rabbitSay = line => h('div', { class:'say rabbit' }, h('div', { class:'kidface rabbitface', 'aria-hidden':'true', text:'🐰' }), h('div', { class:'bub' }, h('div', { class:'nm', text:'The Rabbit' }), h('p', { class:'tx', text:line })));
 function rabbitSlides(){   // two slides: the news, then what everyone thinks of it
-  const pk = rabbitPack(), first = !(S.rabbitNews && S.rabbitNews.d), words = pk.rows.map(r => r[0]);
-  const mark = () => { if (!S.rabbitNews || S.rabbitNews.d !== pk.d){ S.rabbitNews = { d:pk.d, on:today() }; save(); } };
+  const pk = rabbitPack(), first = !(S.rabbitNews && S.rabbitNews.d && S.rabbitNews.d !== pk.d), words = pk.rows.map(r => r[0]);
+  const mark = () => { if (!S.rabbitNews || S.rabbitNews.d !== pk.d || !S.rabbitNews.v){ S.rabbitNews = { d:pk.d, on:today(), v:2 }; save(); } };
   const show = words.slice(0, 3).join(', ') + (words.length > 3 ? ' + ' + (words.length - 3) + ' more' : '');
   return [() => { mark(); return h('div', {}, h('div', { class:'chapter', text:'🚨 BREAKING NEWS' }),
       h('h2', {}, first ? 'Enter: ' : 'He’s ', h('em', { text: first ? 'the Rabbit' : 'back' })),
