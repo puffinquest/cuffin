@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "618c9a1e9a";
+const APPV = "d7e299fa28";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -540,6 +540,33 @@ function fresh(){
 }
 const isBlank = o => !o || ((!o.stats || !o.stats.answered) && !(o.history && o.history.length));
 /* restoring = keep the old progress (a backup code, a save point, the archive); otherwise a pre-race save starts the race from scratch */
+/* school spelling lists Shaw sends: added once to the word bank (with meanings) and set as that week's school words */
+const SCHOOL_PACKS = [
+  { d:'2026-11-07', rows:[
+    ['interlock', 'To fit or link together tightly, like jigsaw pieces.', 'The jigsaw pieces interlock to make one big picture.'],
+    ['interrelated', 'Connected to each other, so that one affects the other.', 'Sleep and a good mood are interrelated.'],
+    ['sublet', 'To rent out a place you are renting yourself to someone else.', 'While they were abroad, they sublet their flat to a student.'],
+    ['submerge', 'To go, or put something, completely under water.', 'The submarine began to submerge beneath the waves.'],
+    ['subtotal', 'The total of part of a list, before everything else is added on.', 'The subtotal was eight pounds, and delivery made it ten.'],
+    ['superglue', 'A very strong glue that sticks things together in seconds.', 'Dad fixed the broken mug handle with superglue.'],
+    ['supernatural', 'Something science or nature cannot explain, like ghosts or magic.', 'The film was about a supernatural castle full of ghosts.'],
+    ['superpower', 'An amazing special power, like flying; or a very powerful country.', 'If I could have one superpower, I would choose flying.']] },
+];
+const isRabbitWord = x => !!(x && S && S.school && (S.school.list || []).includes(norm(x.w)));   // this week's school words: the ones the Rabbit sneaked in
+function applySchoolPacks(o){
+  o.packs = Array.isArray(o.packs) ? o.packs : [];
+  for (const pk of SCHOOL_PACKS){
+    if (o.packs.includes(pk.d)) continue;
+    const keys = [];
+    for (const [w, m, s] of pk.rows){
+      const k = norm(w), ex = o.words.find(x => norm(x.w) === k);
+      if (ex){ if (!ex.m) ex.m = m; if (!ex.s) ex.s = s; } else o.words.push({ w, m, s });   // (none of these are similar-and-opposite cards)
+      keys.push(k);
+    }
+    if (!o.school || !o.school.d || o.school.d < pk.d) o.school = { d:pk.d, list:keys };
+    o.packs.push(pk.d);
+  }
+}
 function migrate(o, restoring){
   const f = fresh();
   if (!o.fishV){ o.points = Math.round((o.points || 0) / 10); (o.history || []).forEach(x => { x.p = Math.round((x.p || 0) / 10); }); o.fishV = 1; }
@@ -568,6 +595,7 @@ function migrate(o, restoring){
   const sent = {}; SAMPLE.forEach(([w, m, s]) => { sent[norm(w)] = s; });
   o.words.forEach(x => { if (!x.s && sent[norm(x.w)]) x.s = sent[norm(x.w)]; });
   delete o.tomatoes;
+  applySchoolPacks(o);
   return o;
 }
 function load(){
@@ -594,7 +622,7 @@ const setBase = v => { try { localStorage.setItem(BASEKEY, String(v || 0)); } ca
 /* what the family copy looked like when this device last agreed with it: lets a merge add up both devices' gains */
 const BASESKEY = KEY + '-basestate';
 const getBaseState = () => { try { return JSON.parse(localStorage.getItem(BASESKEY) || 'null'); } catch (e) { return null; } };
-function setBaseAll(o){ setBase(o.upd || 0); try { localStorage.setItem(BASESKEY, JSON.stringify({ points:o.points || 0, custard:o.custard || 0, stats:o.stats || {}, race:{ mf:(o.race || {}).mf || 0, mm:(o.race || {}).mm || 0 }, tstat:o.tstat || {}, prizes:(o.prizes || []).map(p => ({ at:p.at, text:p.text || '' })) })); } catch (e) {} }
+function setBaseAll(o){ setBase(o.upd || 0); try { localStorage.setItem(BASESKEY, JSON.stringify({ points:o.points || 0, custard:o.custard || 0, stats:o.stats || {}, race:{ mf:(o.race || {}).mf || 0, mm:(o.race || {}).mm || 0 }, tstat:o.tstat || {}, carrots:o.carrots || 0, prizes:(o.prizes || []).map(p => ({ at:p.at, text:p.text || '' })) })); } catch (e) {} }
 const roundKey = x => x.id || (x.d + '|' + x.a + '|' + x.r + '|' + x.n);
 /* two devices played while apart: add up what each one gained since they last agreed, so no answers are lost */
 function mergeStates(a, b, base){
@@ -602,7 +630,7 @@ function mergeStates(a, b, base){
   const o = JSON.parse(JSON.stringify(a)), r = b;
   const add = (av, bv, bs) => Math.max(0, base ? (bv || 0) + (av || 0) - (bs || 0) : Math.max(av || 0, bv || 0));
   for (const k in (r.prog || {})){ const x = r.prog[k], y = o.prog[k]; if (!y || (x.seen || 0) > (y.seen || 0)) o.prog[k] = x; }
-  o.points = add(a.points, r.points, base && base.points); o.custard = add(a.custard, r.custard, base && base.custard);
+  o.points = add(a.points, r.points, base && base.points); o.custard = add(a.custard, r.custard, base && base.custard); o.carrots = base && base.carrots != null ? add(a.carrots, r.carrots, base.carrots) : Math.max(a.carrots || 0, r.carrots || 0);
   o.stats = o.stats || {};
   for (const k of new Set(Object.keys(r.stats || {}).concat(Object.keys(a.stats || {})))){
     o.stats[k] = k === 'best' ? Math.max((a.stats || {})[k] || 0, (r.stats || {})[k] || 0) : add((a.stats || {})[k], (r.stats || {})[k], base && (base.stats || {})[k]);
@@ -889,6 +917,9 @@ const BADGES = [
   { id:'d3',     n:'Three-Day Flyer', d:'Play 3 days in a row.',                      ic:'wave',   t:c => c.days >= 3 },
   { id:'d7',     n:'Perfect Week',    d:'Play 7 days in a row.',                      ic:'trophy', t:c => c.days >= 7 },
   { id:'r10',    n:'Regular',         d:'Finish 10 rounds.',                          ic:'flame',  t:c => c.S.stats.rounds >= 10 },
+  { id:'carrot1',  n:'Carrot Snatcher', d:'Win a carrot back from the Rabbit.', em:'🥕', t:c => (c.S.carrots || 0) >= 1 },
+  { id:'carrot25', n:'Bunch of Carrots', d:'Win 25 carrots back from the Rabbit.', em:'🥕', t:c => (c.S.carrots || 0) >= 25 },
+  { id:'carrot75', n:'Rabbit Foiled', d:'Win 75 carrots back from the Rabbit.', em:'🐰', t:c => (c.S.carrots || 0) >= 75 },
   { id:'cust5',  n:'Custard Collector', d:'Win 5 pots of custard.',             ic:'custard', t:c => Math.max(c.S.custard || 0, c.S.stats.cwon || 0) >= 5 },
   { id:'leader', n:'Crowned',         d:'Beat the Mirror and become Leader.',         ic:'crown',  t:c => !!c.S.leader },
   /* more to chase */
@@ -937,7 +968,7 @@ const BADGES = [
   { id:'owl', n:'Night Owl', d:'Finish a match after 7pm.', em:'🦉', t:c => (c.S.stats.owl || 0) >= 1 }
 ];
 /* show badges easiest first, hardest (every word, then the crown) last */
-const BADGE_ORDER = ["first", "splat1", "story1", "d3", "s5", "m10", "fix5", "spell10", "cust5", "clear", "perf", "f100", "hear10", "pre10", "say10", "pinky10", "book10", "early", "owl", "school1", "d5", "r10", "s10", "m25", "spell25", "cw10", "d7", "splat10", "cards10", "f250", "s15", "perf3", "fix20", "m50", "story10", "clear20", "r25", "d14", "spell50", "s20", "say40", "m75", "f500", "cw25", "d21", "splat50", "r50", "m100", "half", "perf10", "d30", "m150", "f1000", "r100", "m200", "mall", "leader"];
+const BADGE_ORDER = ["first", "splat1", "story1", "d3", "s5", "m10", "fix5", "spell10", "cust5", "carrot1", "clear", "perf", "f100", "hear10", "pre10", "say10", "pinky10", "book10", "early", "owl", "school1", "d5", "r10", "s10", "m25", "carrot25", "spell25", "cw10", "d7", "splat10", "cards10", "f250", "s15", "perf3", "fix20", "m50", "story10", "clear20", "r25", "d14", "spell50", "s20", "say40", "m75", "f500", "cw25", "d21", "carrot75", "splat50", "r50", "m100", "half", "perf10", "d30", "m150", "f1000", "r100", "m200", "mall", "leader"];
 BADGES.sort((x, y) => { const i = BADGE_ORDER.indexOf(x.id), j = BADGE_ORDER.indexOf(y.id); return (i < 0 ? 999 : i) - (j < 0 ? 999 : j); });
 function checkBadges(){
   const ctx = { S, m:masteredCount(), days:dayStreak(), total:allItems().length }, got = [];
@@ -1009,11 +1040,12 @@ const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell
 /* ---------- word-building: prefixes ("not" words and friends) ---------- */
 const PREFIX_WORDS = { illegible:'il', illogical:'il', immortal:'im', impolite:'im', impure:'im', impatient:'im', improper:'im', inadequate:'in', incorrect:'in', indirect:'in', informal:'in', inoffensive:'in', inaccurate:'in', incapable:'in', invalid:'in', irreparable:'ir', irrational:'ir', irresistible:'ir', irresponsible:'ir',
   disadvantage:'dis', disappear:'dis', disappointed:'dis', disbelief:'dis', disconnect:'dis', dishonest:'dis', mishear:'mis', misinform:'mis', misjudge:'mis', mispronounced:'mis',
-  reappear:'re', redesign:'re', reemerge:'re', rephrase:'re', reapply:'re', rearrange:'re', redecorate:'re', reheat:'re', antibiotic:'anti', anticlimax:'anti', antiseptic:'anti', antivirus:'anti', antifreeze:'anti', antisocial:'anti', autograph:'auto', autopilot:'auto', autobiography:'auto', automobile:'auto' };
+  reappear:'re', redesign:'re', reemerge:'re', rephrase:'re', reapply:'re', rearrange:'re', redecorate:'re', reheat:'re', antibiotic:'anti', anticlimax:'anti', antiseptic:'anti', antivirus:'anti', antifreeze:'anti', antisocial:'anti', autograph:'auto', autopilot:'auto', autobiography:'auto', automobile:'auto',
+  interlock:'inter', interrelated:'inter', sublet:'sub', submerge:'sub', subtotal:'sub', superglue:'super', supernatural:'super', superpower:'super' };
 const prefixOf = x => PREFIX_WORDS[norm(x.w)] || null;
 const PREFIX_TIP = { il:'il- goes before l: il + legible = illegible.', im:'im- goes before m, p or b: im + polite = impolite.', in:'in- is the usual “not” start: in + correct = incorrect.', ir:'ir- goes before r: ir + responsible = irresponsible.',
-  un:'un- means not: un + canny = uncanny.', dis:'dis- means not, or the opposite: dis + appear = disappear.', mis:'mis- means wrongly: mis + hear = mishear.', re:'re- means again: re + heat = reheat.', anti:'anti- means against: anti + freeze = antifreeze.', auto:'auto- means self: auto + graph = autograph.' };
-const PREFIX_RULE = 'The “not” starts: il- before l (illegal), ir- before r (irregular), im- before m, p or b (impossible), and in- for most others (incorrect). un- and dis- mean not too. re- means again, mis- means wrongly, anti- means against, auto- means self.';
+  un:'un- means not: un + canny = uncanny.', dis:'dis- means not, or the opposite: dis + appear = disappear.', mis:'mis- means wrongly: mis + hear = mishear.', re:'re- means again: re + heat = reheat.', anti:'anti- means against: anti + freeze = antifreeze.', auto:'auto- means self: auto + graph = autograph.', inter:'inter- means between or together: inter + lock = interlock.', sub:'sub- means under or below: sub + merge = submerge.', super:'super- means above, or extra big and strong: super + power = superpower.' };
+const PREFIX_RULE = 'The “not” starts: il- before l (illegal), ir- before r (irregular), im- before m, p or b (impossible), and in- for most others (incorrect). un- and dis- mean not too. re- means again, mis- means wrongly, anti- means against, auto- means self. inter- means between, sub- means under, super- means above or extra.';
 const canHear = () => 'speechSynthesis' in window && !!(S && S.settings && S.settings.sound);
 const hasMeaning = x => !!(x.card || (x.m && x.m.trim()));
 function typesFor(x){
@@ -1059,9 +1091,9 @@ function makeQuestion(item){
   } else if (type === 'say'){
     q.options = shuffle([{ t:x.w, ok:true, sp:x.w, j:'' }].concat(pronOptions(x.w).map(p => ({ t:p[1], ok:false, sp:p[0], j:p[2] }))));
   } else if (type === 'pre'){
-    const p = prefixOf(x), stem = x.w.slice(p.length), fam = ['il', 'im', 'in', 'ir', 'un'].includes(p) ? ['il', 'im', 'in', 'ir', 'un'] : ['re', 'dis', 'mis', 'anti', 'auto', 'un'];
-    const REAL = new Set(['inpatient', 'disappear', 'reappear', 'rehear', 'reappointed', 'disarrange', 'unfreeze', 'refreeze', 'dissocial', 'reinform', 'discover', 'recover', 'unappear', 'disconnect', 'reconnect', 'misplace', 'replace', 'disapply', 'reform', 'inform', 'unarrange']);
-    q.options = shuffle([{ t:x.w, ok:true }, ...shuffle(fam.filter(f => f !== p && !REAL.has(f + stem))).slice(0, 3).map(f => ({ t:f + stem, ok:false }))]);
+    const p = prefixOf(x), stem = x.w.slice(p.length), fam = ['il', 'im', 'in', 'ir', 'un'].includes(p) ? ['il', 'im', 'in', 'ir', 'un'] : ['inter', 'sub', 'super'].includes(p) ? ['inter', 'sub', 'super', 'trans', 'under'] : ['re', 'dis', 'mis', 'anti', 'auto', 'un'];
+    const REAL = new Set(['inpatient', 'disappear', 'reappear', 'rehear', 'reappointed', 'disarrange', 'unfreeze', 'refreeze', 'dissocial', 'reinform', 'discover', 'recover', 'unappear', 'disconnect', 'reconnect', 'misplace', 'replace', 'disapply', 'reform', 'inform', 'unarrange', 'underlet', 'underpower', 'interlet', 'overlock']);
+    q.options = shuffle([{ t:x.w.toLowerCase(), ok:true }, ...shuffle(fam.filter(f => f !== p && !REAL.has(f + stem.toLowerCase()))).slice(0, 3).map(f => ({ t:f + stem.toLowerCase(), ok:false }))]);
     q.tip = PREFIX_TIP[p];
   } else if (type === 'gap'){
     q.gap = gapFor(x);
@@ -1075,6 +1107,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
   const r = rec(q.w); r.seen++; r.last = today(); r.ty = r.ty || []; r.dy = r.dy || [];
   const was = isMasteredRec(r) || !!(r.m && r.wob), spellish = q.type === 'spell' || q.type === 'scram' || q.type === 'hear';
   let pts = 0, note = null, line, lock = null, custard = false;
+  const rabbit = isRabbitWord(q.w); R.lastCarrot = 0;
   S.stats.answered += 1;
   S.race.ra = (S.race.ra == null ? .6 : S.race.ra) * .9 + (ok ? .1 : 0);
   S.race.ta = (S.race.ta == null ? S.race.ra : S.race.ta) * .97 + (ok ? .03 : 0);   // slow-moving accuracy: an earned lead doesn't vanish after one wobbly round
@@ -1111,6 +1144,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
   { if (!S.tstatFrom) S.tstatFrom = today(); S.tstat = S.tstat || {}; const ts = S.tstat[q.type] || (S.tstat[q.type] = [0, 0]); ts[1]++; if (ok) ts[0]++; }
   raceFix();
   { const nb = checkBadges(); if (nb.length) R.newBadges = (R.newBadges || []).concat(nb); }   // earned the moment it happens, celebrated at full time
+  if (rabbit && ok && !hinted){ const c = lock === 'mastered' ? 6 : 1; S.carrots = (S.carrots || 0) + c; R.carrots = (R.carrots || 0) + c; R.lastCarrot = c; { const nb = checkBadges(); if (nb.length) R.newBadges = (R.newBadges || []).concat(nb); } }   // carrots won back from the Rabbit
   if (custard) line = say('custard');
   return { pts, line, note, lock, custard };
 }
@@ -1544,7 +1578,7 @@ function led(mini, label){
   };
   lastBoard = { A, M };
   const lead = d > 0 ? 'CUFFIN +' + d : d < 0 ? 'MIRROR +' + (-d) : 'LEVEL';
-  const pots = h('span', { class:'pots', title:'Pots of custard' }, '🍮 ' + (S.custard || 0));
+  const pots = h('span', { class:'pots', title:'Pots of custard and carrots' }, '🍮 ' + (S.custard || 0) + ((S.carrots || S.school) ? '  🥕 ' + (S.carrots || 0) : ''));
   return h('div', { class:'led' + (mini ? ' mini' : ''), role:'group', 'aria-label':'Scoreboard: Cuffin and ' + S.name + ' ' + A + ' fish, ' + aM + ' words, ' + (S.custard || 0) + ' pots of custard. The Mirror ' + M + ' fish, ' + mm + ' words.' },
     mini ? null : h('div', { class:'lhead' }, h('span', { class:'live' }, h('i'), 'CHAPTER ' + matchDay()), pots, h('b', { text:label || 'RACE FOR LEADER' })),
     h('div', { class:'lgrid' },
@@ -1556,6 +1590,7 @@ function led(mini, label){
 /* ---------- a question ---------- */
 function question(){
   if (R.idx >= R.queue.length) return finishRound();
+  R.lastCarrot = 0;
   screen = 'round';
   const item = R.queue[R.idx];
   const q = makeQuestion(item); item.lastType = q.type;
@@ -1586,6 +1621,7 @@ function question(){
   function noteFor(lock, custard){
     const n = [];
     if (custard) n.push(h('div', { class:'note custard' }, h('span', { class:'wobble', style:'font-size:1.3rem', text:'🍮' }), h('span', { text:'Five in a row! A pot of custard for the team.' })));
+    if (R && R.lastCarrot) n.push(h('div', { class:'note carrot' }, h('span', { class:'wobble', style:'font-size:1.3rem', text:'🥕' }), h('span', { text: R.lastCarrot > 1 ? 'Rabbit word MASTERED! A whole bunch of ' + R.lastCarrot + ' carrots won back from the Rabbit.' : '+1 carrot won back from the Rabbit!' })));
     const txt = { mastered:q.w.w + ' is MASTERED. Locked in.', day:'3 in a row! Get it right on another day to lock it in.', type:'3 in a row! Now get it right in a different kind of question.',
       needsim:'3 in a row! Beat this card in a similar & opposite question to master it.', wobble:'Was mastered. Get it right next time to keep it.', hint:'Hint used: fish yes, mastery no.' }[lock];
     if (txt) n.push(h('div', { class:'note' }, icon(lock === 'hint' ? 'bulb' : 'lock'), h('span', { text:txt })));
@@ -1874,7 +1910,7 @@ function question(){
 
   if (q.type === 'sim') cardFlow();
   else {
-    setStrip(q.type === 'gap' ? 'gap' : q.type === 'scram' ? 'scram' : '', TYPE_LABEL[q.type].toUpperCase());
+    setStrip(q.type === 'gap' ? 'gap' : q.type === 'scram' ? 'scram' : '', (isRabbitWord(q.w) ? '🐰 RABBIT WORD · ' : '') + TYPE_LABEL[q.type].toUpperCase());
     const lead = item.retry ? say('retry') : R.idx === 0 ? R.hello : pickOne(['Your question.', 'Here it comes.', 'The Mirror is watching.', 'Take your time.', 'Concentrate. Floppy, warm, like custard.']);
     const top = q.type === 'w2m' ? [h('p', { class:'muted', text:'What does this word mean?' }), wordWithSpeak(q.w.w)]
       : q.type === 'm2w' ? [h('p', { class:'muted', text:'Which word means…' }), h('p', { class:'meaning', text:'“' + meanOf() + '”' })]
@@ -1960,7 +1996,7 @@ function summary(x){
   { const v = rankUp ? null : mirWon || tie ? VOICE.pick('c14') : VOICE.pick('c13'); const v2 = mirWon && Math.random() < .5 ? VOICE.pick('m07') : null;
     if (v) setTimeout(() => VOICE.play(v), 1500); if (v2) setTimeout(() => VOICE.play(v2), 1700); }
   const missed = [...new Set(r.missed)];
-  const extra = [x.badges.length ? '🏅 New badge: ' + x.badges.map(b => b.n).join(', ') : null, x.prizes.length ? '🎁 Prize unlocked: ' + x.prizes.map(p => p.text || 'a surprise').join(', ') + '. Ask a grown-up!' : null].filter(Boolean);
+  const extra = [r.carrots ? '🥕 ' + r.carrots + ' carrot' + (r.carrots === 1 ? '' : 's') + ' won back from the Rabbit' : null, x.badges.length ? '🏅 New badge: ' + x.badges.map(b => b.n).join(', ') : null, x.prizes.length ? '🎁 Prize unlocked: ' + x.prizes.map(p => p.text || 'a surprise').join(', ') + '. Ask a grown-up!' : null].filter(Boolean);
   mount([
     topbar(),
     h('div', { class:'led', role:'group', 'aria-label':'Full time' },
@@ -2421,7 +2457,7 @@ function prefixLesson(){
   openSheet([h('div', { class:'say' }, cimg(IMG.hello, '', 52, 'Cuffin'), h('div', { class:'bub' }, h('div', { class:'nm', text:'Cuffin' }), h('p', { class:'tx', text:'A word-building secret. The start of a word can flip its meaning. Learn the rule and you win lots of words at once.' }))),
     h('div', { class:'prules' },
       row('il-', 'illegal', 'before l'), row('ir-', 'irregular', 'before r'), row('im-', 'impossible', 'before m, p or b'), row('in-', 'incorrect', 'most other “not” words'),
-      row('un- / dis-', 'unkind, dishonest', 'also mean not'), row('re-', 'reheat', 'again'), row('mis-', 'mishear', 'wrongly'), row('anti-', 'antifreeze', 'against'), row('auto-', 'autograph', 'self')),
+      row('un- / dis-', 'unkind, dishonest', 'also mean not'), row('re-', 'reheat', 'again'), row('mis-', 'mishear', 'wrongly'), row('anti-', 'antifreeze', 'against'), row('auto-', 'autograph', 'self'), row('inter-', 'interlock', 'between, together'), row('sub-', 'submerge', 'under'), row('super-', 'superpower', 'above, extra')),
     h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); closeSheet(); } }, 'Got it')], true);
   narrateLines(['A word-building secret. I L before L, as in illegal. I R before R, as in irregular. I M before M, P or B, as in impossible. And I N for most other not words, as in incorrect.'], 300);
 }
@@ -2488,14 +2524,32 @@ function storyTime(done){
       h('div', { class:'storytext' }, st.p.map(para)),
       h('p', { class:'small muted', text:'Tap a coloured word to hear it.' }),
       h('div', { class:'row', style:'gap:8px' }, h('button', { class:'btn alt small', type:'button', onclick:() => narrateLines([st.t].concat(st.p), 100) }, icon('sound'), 'Read it to me'),
-        h('button', { class:'btn small', type:'button', style:'flex:1', onclick:() => { stopNarr(); SND.fx('tap'); quiz(0); } }, words.length >= 2 ? 'Questions →' : 'Done')));
+        h('button', { class:'btn small', type:'button', style:'flex:1', onclick:() => { stopNarr(); SND.fx('tap'); quiz(0); } }, qs.length ? 'Questions →' : 'Done')));
     if (S.settings.sound) narrateLines([st.t].concat(st.p), 500);
   }
-  const qs = shuffle(words.slice()).slice(0, 2), sentences = (() => { const raw = st.p.join(' ').split(/(?<=[.!?][”"]?)\s+/), out = []; let cur = ''; for (const r of raw){ cur = cur ? cur + ' ' + r : r; const q = (cur.match(/["“”]/g) || []).length; if (q % 2 === 0){ out.push(cur); cur = ''; } } if (cur) out.push(cur); return out; })();
+  const wq = shuffle(words.slice()).slice(0, 3).map(w => ({ w })), cq0 = (STORY_Q[st.t] || []).map((c, i) => ({ c, i }));
+  const cq = shuffle(cq0).slice(0, Math.max(0, 5 - wq.length)).sort((a, b) => a.i - b.i);
+  const qs = []; for (let i = 0; i < Math.max(wq.length, cq.length); i++){ if (cq[i]) qs.push(cq[i]); if (wq[i]) qs.push(wq[i]); }   // story questions in story order, word meanings in between
+  const sentences = (() => { const raw = st.p.join(' ').split(/(?<=[.!?][”"]?)\s+/), out = []; let cur = ''; for (const r of raw){ cur = cur ? cur + ' ' + r : r; const q = (cur.match(/["“”]/g) || []).length; if (q % 2 === 0){ out.push(cur); cur = ''; } } if (cur) out.push(cur); return out; })();
   let got = 0;
   function quiz(i){
-    if (words.length < 2 || i >= qs.length) return finish();
-    const w = qs[i], x = bankItem(w), right = meanOfX(x), sent = sentences.find(s => new RegExp('\\b' + esc(w) + '\\b', 'i').test(s)) || '';
+    if (i >= qs.length) return finish();
+    const Q = qs[i];
+    if (Q.c){   // what happened in the story
+      const right = Q.c[1], opts = shuffle(Q.c.slice(1));
+      const btns = opts.map((o, j) => h('button', { class:'ans', type:'button', onclick:() => {
+        btns.forEach((b, k) => { b.disabled = true; if (opts[k] === right) b.classList.add('correct'); });
+        const ok = o === right; if (!ok) btns[j].classList.add('wrong');
+        if (ok){ got++; S.points += 1; save(); SND.fx('goal'); } else SND.fx('wrong');
+        put(nx, h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); quiz(i + 1); } }, i + 1 < qs.length ? 'Next question' : 'Finish'));
+      } }, h('span', { class:'l', text:'ABCD'[j] }), h('span', { class:'t', text:o }), h('span', { class:'mk' })));
+      const nx = h('div');
+      put(body, h('div', { class:'storyhead' }, h('div', { class:'eyebrow', text:'📖 STORY QUESTION ' + (i + 1) + ' OF ' + qs.length })),
+        h('p', { class:'sentence', style:'font-size:1.05rem', text:Q.c[0] }), h('div', { class:'answers' }, btns), h('div', { class:'grow' }), nx);
+      if (S.settings.sound) sayWord(Q.c[0]);
+      return;
+    }
+    const w = Q.w, x = bankItem(w), right = meanOfX(x), sent = sentences.find(s => new RegExp('\\b' + esc(w) + '\\b', 'i').test(s)) || '';
     const wrong = [...new Set(shuffle(allItems().filter(y => norm(y.w) !== norm(w)).map(meanOfX).filter(m => m && m !== right)))].slice(0, 3);
     const opts = shuffle([right].concat(wrong));
     const ix = sent.search(new RegExp('\\b' + esc(w) + '\\b', 'i'));
@@ -2513,8 +2567,8 @@ function storyTime(done){
   function finish(){
     stopNarr(); S.stats.stories = (S.stats.stories || 0) + 1; save();
     put(body, h('div', { class:'storyhead' }, h('div', { class:'eyebrow', text:'📖 THE END' }), h('h2', { text:st.t })),
-      sayBlock('com', words.length >= 2 ? (got === 2 ? 'Both right. A story-reading puffin. The community is impressed.' : got === 1 ? 'One out of two. Eventually still counts.' : 'Tricky ones. We will meet those words again.') : 'A good story. Mostly true. Partly custard.', IMG.right),
-      words.length >= 2 ? h('p', { class:'line', text:'+' + got + ' 🐟 fresh fish from the story' }) : null,
+      sayBlock('com', qs.length ? (got === qs.length ? 'All ' + got + ' right. A story-reading puffin. The community is impressed.' : got >= qs.length - 1 ? got + ' out of ' + qs.length + '. Very nearly perfect. I would like that noted.' : got >= 2 ? got + ' out of ' + qs.length + '. Eventually still counts.' : 'Tricky ones. Read it again another day and they will make more sense.') : 'A good story. Mostly true. Partly custard.', IMG.right),
+      qs.length ? h('p', { class:'line', text:'+' + got + ' 🐟 fresh fish from the story' }) : null,
       h('div', { class:'grow' }), h('button', { class:'btn kick', type:'button', onclick:() => { SND.fx('tap'); done(); } }, 'Back to the race'));
   }
   mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'STORY TIME' }), h('div', { class:'tools' }, soundBtns())), h('div', { class:'pitch' }, h('div', { class:'pbody' }, body))], null);
@@ -2758,11 +2812,42 @@ function pickStory(){
   const seen = S.stories || [], k = w => norm(w);
   const learning = new Set(allItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r); }).map(x => norm(x.w)));
   const known = new Set(allItems().map(x => norm(x.w)));
-  const score = st => st.w.filter(w => learning.has(k(w))).length * 3 + st.w.filter(w => known.has(k(w))).length;
+  const school = new Set((S.school && S.school.list) || []);
+  const score = st => st.w.filter(w => school.has(k(w))).length * 4 + st.w.filter(w => learning.has(k(w))).length * 3 + st.w.filter(w => known.has(k(w))).length;   // this week's school words first
   let pool = STORIES.filter(st => !seen.includes(st.t));
   if (!pool.length){ S.stories = []; pool = STORIES.slice(); }
   return pool.slice().sort((a, b) => score(b) - score(a) || Math.random() - .5)[0];
 }
+/* this week's school words get their own story */
+STORIES.push({ t:'The Superglue Disaster', w:['superglue','interlock','submerge','supernatural','superpower','subtotal'], p:[
+  'The Mirror bought a tube of superglue. "With this," he announced, "I will glue my best feathers on forever." The shopkeeper, a crab, handed him the receipt. The subtotal was two fish, plus one fish for a shiny bag.',
+  'Back on the cliff, the Mirror tried to glue two shells together so they would interlock like a crown. Instead, he glued his own wings together. He hopped about shouting that he had been struck by a supernatural curse.',
+  '"It is not supernatural," said Cuffin. "It is glue." Giles said the only cure was warm salty water, so the Mirror had to submerge himself in a rock pool for an hour. "Patience," said Cuffin, "is my superpower. Clearly not yours."'] });
+
+/* questions about what happened in each story: [question, right answer, wrong, wrong, wrong] */
+const STORY_Q = {
+  'The Custard Map':[['What did the map promise?', 'A lake of custard', 'A hidden treasure chest', 'A giant fish', 'A secret burrow'], ['What was the weather like on the walk?', 'Grey and drizzly', 'Hot and sunny', 'Snowy', 'Very windy but dry'], ['What did they find at the end?', 'Only a puddle', 'A lake of custard', 'A sleeping seagull', 'Another map'], ['What did they acquire in the end?', 'Very damp feet', 'A bucket of custard', 'A new hat', 'A shiny shell']],
+  'The Mirror’s Autograph':[['How many puffins asked for the Mirror’s autograph?', 'Nobody', 'Everybody', 'Just Giles', 'Three seagulls'], ['Whose hat did the Mirror sign?', 'Giles’s hat', 'Cuffin’s hat', 'His own hat', 'A crab’s hat'], ['Why didn’t the Mirror’s sorry work?', 'It did not sound sincere', 'Nobody heard it', 'He said it in French', 'He said it to a rock'], ['What did Giles take away?', 'The pen', 'The table', 'The hat', 'The rock']],
+  'The Great Fish Race':[['What was Giles’s flag mostly made of?', 'Seaweed', 'Feathers', 'Paper', 'Fish scales'], ['What did the Mirror nearly crash into?', 'A lighthouse', 'A boat', 'Giles', 'A cloud'], ['Why did the Mirror lose?', 'He stopped to look at his reflection', 'He fell asleep', 'He dropped his fish', 'He flew the wrong way'], ['Who won the race?', 'Cuffin', 'The Mirror', 'Giles', 'A seagull']],
+  'Redecorating the Burrow':[['Which colour did the Mirror call “shiny”?', 'A colour he made up', 'Blue', 'Green', 'Black'], ['What did Cuffin’s sign say?', 'No custard here. Yet.', 'Keep out!', 'Welcome, friends!', 'Mirror was here'], ['What did the Mirror try to spell with Cuffin’s shells?', 'MIRROR', 'CUSTARD', 'HELLO', 'FISH'], ['How did Cuffin know his shells had been moved?', 'One was facing a different way', 'Giles told him', 'He heard a noise', 'One was missing']],
+  'The Mishap at Breakfast':[['What did Giles ask for?', 'A sprat on toast', 'Custard on toast', 'A boiled egg', 'Seaweed soup'], ['What did the Mirror bring instead?', 'A blob of seaweed', 'A fish finger', 'A cup of tea', 'Nothing at all'], ['How did the Mirror try to reheat the fish?', 'On a sunny rock', 'In a fire', 'In a microwave', 'Under his wing'], ['What did Cuffin do to help Giles?', 'Shared his own sprat', 'Cooked him custard', 'Flew to a café', 'Told the Mirror off']],
+  'The Disappearing Shell':[['What went missing?', 'Cuffin’s lucky shell', 'Giles’s hat', 'The Mirror’s comb', 'A bucket of fish'], ['Where was the shell really?', 'Under the Mirror’s bottom', 'Behind the lighthouse', 'In a rock pool', 'In Cuffin’s ear'], ['How many times has Cuffin crossed the Atlantic?', 'Eleven', 'Two', 'Fifty', 'None'], ['Why did the Mirror take the shell?', 'He wanted to borrow some luck', 'He wanted to sell it', 'He thought it was his', 'He wanted to eat it']],
+  'The Sea Fog':[['What could still be seen in the fog?', 'The top of the lighthouse', 'The sea', 'Cuffin’s feet', 'The Mirror'], ['How did the puffins get out of the fog?', 'They flew up above it', 'They waited until night', 'They swam away', 'They hid in a burrow'], ['What was the sky like above the fog?', 'Calm and blue', 'Dark and stormy', 'Pink and cloudy', 'Full of seagulls'], ['What spoiled the peaceful moment?', 'The Mirror talking about how amazing he looked', 'A clap of thunder', 'Giles sneezing', 'A boat horn']],
+  'The Rematch':[['What was the contest?', 'Standing on one leg', 'Catching fish', 'Flying the fastest', 'Holding your breath'], ['What nibbled Cuffin’s toe?', 'A crab', 'A seagull', 'A fish', 'The Mirror'], ['How did the Mirror try to cheat?', 'Tickled Cuffin with a feather', 'Pushed Cuffin over', 'Hid Cuffin’s leg', 'Splashed water at him'], ['What did Giles decide?', 'The Mirror was disqualified', 'It was a draw', 'The Mirror won', 'They would try again tomorrow']],
+  'The Antisocial Seagull':[['What did the seagull steal?', 'Chips', 'Shells', 'Feathers', 'Hats'], ['Who wanted to banish the seagull?', 'Some of the puffins', 'Cuffin', 'Nobody', 'The Mirror only'], ['What did Cuffin notice about the seagull?', 'He was lonely', 'He was hungry for custard', 'He was lost', 'He was a puffin in disguise'], ['What did Cuffin give him?', 'A sprat', 'A chip', 'A shell', 'A hat']],
+  'The Biggest Wave':[['How tall was the wave?', 'Taller than the lighthouse', 'As tall as a puffin', 'As tall as a house', 'As small as a puddle'], ['Where did the puffins go?', 'Up the cliff to the burrows', 'Into the sea', 'Onto a boat', 'Into a cave'], ['How did everyone feel watching the wave?', 'Amazed', 'Bored', 'Sleepy', 'Angry'], ['What was surprising about the Mirror?', 'He was speechless', 'He surfed the wave', 'He fell asleep', 'He was brave']],
+  'The Recipe':[['What was the book called?', 'Custard: A Recipe', 'Fish for Beginners', 'The Puffin Cookbook', 'Seaweed Soups'], ['Which group did most steps go in?', 'Needs a cow', 'Easy', 'Tricky', 'Needs a fish'], ['Which ingredients did Cuffin recognise?', 'Milk, sugar and egg', 'Fish, salt and seaweed', 'Flour and butter', 'Jam and cream'], ['Why couldn’t Cuffin make custard?', 'He had only fish', 'The book was illegible', 'The Mirror ate it', 'He was too busy']],
+  'The Lost Fish':[['Where did Cuffin drop his fish?', 'Into a deep rock pool', 'Off the cliff', 'Into the Mirror’s burrow', 'Into a boat'], ['What did Cuffin come up with at first?', 'Seaweed on his head', 'A crab', 'A boot', 'A shell'], ['On which dive did Cuffin get the fish?', 'The fourth', 'The first', 'The tenth', 'The second'], ['What does Cuffin say about doing things eventually?', 'Eventually still counts', 'Eventually is too late', 'Never give up custard', 'Fast is best']],
+  'The Sullen Mirror':[['Why was the Mirror sullen?', 'He lost the leg-standing contest', 'He lost his comb', 'It was raining', 'Nobody signed his hat'], ['What did the Mirror blame?', 'The wind, the crab and his short leg', 'Giles', 'His breakfast', 'The fog'], ['What did Cuffin say to cheer him up?', 'You were very good for ten seconds', 'You won really', 'Try harder next time', 'Have some custard'], ['How long did the Mirror say he lasted?', 'Eleven seconds', 'Ten minutes', 'One hour', 'Five seconds']],
+  'Impatient Giles':[['Why was Giles impatient?', 'He wanted to retire', 'He was hungry', 'He was late', 'He was cold'], ['Who did Giles snap at?', 'The Mirror', 'Cuffin', 'A seagull', 'A crab'], ['What did Giles do after being impolite?', 'Said it again more kindly', 'Walked away', 'Flew home', 'Laughed'], ['What did the Mirror want to be called?', 'Your Shininess', 'Your Majesty', 'Leader', 'Mr Mirror']],
+  'The Robot Puffin':[['Who dropped the robot puffin?', 'A tourist', 'Giles', 'A seagull', 'Cuffin'], ['What did the robot do?', 'Marched in circles, beeping', 'Flew away', 'Sang a song', 'Ate fish'], ['What contest did the Mirror challenge it to?', 'A staring contest', 'A race', 'A swimming contest', 'Standing on one leg'], ['Why didn’t the Mirror’s win count?', 'The robot’s batteries had run out', 'He cheated', 'Giles was asleep', 'The robot won']],
+  'The Illegible Letter':[['What did the writing look like?', 'A crab had walked through ink', 'Beautiful joined-up writing', 'Tiny dots', 'A picture of a fish'], ['What did the Mirror pretend the letter said?', 'An invitation to his birthday party', 'A prize for Cuffin', 'A recipe for custard', 'A map'], ['Who was the letter really from?', 'Cuffin’s cousin in Iceland', 'Giles', 'The Mirror', 'A seagull'], ['What did the letter really say?', 'Still no custard here either', 'Happy birthday', 'Come and visit', 'I found the custard']],
+  'The Brilliant Idea':[['How long did Cuffin think about his idea?', 'Three whole days', 'Three seconds', 'A whole year', 'One night'], ['What did Cuffin propose?', 'A puffin school', 'A custard factory', 'A fishing race', 'A new burrow'], ['How many new words a day would each puffin learn?', 'One', 'Ten', 'None', 'A hundred'], ['Which word did the Mirror use about himself all week?', 'Magnificent', 'Astute', 'Refined', 'Humble']],
+  'The Echo Cave':[['What was special about the cave?', 'It echoed everything', 'It was full of custard', 'It glowed in the dark', 'It was warm'], ['What is “Splash! Crash! Squawk!” an example of?', 'Onomatopoeia', 'A metaphor', 'A simile', 'Alliteration'], ['Cuffin said the echo was “like a parrot made of rock”. What is that?', 'A simile', 'A metaphor', 'Onomatopoeia', 'Alliteration'], ['What did the Mirror say his voice was?', 'A golden trumpet', 'A silver bell', 'A rock parrot', 'A foghorn']],
+  'The Volatile Volcano':[['Who told the story about the volcano?', 'Giles', 'Cuffin', 'The Mirror', 'A seagull'], ['What happened to puddles near the volcano?', 'They dried up in seconds', 'They froze', 'They turned to custard', 'They got bigger'], ['How did the puffins escape in the story?', 'On a passing cloud', 'On a boat', 'Through a tunnel', 'On a whale'], ['Was Giles’s story true?', 'No, but it was a good story', 'Yes, every word', 'Only the volcano part', 'Nobody knows']],
+  'The Untidy Burrow':[['What was in the Mirror’s burrow that nobody could explain?', 'A sock', 'A custard pie', 'A crab', 'A map'], ['What could the Mirror not find?', 'His comb', 'His mirror', 'His sock', 'His fish'], ['Who helped tidy up?', 'Cuffin', 'Giles', 'A seagull', 'Nobody'], ['What did Cuffin tell him to do every morning?', 'Tidy up', 'Brush his feathers', 'Catch a fish', 'Practise spelling']],
+  'The Superglue Disaster':[['Why did the Mirror buy superglue?', 'To glue his best feathers on forever', 'To fix a shell', 'To mend Giles’s hat', 'To make a crown for Cuffin'], ['Who sold him the superglue?', 'A crab', 'A seagull', 'Giles', 'Cuffin'], ['What did the Mirror accidentally glue together?', 'His own wings', 'Two shells', 'Giles’s feet', 'The receipt'], ['How was the Mirror unstuck?', 'Sitting in warm salty water for an hour', 'Cuffin pulled hard', 'A supernatural spell', 'He waited until morning']],
+};
 
 /* ---------- "How do you say it?": the right way (the phone's own British voice) against silly wrong ways ----------
    Each wrong version: [what the voice says, how it is written on screen, Cuffin's joke]. Words not listed get wrong versions made automatically. */
@@ -2969,6 +3054,7 @@ function home(greeting){
   if (!S.intro) return intro(() => { S.intro = true; S.lastVisit = visitSnap(); save(); home(); });
   if (S.lastVisit && S.lastVisit.d !== today() && !home.recapDone){ home.recapDone = true; return chapter(() => { S.lastVisit = visitSnap(); save(); if (storyDue()) storyTime(() => home()); else home(); }); }
   if (!S.lastVisit){ S.lastVisit = visitSnap(); save(); }
+  if (rabbitDue() && !home.rabbitShown){ home.rabbitShown = true; return rabbitNews(() => home()); }   // the Rabbit's news, if today's chapter has already been seen
   if (home.prizeShowing && !document.querySelector('.celeb')) home.prizeShowing = false;   // a party closed with End
   const pz = home.prizeShowing ? [] : prizeParties();
   { const nb = checkBadges(); if (nb.length){ save(); const msg = '🏅 New badge: ' + nb.map(b => b.n).join(', '); if (pz.length) home.badgeMsg = msg; else toast(msg); } }   // catch up on badges earned in an unfinished match
@@ -3068,6 +3154,32 @@ function intro(finish){
     end => h('div', {}, h('h2', {}, 'It’s ', h('em', { text:'matchday' })), duoFig(), h('button', { class:'cta', type:'button', onclick:() => { SND.fx('whistle'); end(); } }, 'Help Cuffin win! 🐟'))
   ], finish, { label:'The story', skip:'Skip', tune:'fanfare', splash:h('div', { class:'chapter', text:'THE RACE FOR LEADER' }), ticker:'BREAKING NEWS · GILES TO RETIRE · TWO PUFFINS, ONE CROWN · STILL NO CUSTARD IN THE NORTH ATLANTIC · ' });
 }
+/* ---------- the Rabbit: Cuffin's other nemesis, who sneaks new school words in ---------- */
+const rabbitPack = () => SCHOOL_PACKS.length ? SCHOOL_PACKS[SCHOOL_PACKS.length - 1] : null;
+const rabbitDue = () => { const pk = rabbitPack(); if (!pk || !(S.packs || []).includes(pk.d)) return false; const n = S.rabbitNews || {}; return n.d !== pk.d; };
+const rabbitSay = line => h('div', { class:'say rabbit' }, h('div', { class:'kidface rabbitface', 'aria-hidden':'true', text:'🐰' }), h('div', { class:'bub' }, h('div', { class:'nm', text:'The Rabbit' }), h('p', { class:'tx', text:line })));
+function rabbitSlides(){   // two slides: the news, then what everyone thinks of it
+  const pk = rabbitPack(), first = !(S.rabbitNews && S.rabbitNews.d), words = pk.rows.map(r => r[0]);
+  const mark = () => { if (!S.rabbitNews || S.rabbitNews.d !== pk.d){ S.rabbitNews = { d:pk.d, on:today() }; save(); } };
+  const show = words.slice(0, 3).join(', ') + (words.length > 3 ? ' + ' + (words.length - 3) + ' more' : '');
+  return [() => { mark(); return h('div', {}, h('div', { class:'chapter', text:'🚨 BREAKING NEWS' }),
+      h('h2', {}, first ? 'Enter: ' : 'He’s ', h('em', { text: first ? 'the Rabbit' : 'back' })),
+      first ? h('p', { text:'“I would like to enter the race,” whispered the Rabbit. “You are a rabbit,” said Giles. “This is a race for puffins.” So that night the Rabbit crept into the word store and sneaked in ' + words.length + ' brand-new words, just to annoy everyone.' })
+            : h('p', { text:'Somebody crept into the word store again. Muddy paw prints, a nibbled carrot top and ' + words.length + ' brand-new words.' }),
+      h('p', { class:'big', text:show }),
+      rabbitSay(first ? 'Hee hee. Good luck with THOSE. They’re extra long. I checked.' : pickOne(['Missed me? I brought presents. Long ones.', 'Hee hee. More words. You’re welcome.', 'I left you a few little extras. Hee hee.']))); },
+    () => h('div', {}, h('h2', {}, 'Win back the ', h('em', { text:'carrots' })),
+      sayBlock('com', 'Typical. But here’s the good news: look for 🐰 RABBIT WORD. Get one right and we win back a carrot. Master it and we take a whole bunch.', IMG.hello),
+      first ? sayBlock('rival', 'A RABBIT? In MY race? I don’t trust him. His ears are bigger than mine.', MIMG.ask) : null,
+      h('p', { class:'big', text:'🥕 ' + (S.carrots || 0) + ' carrot' + ((S.carrots || 0) === 1 ? '' : 's') + ' won back so far' }),
+      lower('WATCH OUT', first ? 'He says he’ll be back. Rabbits always come back.' : 'Win those carrots back!', 'cus'))];
+}
+function rabbitNews(finish){
+  screen = 'chapter';
+  const sl = rabbitSlides();
+  reel([sl[0], end => { const el = sl[1](); el.append(h('button', { class:'cta', type:'button', onclick:() => { SND.fx('whistle'); end(); } }, 'Let’s get them back 🥕')); return el; }], finish,
+    { label:'Breaking news', tag:'BREAKING NEWS', tune:'news', splash:h('div', { class:'chapter', text:'🚨 BREAKING NEWS' }), ticker:'BREAKING NEWS · RABBIT SPOTTED NEAR THE WORD STORE · NEW WORDS FOUND · CARROTS AT RISK · ' });
+}
 /* the daily chapter: shows itself on the first visit of a new day */
 function chapter(finish){
   screen = 'chapter';
@@ -3077,11 +3189,13 @@ function chapter(finish){
   const rows = chartRows();
   const plus = x => x > 0 ? '+' + x + ' since last time' : 'same as last time';
   const sl = (...kids) => () => h('div', {}, ...kids);
+  const rabbit = rabbitDue();
   reel([
     () => { VOICE.play('c03'); return h('div', {}, h('div', { class:'chapter', text:'CHAPTER ' + n + ' · ' + shortDate(today()).toUpperCase() }), h('h2', {}, h('em', { text:title })),
       led(true, 'SO FAR'), Math.random() < .5 ? lower('GILES', pickOne(GCUSTARD), 'cus') : lower('GILES', pickOne(GILES))); },
     () => { const lv = d > 0 ? 'c11' : d < 0 ? 'c12' : null; const said = lv && VOICE.play(lv); return h('div', {}, h('h2', {}, 'The race ', h('em', { text:'so far' })), h('div', { class:'chartbox' }, raceChart(rows, 'p', 'mf', 'Fresh fish over time')), legend(),
       h('p', { class:'big', text: d > 0 ? 'Cuffin leads by ' + d + ' fish. ' : d < 0 ? 'The Mirror leads by ' + (-d) + ' fish. ' : 'Dead level. ' }), sayBlock('com', said ? VO[lv] : pickOne(SAY.since[sinceKey]), IMG.hello)); },
+    ...(rabbit ? rabbitSlides() : []),
     sl(h('h2', {}, 'Your ', h('em', { text:'stats' })),
       h('div', { class:'stat4' },
         h('div', { class:'st' }, h('div', { class:'k', text:'WORDS MASTERED' }), h('div', { class:'v', text:aM + '/' + T }), h('div', { class:'d', text:plus(aM - (v.w || 0)) })),
@@ -3093,7 +3207,7 @@ function chapter(finish){
       sayBlock('rival', Math.random() < .35 ? pickOne(MCUSTARD) : pickOne(PRE), MIMG.smug), sayBlock('kid', pickOne(ASAY)),
       lower('MISSION', mission()),
       h('button', { class:'cta', type:'button', onclick:() => { SND.fx('whistle'); end(); } }, 'KICK OFF ⚽'))
-  ], finish, { label:'Chapter ' + n, tag:'CHAPTER ' + n, tune:'news', splash:h('div', { style:'display:flex;flex-direction:column;align-items:center;gap:6px' }, h('div', { class:'chapter', text:'CHAPTER ' + n }), h('h2', { text:title })),
+  ].filter(Boolean), finish, { label:'Chapter ' + n, tag:'CHAPTER ' + n, tune:'news', splash:h('div', { style:'display:flex;flex-direction:column;align-items:center;gap:6px' }, h('div', { class:'chapter', text:'CHAPTER ' + n }), h('h2', { text:title })),
     ticker:'CHAPTER ' + n + ' · CUFFIN ' + S.points + ' – ' + S.race.mf + ' MIRROR · ' + aM + ' WORDS MASTERED · ' + (S.custard || 0) + ' POTS OF CUSTARD · ' });
 }
 function confetti(n){

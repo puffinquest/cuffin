@@ -176,7 +176,7 @@ svg.ic{width:1.15em;height:1.15em;fill:currentColor;flex:none;vertical-align:-.2
 .sentence .fill{color:var(--win);font-weight:800;border-bottom:3px solid var(--win)}
 .answers{display:grid;gap:clamp(6px,1.1dvh,9px)}
 .ans{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:clamp(9px,1.6dvh,13px) 12px;border-radius:16px;border:2px solid var(--line);background:var(--surface);font-weight:700;font-size:1rem;box-shadow:0 3px 0 var(--line)}
-.ans:hover:not([disabled]){border-color:var(--team)}
+@media (hover:hover){.ans:hover:not([disabled]){border-color:var(--muted)}}   /* phones keep a 'hover' on whatever is under the finger after a tap */
 .ans:active:not([disabled]){transform:translateY(2px);box-shadow:0 1px 0 var(--line)}
 .ans .l{flex:none;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:var(--team-soft);color:var(--team);font:400 .82rem var(--font-display)}
 .ans .t{flex:1;min-width:0;overflow-wrap:anywhere;display:flex;flex-direction:column}
@@ -236,6 +236,8 @@ svg.ic{width:1.15em;height:1.15em;fill:currentColor;flex:none;vertical-align:-.2
 .line{font-weight:600;font-size:.95rem}
 .note{display:flex;gap:8px;align-items:center;border-radius:12px;padding:7px 10px;border:2px solid var(--gold);background:var(--gold-soft);font-weight:600;font-size:.86rem}
 .note.custard{border-color:var(--custard);background:var(--custard-soft)}
+.rabbitface{background:#FFF1E6 !important;font-size:1.9rem !important;display:grid;place-items:center}
+.note.carrot{border-color:#F07A1A;background:rgba(240,122,26,.14)}
 .mline{display:flex;gap:8px;align-items:center;border-radius:14px;padding:6px 10px;background:var(--rival-soft);border:2px solid color-mix(in srgb,var(--rival) 45%,var(--line));font-size:.88rem}
 .mline img{width:34px;height:34px;object-fit:contain;flex:none}
 .mline b{color:var(--rival)}
@@ -662,5 +664,5 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=618c9a1e9a"></script>
+<script src="app.js?v=d7e299fa28"></script>
 </body></html>
