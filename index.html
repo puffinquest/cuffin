@@ -538,6 +538,13 @@ label.chk{display:inline-flex;gap:4px;align-items:center;font-size:.85rem}
 @media (max-height:720px){ .banner.big{padding:6px 10px} .banner.big .em{font-size:1.3rem} .banner.big .bt b{font-size:1.1rem} .banner.big .bt span{font-size:.85rem} }
 .wc.almost{color:#FFD23F;font-weight:800}
 .wbtns{display:flex;gap:6px;margin-top:8px} .wbtns .btn{flex:1;padding-left:6px;padding-right:6px;font-size:.8rem}
+.wl.ck{width:100%;border:2px solid transparent;font:inherit;color:inherit;cursor:pointer}
+.wl.ck .ckmark{flex:none;font-size:1.1rem;color:var(--muted)}
+.wl.ck.on{background:rgba(255,184,0,.16);border-color:#F2A900}
+.wl.ck .ckst{display:block;color:#8A5A00;font-weight:600}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .wl.ck .ckst{color:#FFC94D} }
+:root[data-theme="dark"] .wl.ck .ckst{color:#FFC94D}
+.wl.ck b{display:block}
 .wlist{display:flex;flex-direction:column;gap:5px;max-height:48dvh;overflow-y:auto}
 .wl{display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:12px;background:var(--surface-2);padding:7px 10px}
 .wl b{display:block} .wl .small{display:block}
@@ -664,5 +671,5 @@ html.noscroll,html.noscroll body{overflow:hidden;overscroll-behavior:none;touch-
 <div class="toastbox" id="toastbox" aria-live="polite"></div>
 <noscript><p>Cuffin's Word Quest needs JavaScript to run.</p></noscript>
 
-<script src="app.js?v=fb29045a67"></script>
+<script src="app.js?v=616e871f34"></script>
 </body></html>

@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "fb29045a67";
+const APPV = "616e871f34";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -630,7 +630,8 @@ function mergeStates(a, b, base){
   const o = JSON.parse(JSON.stringify(a)), r = b;
   const add = (av, bv, bs) => Math.max(0, base ? (bv || 0) + (av || 0) - (bs || 0) : Math.max(av || 0, bv || 0));
   for (const k in (r.prog || {})){ const x = r.prog[k], y = o.prog[k]; if (!y || (x.seen || 0) > (y.seen || 0)) o.prog[k] = x; }
-  o.points = add(a.points, r.points, base && base.points); o.custard = add(a.custard, r.custard, base && base.custard); o.carrots = base && base.carrots != null ? add(a.carrots, r.carrots, base.carrots) : Math.max(a.carrots || 0, r.carrots || 0);
+  o.points = add(a.points, r.points, base && base.points); o.custard = add(a.custard, r.custard, base && base.custard); { const P = Object.assign({}, r.practice || {}); for (const [k, v] of Object.entries(a.practice || {})) if (!P[k] || (v.u || 0) >= (P[k].u || 0)) P[k] = v; o.practice = P; }   // newest change to each marked word wins
+  o.carrots = base && base.carrots != null ? add(a.carrots, r.carrots, base.carrots) : Math.max(a.carrots || 0, r.carrots || 0);
   o.stats = o.stats || {};
   for (const k of new Set(Object.keys(r.stats || {}).concat(Object.keys(a.stats || {})))){
     o.stats[k] = k === 'best' ? Math.max((a.stats || {})[k] || 0, (r.stats || {})[k] || 0) : add((a.stats || {})[k], (r.stats || {})[k], base && (base.stats || {})[k]);
@@ -810,6 +811,31 @@ const matchDay = () => { const days = new Set(S.history.map(x => x.d)); days.add
 const CARD_ITEMS = CARDS.map(c => ({ w:c.w, m:(XW[c.w] || {}).m || 'Similar and opposite card', card:c }));
 const allItems = () => S.words.concat(CARD_ITEMS);
 const pk = x => x.card ? 'card:' + (x.card.id || norm(x.w)) : norm(x.w);
+/* ---------- words a grown-up marked for more practice: proven again in 3 steps, easy to hard, one step per day ---------- */
+const PRAC_STEPS = 3;
+const pracOn = x => { const p = (S.practice || {})[pk(x)]; return !!(p && p.on); };
+function pracSteps(x){   // the question type for each step: meaning from 4, then word from meaning, then the hardest one it has
+  const ts = typesFor(x), has = t => ts.includes(t);
+  const a = has('w2m') ? 'w2m' : ts[0];
+  const c = x.card && has('sim') ? 'sim' : has('gap') ? 'gap' : has('spell') ? 'spell' : a;
+  const b = has('m2w') ? 'm2w' : has('gap') && c !== 'gap' ? 'gap' : has('scram') ? 'scram' : a;
+  return [a, b, c];
+}
+function setPractice(x, on){
+  S.practice = S.practice || {};
+  const k = pk(x), p = S.practice[k];
+  S.practice[k] = on ? { on:true, st:0, d:'', u:Date.now(), at:today() } : Object.assign({}, p || {}, { on:false, u:Date.now(), cleared:'grown-up' });
+  save();
+}
+function pracDue(pool){ return pool.filter(x => { const p = (S.practice || {})[pk(x)]; return p && p.on && p.d !== today(); }); }
+function pracResult(item, ok, hinted){   // called after each answer on a practice word
+  const p = S.practice && S.practice[pk(item.w)];
+  if (!p || !p.on || item.prac == null) return;
+  if (ok && !hinted && !item.retry){ p.st = (p.st || 0) + 1; p.d = today(); if (p.st >= PRAC_STEPS){ p.on = false; p.done = today(); const r = rec(item.w); if (!r.m || r.wob){ r.m = true; r.wob = false; r.md = r.md || today(); } } }   // re-proven: definitely mastered
+  else if (!ok && !item.retry){ p.st = Math.max(0, (p.st || 0) - 1); p.d = today(); }
+  else if (!item.retry) p.d = today();   // right with a hint: same step, try again tomorrow
+  p.u = Date.now();
+}
 function rec(x){ const k = pk(x); return S.prog[k] || (S.prog[k] = { streak:0, seen:0, right:0, miss:0, fixed:0, last:'', ty:[], dy:[] }); }
 const peek = x => S.prog[pk(x)];
 /* cards also need a hint-free, fully right similar & opposite answer in the current run */
@@ -1023,14 +1049,17 @@ function startRound2(kind){
     if (pool.length < 5) pool = pool.concat(allItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r) && !pool.includes(x); }).sort((a, b) => (peek(b).miss / peek(b).seen) - (peek(a).miss / peek(a).seen)).slice(0, 5 - pool.length)); }   // short of tricky words: top up with the next-shakiest
   if (!pool.length){ toast('The word bank is empty. Add words in Grown-ups.'); return; }
   const B = S.book && S.book.next || [], n = Math.min(10, pool.length);
-  const first = kind === 'tricky' ? [] : pool.filter(x => B.includes(pk(x))).slice(0, 4);
-  if (first.length && S.book) S.book.next = B.filter(k => !first.some(x => pk(x) === k));
+  const prac = shuffle(pracDue(pool)).slice(0, 3);   // words a grown-up marked: up to 3 each match, picked first so they always get their practice step
+  const first = kind === 'tricky' ? [] : pool.filter(x => B.includes(pk(x)) && !prac.includes(x)).slice(0, 4);
+  if ((first.length || prac.length) && S.book) S.book.next = B.filter(k => !first.some(x => pk(x) === k) && !prac.some(x => pk(x) === k));
+  first.push(...prac);
   const due0 = shuffle(pool.filter(x => !first.includes(x) && (() => { const r = peek(x), d = dueIn(r); return r && r.seen && d != null && d <= 0; })())).sort((a, b) => dueIn(peek(a)) - dueIn(peek(b))).slice(0, 3);   // up to 3 due reviews, most overdue first
   const due = due0;
   const school = (S.school && S.school.list || []).map(k => pool.find(x => norm(x.w) === k)).filter(x => x && !first.includes(x) && !isMastered(x)); first.push(...shuffle(school).slice(0, Math.max(0, Math.min(3, n - first.length))));   // this week's school words: up to 3 each match
   first.push(...due.filter(x => !first.includes(x)).slice(0, Math.max(0, n - first.length)));
   const rest = pickWords(n - first.length, pool.filter(x => !first.includes(x)));
   R = newRound(shuffle(first).concat(rest), kind);
+  R.queue.forEach(it => { if (prac.includes(it.w)){ const p = S.practice[pk(it.w)]; it.prac = pracSteps(it.w)[Math.min(PRAC_STEPS - 1, p.st || 0)]; } });
   R.rank0 = rankInfo(masteredCount()).i; R.lastD = S.points - S.race.mf; R.badges0 = Object.keys(S.badges || {}).length;
   SND.prime(); SND.fx('whistle'); SND.loop(true);
   if (Math.random() < .5) setTimeout(() => VOICE.play('c04'), 600);
@@ -1061,6 +1090,7 @@ function pickType(item){
   const x = item.w, r = peek(x);
   if (FORCE && typesFor(x).includes(FORCE)) return FORCE;
   if (item.retry && item.lastType) return item.lastType;
+  if (item.prac != null) return item.prac;   // a practice word: this step's question type
   if (r && x.card && r.streak >= 2 && !(r.ty || []).includes('sim')) return 'sim';   // steer cards towards the similar & opposite test
   if (!hasMeaning(x)){ const ts = typesFor(x), notYet = ts.filter(t => !((r && r.ty) || []).includes(t)); return notYet.length ? notYet[0] : ts[rnd(ts.length)]; }
   if (!r || !r.seen) return x.card ? (Math.random() < .65 ? 'sim' : 'w2m') : (S.words.length >= 4 ? (Math.random() < .5 ? 'w2m' : 'm2w') : 'spell');
@@ -1108,6 +1138,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
   const was = isMasteredRec(r) || !!(r.m && r.wob), spellish = q.type === 'spell' || q.type === 'scram' || q.type === 'hear';
   let pts = 0, note = null, line, lock = null, custard = false;
   const rabbit = isRabbitWord(q.w); R.lastCarrot = 0;
+  pracResult(item, ok, hinted);
   S.stats.answered += 1;
   S.race.ra = (S.race.ra == null ? .6 : S.race.ra) * .9 + (ok ? .1 : 0);
   S.race.ta = (S.race.ta == null ? S.race.ra : S.race.ta) * .97 + (ok ? .03 : 0);   // slow-moving accuracy: an earned lead doesn't vanish after one wobbly round
@@ -1132,7 +1163,8 @@ function scoreItem(item, q, ok, fishDone, hinted){
     R.results[R.idx] = 'ok';
   } else {
     r.miss++; r.lm = today(); r.streak = Math.max(0, r.streak - 2); R.streak = 0; R.missed.push(q.w.w);
-    if (r.m && !r.wob){ r.wob = true; lock = 'wobble'; }   // one slip on a mastered word: needs one right answer to re-secure
+    if (pracOn(q.w)){}   // a word a grown-up marked for practice stays mastered: the practice steps decide
+    else if (r.m && !r.wob){ r.wob = true; lock = 'wobble'; }   // one slip on a mastered word: needs one right answer to re-secure
     else { if (r.m){ r.ty = []; r.dy = []; } r.m = false; r.wob = false; }   // a second slip on a mastered word: earn it again
     line = say('wrong'); R.results[R.idx] = 'bad';
     if (!item.retry){ queueRetry(item); note = 'We will come back to this one in a moment.'; }
@@ -2724,6 +2756,35 @@ function pieGame(){
   raf = requestAnimationFrame(frame);
 }
 
+/* ---------- Grown-ups → Check words: test Aaron on his mastered words, tap any he has forgotten ---------- */
+let checkHide = false;
+function checkPanel(){
+  const STEP_NAME = { w2m:'pick the meaning', m2w:'pick the word', sim:'similar & opposite', gap:'fill the gap', spell:'spell it', scram:'unscramble', hear:'hear & spell', pre:'pick the start', say:'say it' };
+  const mean = x => x.card ? info(x.w).m : x.m, all = allItems();
+  const box = h('div');
+  const row = x => {
+    const p = (S.practice || {})[pk(x)], prac = !!(p && p.on), st = prac ? (p.st || 0) : 0, steps = pracSteps(x);
+    const status = prac ? '🔁 Practising · step ' + (st + 1) + ' of ' + PRAC_STEPS + ': ' + STEP_NAME[steps[st]] + (p.d === today() ? ' (next go tomorrow)' : '') : '';
+    return h('button', { type:'button', class:'wl ck' + (prac ? ' on' : ''), 'aria-pressed':String(prac), onclick:() => { SND.fx('tap'); setPractice(x, !prac); draw(); const tb = [...document.querySelectorAll('.subtabs button')].find(b => /^Check words/.test(b.textContent)); if (tb) tb.textContent = 'Check words' + (all.some(pracOn) ? ' 🔁' : ''); } },
+      h('div', { style:'min-width:0;text-align:left' }, h('b', { text:x.w }), checkHide && !prac ? null : h('span', { class:'small muted', text:(mean(x) || '') }), status ? h('span', { class:'small ckst', text:status }) : null),
+      h('span', { class:'ckmark', text: prac ? '🔁' : '＋' }));
+  };
+  function draw(){
+    const on = all.filter(pracOn), mastered = all.filter(x => isMasteredRec(peek(x)) || pracOn(x)).sort((a, b) => a.w.localeCompare(b.w));
+    const done = all.filter(x => { const p = (S.practice || {})[pk(x)]; return p && !p.on && p.done && daysSince(p.done) <= 14; });
+    put(box,
+      h('p', { class:'small', text:'Test Aaron on his mastered words. Tap any he’s forgotten to mark it 🔁 for practice. Tap again to unmark it.' }),
+      h('p', { class:'small muted', text:'A marked word still counts as mastered. Up to 3 come back at the start of each match, mixed in with no label. He re-proves each one in 3 steps, one a day: pick the meaning, then pick the word, then the harder one (similar & opposite for card words, otherwise fill the gap or spelling). A miss drops it back a step.' }),
+      h('label', { class:'row small', style:'gap:8px;align-items:center' }, h('input', { type:'checkbox', checked:checkHide, onchange:e => { checkHide = e.target.checked; draw(); } }), h('span', { text:'Hide meanings while testing' })),
+      on.length ? [h('h3', { class:'ih', text:'🔁 Practising (' + on.length + ')' }), h('p', { class:'small', text:on.map(x => x.w + ' (step ' + Math.min(PRAC_STEPS, ((S.practice[pk(x)] || {}).st || 0) + 1) + ' of ' + PRAC_STEPS + ')').join(', ') })] : null,
+      done.length ? [h('h3', { class:'ih', text:'✅ Re-proven in the last 2 weeks' }), h('p', { class:'small', text:done.map(x => x.w).join(', ') })] : null,
+      h('h3', { class:'ih', text:'Mastered words (' + mastered.length + ')' }),
+      mastered.length ? h('div', { class:'wlist', style:'max-height:none' }, mastered.map(row)) : h('p', { class:'small muted', text:'No mastered words yet.' }));
+  }
+  draw();
+  return box;
+}
+
 /* ---------- Cuffin's word stories: short, silly, read aloud, each using a few of Aaron's words ---------- */
 const STORIES = [
   { t:'The Custard Map', w:['inaccurate','ponder','ramble','dismal','acquire'], p:[
@@ -3388,7 +3449,7 @@ function grownups(){
     setTimeout(() => inp.focus(), 30); return;
   }
   const nb = bookStore().list.filter(e => e.d === today()).length;
-  const tabs = [['play','Play'],['insights','Insights'],['school','School' + (schoolDue() ? ' ⚠️' : '')],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
+  const tabs = [['play','Play'],['insights','Insights'],['check','Check words' + (Object.values(S.practice || {}).filter(p => p.on).length ? ' 🔁' : '')],['school','School' + (schoolDue() ? ' ⚠️' : '')],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
   const bar = h('div', { class:'subtabs', role:'group', 'aria-label':'Grown-ups sections' }, tabs.map(([id, t]) => h('button', { type:'button', 'aria-pressed':String(gTab === id), onclick:() => { gTab = id; grownups(); } }, t)));
   const panel = h('div', { class:'panel grow', style:'overflow-y:auto' });
   const c = counts(), T = allItems().length;
@@ -3408,6 +3469,8 @@ function grownups(){
     put(panel, schoolPanel());
   } else if (gTab === 'insights'){
     put(panel, insightsPanel());
+  } else if (gTab === 'check'){
+    put(panel, checkPanel());
   } else if (gTab === 'book'){
     const L = bookStore().list.slice(0, 120), days = {};
     L.forEach(e => { (days[e.d] = days[e.d] || []).push(e); });
