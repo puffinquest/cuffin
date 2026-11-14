@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "ce40dc5588";
+const APPV = "2a3cd92216";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -551,8 +551,22 @@ const SCHOOL_PACKS = [
     ['superglue', 'A very strong glue that sticks things together in seconds.', 'Dad fixed the broken mug handle with superglue.'],
     ['supernatural', 'Something science or nature cannot explain, like ghosts or magic.', 'The film was about a supernatural castle full of ghosts.'],
     ['superpower', 'An amazing special power, like flying; or a very powerful country.', 'If I could have one superpower, I would choose flying.']] },
+  { d:'2026-11-14', rows:[
+    ['interactive', 'Something that reacts to what you do, so you can join in.', 'The museum had an interactive screen you could touch to explore.'],
+    ['intercity', 'Going between two cities, like a fast train.', 'We caught the intercity train from London to Bristol.'],
+    ['subdivided', 'Split into smaller parts, after already being divided once.', 'The garden was subdivided into little vegetable patches.'],
+    ['subheading', 'A small heading under a main heading that tells you what the next part is about.', 'Each section of the leaflet had a bold subheading.'],
+    ['submarine', 'A ship that can travel under the water.', 'The submarine dived deep beneath the waves.'],
+    ['subtitle', 'Words on the screen that show what people in a film are saying.', 'We watched the French film with English subtitles.'],
+    ['superhero', 'A hero in a story with amazing powers who saves people.', 'Her favourite superhero can run faster than light.'],
+    ['superman', 'A man with powers far beyond normal people.', 'Grandad lifted the heavy box like a superman.'],
+    ['supermarket', 'A big shop that sells food and things for the home.', 'We bought milk and bread at the supermarket.'],
+    ['superstar', 'A very famous and successful performer or player.', 'The footballer became a superstar after scoring the winning goal.']] },
 ];
-const isRabbitWord = x => !!(x && S && S.school && (S.school.list || []).includes(norm(x.w)));   // this week's school words: the ones the Rabbit sneaked in
+/* the Rabbit's words: every word from the school lists. They are their own challenge (Stop the Rabbit), separate from the words for Leader */
+const RABBIT_KEYS = new Set(SCHOOL_PACKS.flatMap(pk => pk.rows.map(r => norm(r[0]))));
+const isRabbitItem = x => !!(x && !x.card && RABBIT_KEYS.has(norm(x.w)));
+const isRabbitWord = x => isRabbitItem(x);   // any word the Rabbit sneaked in
 function applySchoolPacks(o){
   o.packs = Array.isArray(o.packs) ? o.packs : [];
   for (const pk of SCHOOL_PACKS){
@@ -631,7 +645,8 @@ function mergeStates(a, b, base){
   const add = (av, bv, bs) => Math.max(0, base ? (bv || 0) + (av || 0) - (bs || 0) : Math.max(av || 0, bv || 0));
   for (const k in (r.prog || {})){ const x = r.prog[k], y = o.prog[k]; if (!y || (x.seen || 0) > (y.seen || 0)) o.prog[k] = x; }
   o.points = add(a.points, r.points, base && base.points); o.custard = add(a.custard, r.custard, base && base.custard); { const P = Object.assign({}, r.practice || {}); for (const [k, v] of Object.entries(a.practice || {})) if (!P[k] || (v.u || 0) >= (P[k].u || 0)) P[k] = v; o.practice = P; }   // newest change to each marked word wins
-  o.carrots = base && base.carrots != null ? add(a.carrots, r.carrots, base.carrots) : Math.max(a.carrots || 0, r.carrots || 0);
+  o.rabbitLocks = Math.max(a.rabbitLocks || 0, r.rabbitLocks || 0); if (r.rabbitLock && (!a.rabbitLock || r.rabbitLock.d > a.rabbitLock.d)) o.rabbitLock = r.rabbitLock; o.rtrophy = Object.assign({}, r.rtrophy || {}, a.rtrophy || {});
+    o.carrots = base && base.carrots != null ? add(a.carrots, r.carrots, base.carrots) : Math.max(a.carrots || 0, r.carrots || 0);
   o.stats = o.stats || {};
   for (const k of new Set(Object.keys(r.stats || {}).concat(Object.keys(a.stats || {})))){
     o.stats[k] = k === 'best' ? Math.max((a.stats || {})[k] || 0, (r.stats || {})[k] || 0) : add((a.stats || {})[k], (r.stats || {})[k], base && (base.stats || {})[k]);
@@ -810,6 +825,10 @@ const matchDay = () => { const days = new Set(S.history.map(x => x.d)); days.add
    a second slip un-masters it and clears the kinds and days, so it must be earned again. */
 const CARD_ITEMS = CARDS.map(c => ({ w:c.w, m:(XW[c.w] || {}).m || 'Similar and opposite card', card:c }));
 const allItems = () => S.words.concat(CARD_ITEMS);
+const mainItems = () => allItems().filter(x => !isRabbitItem(x));   // the words that count for Leader, prizes and the race
+const rabbitItems = () => S.words.filter(isRabbitItem);
+const rabbitMastered = () => rabbitItems().filter(isMastered).length;
+const rabbitAllDone = () => { const t = rabbitItems(); return t.length > 0 && t.every(isMastered); };
 const pk = x => x.card ? 'card:' + (x.card.id || norm(x.w)) : norm(x.w);
 /* ---------- words a grown-up marked for more practice: proven again in 3 steps, easy to hard, one step per day ---------- */
 const PRAC_STEPS = 3;
@@ -842,10 +861,10 @@ const peek = x => S.prog[pk(x)];
 const meetsMastery = (r, card, nTypes) => r.streak >= 3 && (r.ty || []).length >= Math.min(2, nTypes || 2) && (r.dy || []).length >= 2 && (!card || (r.ty || []).includes('sim'));
 const isMasteredRec = r => !!r && !!r.m && !r.wob;
 const isMastered = x => isMasteredRec(peek(x));
-const masteredCount = () => allItems().filter(isMastered).length;
+const masteredCount = () => mainItems().filter(isMastered).length;
 /* almost mastered: on a run of 2+, or mastered-then-slipped once */
 const isAlmost = r => !!r && r.seen > 0 && !isMasteredRec(r) && (r.wob || r.streak >= 2);
-const almostCount = () => allItems().filter(x => isAlmost(peek(x))).length;
+const almostCount = () => mainItems().filter(x => isAlmost(peek(x))).length;
 function status(x){
   const r = peek(x);
   if (!r || !r.seen) return 'new';
@@ -853,10 +872,10 @@ function status(x){
   if (isAlmost(r)) return 'lock';
   return 'learning';
 }
-const trickyWords = () => allItems().filter(x => { const r = peek(x); return r && r.miss > 0 && !isMasteredRec(r) && (r.wob || r.streak < 2); })
+const trickyWords = () => mainItems().filter(x => { const r = peek(x); return r && r.miss > 0 && !isMasteredRec(r) && (r.wob || r.streak < 2); })
   .sort((a,b) => peek(b).miss - peek(a).miss);
-function counts(){ const c = { mastered:0, lock:0, learning:0, new:0 }; for (const x of allItems()) c[status(x)]++; return c; }
-const lockReadyToday = () => allItems().filter(x => { const r = peek(x); return r && !isMasteredRec(r) && (r.wob || (r.streak >= 3 && !(r.dy || []).includes(today()))); }).length;
+function counts(){ const c = { mastered:0, lock:0, learning:0, new:0 }; for (const x of mainItems()) c[status(x)]++; return c; }
+const lockReadyToday = () => mainItems().filter(x => { const r = peek(x); return r && !isMasteredRec(r) && (r.wob || (r.streak >= 3 && !(r.dy || []).includes(today()))); }).length;
 function accuracy(){ return S.stats.answered ? Math.round(100 * S.stats.right / S.stats.answered) : 0; }
 const info = w => XW[w] || XW[norm(w)] || { m:'', f:'' };
 const esc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -872,7 +891,7 @@ function gapFor(x){
 const RANK_NAMES = ['Egg','Hatchling','Fledgling','Beak Cadet','Fish Fetcher','Burrow Boss','Wave Rider','Atlantic Crosser','Puffin Elder','Puffin Legend','Honorary Member of the Puffin Community','Leader of the Puffin Community'];
 const RANK_PCT = [0,.02,.05,.10,.18,.28,.40,.55,.72,.86,.95,1];
 function ranks(){
-  const n = Math.max(1, allItems().length); let prev = -1;
+  const n = Math.max(1, mainItems().length); let prev = -1;
   return RANK_NAMES.map((name, i) => {
     let at = i===0 ? 0 : Math.max(prev+1, Math.round(RANK_PCT[i]*n));
     if (i === RANK_NAMES.length - 1) at = n; else at = Math.min(at, n - (RANK_NAMES.length - 1 - i));
@@ -888,7 +907,7 @@ function rankInfo(m){ const t = ranks(); let i = 0; while (i+1 < t.length && t[i
 const LEAD_CAP = 3, MAST_CAP = 0, END_ZONE = 10;
 const MC = { base:.6, slope:.08, catchStart:3, catchStep:3, catchMax:4 };
 function raceCaps(){
-  const T = allItems().length, aM = masteredCount(), A = S.points, end = T - aM <= END_ZONE;
+  const T = mainItems().length, aM = masteredCount(), A = S.points, end = T - aM <= END_ZONE;
   return { T, aM, A, end, fishMax: end ? A - 1 : A + LEAD_CAP, mastMax: Math.max(0, Math.min(T - 1, end ? aM - 1 : aM + MAST_CAP)) };
 }
 /* how far ahead Aaron is allowed to pull: 3 fish normally, up to 20 when he is answering really well */
@@ -916,7 +935,7 @@ function mirrorMastery(ok){
   r.mm = Math.max(0, Math.min(r.mm, raceCaps().mastMax));
 }
 function raceFix(){ const c = raceCaps(); S.race.mf = Math.min(S.race.mf, c.A + LEAD_CAP); if (c.end) S.race.mf = Math.min(S.race.mf, Math.max(0, c.A - 1)); S.race.mm = Math.min(S.race.mm, c.mastMax); }
-const allDone = () => { const T = allItems().length; return T > 0 && masteredCount() >= T; };
+const allDone = () => { const T = mainItems().length; return T > 0 && masteredCount() >= T; };
 function misspell(w){
   const s = [...w], V = 'aeiou', tries = [
     () => { const i = 1 + rnd(Math.max(1, s.length - 2)); if (s[i] === s[i+1] || !s[i+1]) return null; const t = s.slice(); [t[i], t[i+1]] = [t[i+1], t[i]]; return t; },
@@ -943,6 +962,15 @@ const BADGES = [
   { id:'d3',     n:'Three-Day Flyer', d:'Play 3 days in a row.',                      ic:'wave',   t:c => c.days >= 3 },
   { id:'d7',     n:'Perfect Week',    d:'Play 7 days in a row.',                      ic:'trophy', t:c => c.days >= 7 },
   { id:'r10',    n:'Regular',         d:'Finish 10 rounds.',                          ic:'flame',  t:c => c.S.stats.rounds >= 10 },
+  { id:'rmatch1', n:'Rabbit Spotter', d:'Play your first Stop the Rabbit match.', em:'🐰', t:c => (c.S.stats.rmatch || 0) >= 1 },
+  { id:'rab1', n:'Paw Print', d:'Master your first Rabbit word.', em:'🐾', t:c => c.rm >= 1 },
+  { id:'rab5', n:'Carrot Guard', d:'Master 5 Rabbit words.', em:'🛡️', t:c => c.rm >= 5 },
+  { id:'rperf', n:'Not Today, Rabbit', d:'Get every answer right first time in a Stop the Rabbit match.', em:'🙅', t:c => (c.S.stats.rperf || 0) >= 1 },
+  { id:'lock1', n:'Gate Keeper', d:'Lock the Rabbit out: master every Rabbit word.', em:'🔒', t:c => (c.S.rabbitLocks || 0) >= 1 },
+  { id:'rab15', n:'Rabbit Tamer', d:'Master 15 Rabbit words.', em:'🥇', t:c => c.rm >= 15 },
+  { id:'rmatch10', n:'Rabbit Chaser', d:'Play 10 Stop the Rabbit matches.', em:'🏃', t:c => (c.S.stats.rmatch || 0) >= 10 },
+  { id:'carrot150', n:'Carrot Mountain', d:'Win 150 carrots back from the Rabbit.', em:'⛰️', t:c => (c.S.carrots || 0) >= 150 },
+  { id:'lock3', n:'Rabbit-Proof Fence', d:'Lock the Rabbit out 3 times.', em:'🚧', t:c => (c.S.rabbitLocks || 0) >= 3 },
   { id:'carrot1',  n:'Carrot Snatcher', d:'Win a carrot back from the Rabbit.', em:'🥕', t:c => (c.S.carrots || 0) >= 1 },
   { id:'carrot25', n:'Bunch of Carrots', d:'Win 25 carrots back from the Rabbit.', em:'🥕', t:c => (c.S.carrots || 0) >= 25 },
   { id:'carrot75', n:'Rabbit Foiled', d:'Win 75 carrots back from the Rabbit.', em:'🐰', t:c => (c.S.carrots || 0) >= 75 },
@@ -994,10 +1022,10 @@ const BADGES = [
   { id:'owl', n:'Night Owl', d:'Finish a match after 7pm.', em:'🦉', t:c => (c.S.stats.owl || 0) >= 1 }
 ];
 /* show badges easiest first, hardest (every word, then the crown) last */
-const BADGE_ORDER = ["first", "splat1", "story1", "d3", "s5", "m10", "fix5", "spell10", "cust5", "carrot1", "clear", "perf", "f100", "hear10", "pre10", "say10", "pinky10", "book10", "early", "owl", "school1", "d5", "r10", "s10", "m25", "carrot25", "spell25", "cw10", "d7", "splat10", "cards10", "f250", "s15", "perf3", "fix20", "m50", "story10", "clear20", "r25", "d14", "spell50", "s20", "say40", "m75", "f500", "cw25", "d21", "carrot75", "splat50", "r50", "m100", "half", "perf10", "d30", "m150", "f1000", "r100", "m200", "mall", "leader"];
+const BADGE_ORDER = ["first", "splat1", "story1", "d3", "s5", "m10", "fix5", "spell10", "cust5", "rmatch1", "carrot1", "rab1", "clear", "perf", "f100", "hear10", "pre10", "say10", "pinky10", "book10", "early", "owl", "school1", "d5", "r10", "s10", "m25", "carrot25", "rab5", "rperf", "spell25", "cw10", "d7", "splat10", "cards10", "f250", "s15", "perf3", "fix20", "m50", "story10", "clear20", "r25", "d14", "spell50", "s20", "say40", "m75", "f500", "cw25", "d21", "carrot75", "lock1", "rab15", "rmatch10", "splat50", "r50", "m100", "half", "perf10", "d30", "m150", "f1000", "r100", "m200", "carrot150", "lock3", "mall", "leader"];
 BADGES.sort((x, y) => { const i = BADGE_ORDER.indexOf(x.id), j = BADGE_ORDER.indexOf(y.id); return (i < 0 ? 999 : i) - (j < 0 ? 999 : j); });
 function checkBadges(){
-  const ctx = { S, m:masteredCount(), days:dayStreak(), total:allItems().length }, got = [];
+  const ctx = { S, m:masteredCount(), rm:rabbitMastered(), days:dayStreak(), total:mainItems().length }, got = [];
   for (const b of BADGES) if (!S.badges[b.id] && b.t(ctx)){ S.badges[b.id] = today(); got.push(b); }
   return got;
 }
@@ -1043,12 +1071,13 @@ function newRound(picks, kind){
 }
 function startRound(kind){ streakRescue(() => startRound2(kind)); }
 function startRound2(kind){
-  let pool = allItems();
+  let pool = mainItems();
   if (kind === 'cards') pool = CARD_ITEMS;
-  else if (kind === 'tricky'){ pool = trickyWords(); if (!pool.length){ toast('Nothing tricky yet!'); return home(say('empty')); }
-    if (pool.length < 5) pool = pool.concat(allItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r) && !pool.includes(x); }).sort((a, b) => (peek(b).miss / peek(b).seen) - (peek(a).miss / peek(a).seen)).slice(0, 5 - pool.length)); }   // short of tricky words: top up with the next-shakiest
+  else if (kind === 'rabbit'){ pool = rabbitItems(); if (!pool.length){ toast('No Rabbit words yet!'); return home(); } }
+  else if (kind === 'tricky'){ pool = trickyWords().filter(x => !isRabbitItem(x)); if (!pool.length){ toast('Nothing tricky yet!'); return home(say('empty')); }
+    if (pool.length < 5) pool = pool.concat(mainItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r) && !pool.includes(x); }).sort((a, b) => (peek(b).miss / peek(b).seen) - (peek(a).miss / peek(a).seen)).slice(0, 5 - pool.length)); }   // short of tricky words: top up with the next-shakiest
   if (!pool.length){ toast('The word bank is empty. Add words in Grown-ups.'); return; }
-  const B = S.book && S.book.next || [], n = Math.min(10, pool.length);
+  const B = S.book && S.book.next || [], n = Math.min(kind === 'rabbit' ? 8 : 10, pool.length);
   const prac = shuffle(pracDue(pool)).slice(0, 3);   // words a grown-up marked: up to 3 each match, picked first so they always get their practice step
   const first = kind === 'tricky' ? [] : pool.filter(x => B.includes(pk(x)) && !prac.includes(x)).slice(0, 4);
   if ((first.length || prac.length) && S.book) S.book.next = B.filter(k => !first.some(x => pk(x) === k) && !prac.some(x => pk(x) === k));
@@ -1070,7 +1099,8 @@ const TYPE_LABEL = { w2m:'What does it mean?', m2w:'Name the word', spell:'Spell
 const PREFIX_WORDS = { illegible:'il', illogical:'il', immortal:'im', impolite:'im', impure:'im', impatient:'im', improper:'im', inadequate:'in', incorrect:'in', indirect:'in', informal:'in', inoffensive:'in', inaccurate:'in', incapable:'in', invalid:'in', irreparable:'ir', irrational:'ir', irresistible:'ir', irresponsible:'ir',
   disadvantage:'dis', disappear:'dis', disappointed:'dis', disbelief:'dis', disconnect:'dis', dishonest:'dis', mishear:'mis', misinform:'mis', misjudge:'mis', mispronounced:'mis',
   reappear:'re', redesign:'re', reemerge:'re', rephrase:'re', reapply:'re', rearrange:'re', redecorate:'re', reheat:'re', antibiotic:'anti', anticlimax:'anti', antiseptic:'anti', antivirus:'anti', antifreeze:'anti', antisocial:'anti', autograph:'auto', autopilot:'auto', autobiography:'auto', automobile:'auto',
-  interlock:'inter', interrelated:'inter', sublet:'sub', submerge:'sub', subtotal:'sub', superglue:'super', supernatural:'super', superpower:'super' };
+  interlock:'inter', interrelated:'inter', sublet:'sub', submerge:'sub', subtotal:'sub', superglue:'super', supernatural:'super', superpower:'super',
+  interactive:'inter', intercity:'inter', subdivided:'sub', subheading:'sub', submarine:'sub', subtitle:'sub', superhero:'super', superman:'super', supermarket:'super', superstar:'super' };
 const prefixOf = x => PREFIX_WORDS[norm(x.w)] || null;
 const PREFIX_TIP = { il:'il- goes before l: il + legible = illegible.', im:'im- goes before m, p or b: im + polite = impolite.', in:'in- is the usual “not” start: in + correct = incorrect.', ir:'ir- goes before r: ir + responsible = irresponsible.',
   un:'un- means not: un + canny = uncanny.', dis:'dis- means not, or the opposite: dis + appear = disappear.', mis:'mis- means wrongly: mis + hear = mishear.', re:'re- means again: re + heat = reheat.', anti:'anti- means against: anti + freeze = antifreeze.', auto:'auto- means self: auto + graph = autograph.', inter:'inter- means between or together: inter + lock = interlock.', sub:'sub- means under or below: sub + merge = submerge.', super:'super- means above, or extra big and strong: super + power = superpower.' };
@@ -1140,12 +1170,12 @@ function scoreItem(item, q, ok, fishDone, hinted){
   const rabbit = isRabbitWord(q.w); R.lastCarrot = 0;
   pracResult(item, ok, hinted);
   S.stats.answered += 1;
-  S.race.ra = (S.race.ra == null ? .6 : S.race.ra) * .9 + (ok ? .1 : 0);
-  S.race.ta = (S.race.ta == null ? S.race.ra : S.race.ta) * .97 + (ok ? .03 : 0);   // slow-moving accuracy: an earned lead doesn't vanish after one wobbly round
+  if (R.kind !== 'rabbit'){ S.race.ra = (S.race.ra == null ? .6 : S.race.ra) * .9 + (ok ? .1 : 0);
+  S.race.ta = (S.race.ta == null ? S.race.ra : S.race.ta) * .97 + (ok ? .03 : 0); }   // slow-moving accuracy (main matches only): an earned lead doesn't vanish after one wobbly round
   if (ok){
     S.stats.right++; if (spellish) S.stats.spell++;
     R.streak++; R.best = Math.max(R.best, R.streak); S.stats.best = Math.max(S.stats.best, R.streak);
-    if (R.streak % 5 === 0){ S.stats.cwon = (S.stats.cwon || 0) + 1; S.custard = (S.custard || 0) + 1; R.custard = (R.custard || 0) + 1; custard = true; }
+    if (R.streak % 5 === 0 && R.kind !== 'rabbit'){ S.stats.cwon = (S.stats.cwon || 0) + 1; S.custard = (S.custard || 0) + 1; R.custard = (R.custard || 0) + 1; custard = true; }
     if (!item.retry && !hinted) R.firstTry++; else { r.fixed++; R.fixed++; S.stats.fixed++; }
     if (hinted){ pts = 1; r.hint = (r.hint || 0) + 1; line = say('hinted'); lock = 'hint'; }
     else {
@@ -1158,7 +1188,7 @@ function scoreItem(item, q, ok, fishDone, hinted){
       const now = isMasteredRec(r);
       if (now && !was){ lock = 'mastered'; line = say('mastered'); R.mastered.push(q.w.w); r.md = today(); }
       else if (!now && r.streak >= 3){ lock = (q.w.card && !r.ty.includes('sim')) ? 'needsim' : r.ty.length < Math.min(2, typesFor(q.w).length) ? 'type' : 'day'; line = say(lock === 'day' ? 'lockin' : lock === 'needsim' ? 'needSim' : 'needType'); }
-      else line = (R.streak === 3 || R.streak === 5 || R.streak === 10) ? say('streak', { n:R.streak }) : say(item.retry ? 'fixed' : 'right');
+      else line = R.kind !== 'rabbit' && (R.streak === 3 || R.streak === 5 || R.streak === 10) ? say('streak', { n:R.streak }) : say(item.retry ? 'fixed' : 'right');
     }
     R.results[R.idx] = 'ok';
   } else {
@@ -1171,7 +1201,8 @@ function scoreItem(item, q, ok, fishDone, hinted){
     else if (item.tries < 2){ queueRetry(item); note = 'One more go at this later.'; }
     else note = 'It stays on the tricky list for now.';
   }
-  if (fishDone != null) pts = fishDone; else { R.points += pts; S.points += pts; }
+  if (R.kind === 'rabbit'){ pts = 0; }   // the Rabbit match is for carrots: the fish race with the Mirror is not affected
+  else if (fishDone != null) pts = fishDone; else { R.points += pts; S.points += pts; }
   schedule(r, ok, hinted && ok);
   { if (!S.tstatFrom) S.tstatFrom = today(); S.tstat = S.tstat || {}; const ts = S.tstat[q.type] || (S.tstat[q.type] = [0, 0]); ts[1]++; if (ok) ts[0]++; }
   raceFix();
@@ -1599,7 +1630,7 @@ function crownSvg(cls){
 /* the LED scoreboard */
 let lastBoard = null;
 function led(mini, label){
-  const T = allItems().length, aM = masteredCount(), A = S.points, M = S.race.mf, mm = S.race.mm, d = A - M;
+  const T = mainItems().length, aM = masteredCount(), A = S.points, M = S.race.mf, mm = S.race.mm, d = A - M;
   const segs = m => h('div', { class:'segs', 'aria-hidden':'true' }, Array.from({ length:10 }, (_, i) => h('i', { class: i < Math.max(m > 0 ? 1 : 0, Math.round(10 * m / Math.max(1, T))) ? 'on' : '' })));
   const bumpA = lastBoard && lastBoard.A !== A, bumpM = lastBoard && lastBoard.M !== M;
   const side = (who, img, name, fish, m, bump) => {
@@ -1644,12 +1675,15 @@ function question(){
   const lastQ = () => R.idx >= R.queue.length - 1;
   const mtag = () => h('span', { class:'mtag', text:'MIRROR' });
   const hintBtn = (label, fn) => hintsOn ? h('button', { class:'hintbtn', type:'button', onclick:e => { if (done) return; hinted = true; SND.fx('peek'); e.currentTarget.remove(); fn(); } }, icon('bulb'), label) : null;
+  const RABBIT_MISS = ['Oi! That was MY carrot.', 'Grr. Lucky guess.', 'Hmph. I meant to drop that one.', 'No fair. You’ve been practising.', 'My carrots! Give them back!', 'I’ll get you next time. Probably.'];
+  const RABBIT_GLOAT = ['Hee hee. Told you they were tricky.', 'Snigger. One step closer to the gate.', 'Ha! That one’s mine.', 'Hee hee. Carrot for me.', 'Oops! The gate creaks open a little.'];
   function mirrorTurn(guessFor){
+    if (R.kind === 'rabbit') return { sat:true, rab:true };   // the Mirror sits out the Rabbit match
     if (item.retry) return { sat:true };
     const t = mirrorTry(mirrorGain(q.type)); R.mfish += t.fish; mirrorMastery(t.ok);
     return { ok:t.ok, fish:t.fish, guess:guessFor(t.ok) };
   }
-  function mirrorLine(mir){ if (mir.sat) return msay('sitout'); if (Math.random() < .25) return msay(raceLine()); return msay(mir.ok ? 'right' : 'wrong'); }
+  function mirrorLine(mir){ if (mir.rab) return null; if (mir.sat) return msay('sitout'); if (Math.random() < .25) return msay(raceLine()); return msay(mir.ok ? 'right' : 'wrong'); }
   function noteFor(lock, custard){
     const n = [];
     if (custard) n.push(h('div', { class:'note custard' }, h('span', { class:'wobble', style:'font-size:1.3rem', text:'🍮' }), h('span', { text:'Five in a row! A pot of custard for the team.' })));
@@ -1680,13 +1714,14 @@ function question(){
     const nb = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); goOn(); } }, o.nextLabel);
     openSheet([
       h('div', { class:'res ' + (o.ok ? 'ok' : 'no'), role:'status' }, o.ok ? h('span', { style:'font-size:2rem', 'aria-hidden':'true', text:'⚽' }) : h('span', { class:'plate', 'aria-hidden':'true', text:'🍽️' }),
-        h('div', {}, h('div', { class:'big', text: o.ok ? 'GOAL!' : 'OFF THE POST' }), h('div', { class:'small muted', text: o.ok ? 'Fresh fish!' : 'No fish this time. Eventually still counts.' })),
-        h('div', { class:'fish', text:'+' + (o.fish || 0) + ' 🐟' })),
+        h('div', {}, h('div', { class:'big', text: o.ok ? 'GOAL!' : 'OFF THE POST' }), h('div', { class:'small muted', text: R.kind === 'rabbit' ? (o.ok ? (R.lastCarrot ? 'Carrot snatched back from the Rabbit!' : 'Right! (No carrot with a hint.)') : 'The Rabbit sniggers. Eventually still counts.') : o.ok ? 'Fresh fish!' : 'No fish this time. Eventually still counts.' })),
+        h('div', { class:'fish', text: R.kind === 'rabbit' ? '+' + (R.lastCarrot || 0) + ' 🥕' : '+' + (o.fish || 0) + ' 🐟' })),
       drama ? h('div', { class:'news', role:'status' }, h('b', { text:drama.title }), h('span', { text:drama.text })) : null,
       o.answer || null,
       o.book ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📓' }), h('b', { text:'Next: write it in your vocabulary book.' })) : null,
       o.line ? h('p', { class:'line', text:o.line }) : null,
       noteFor(o.lock, o.custard),
+      mir && mir.rab ? h('div', { class:'mline' }, h('span', { class:'rabbitface mini', 'aria-hidden':'true', text:'🐰' }), h('div', { style:'min-width:0' }, h('b', { text:'The Rabbit: ' }), h('span', { class:'q', text: pickOne(o.ok ? RABBIT_MISS : RABBIT_GLOAT) }))) :
       mir ? h('div', { class:'mline' }, cimg(mir.sat || !mir.ok ? MIMG.sad : MIMG.smug, '', 34, 'The Mirror'),
         h('div', { style:'min-width:0' }, mir.sat ? h('b', { text:'Mirror sits this one out. ' }) : h('span', {}, h('b', { text:'Mirror: ' }), '“' + mir.guess + '” ' + (mir.ok ? '✓ +' + mir.fish + ' 🐟 ' : '✗ ')),
           h('span', { class:'q', text: mv ? VO[mv] : drama && drama.mline ? drama.mline : o.custard && !mir.sat ? pickOne(MCUSTARD) : mirrorLine(mir) }))) : null,
@@ -1959,7 +1994,7 @@ function question(){
     if (q.type === 'pre' && !S.seenPre){ S.seenPre = true; save(); setTimeout(() => { if (!done && !sheetEl) prefixLesson(); }, 120); }   // never over the top of an answer
   }
   const quit = h('button', { class:'quit', type:'button', 'aria-label':'End this match and go home', onclick:() => quitMatch() }, icon('x'), h('span', { text:'End' }));
-  put(boardBox, led(true, (R.idx + 1) + '/' + R.queue.length));
+  put(boardBox, R.kind === 'rabbit' ? h('div', { class:'rmini' }, h('span', { class:'small', text:'🐰 STOP THE RABBIT · ' + (R.idx + 1) + '/' + R.queue.length + ' · 🥕 ' + (S.carrots || 0) }), rabbitGate(true)) : led(true, (R.idx + 1) + '/' + R.queue.length));
   const keepSheet = sheetEl; sheetEl = null;
   mount([h('div', { class:'qbar' }, quit, pipsEl, qn, h('div', { class:'tools' }, reportBtn(true), soundBtns())), boardBox, h('div', { class:'pitch' }, strip, body)], null);
   if (keepSheet) keepSheet.forEach(e => e.remove());
@@ -1987,7 +2022,7 @@ function quitMatch(){
   SND.loop(false); closeSheet();
   const n = (R.results || []).reduce((a, v, i) => a + (v && R.queue[i] && !R.queue[i].retry ? 1 : 0), 0), nb = R.newBadges || [];
   if (n){
-    roundRec(false);
+    roundRec(false); checkRabbitLock();
     raceFix(); S.last = today(); snapshot(); save();
   }
   const party = n ? matchCelebrations({ rank0:R.rank0 }, nb) : [];
@@ -1999,7 +2034,12 @@ function finishRound(){
   if (R.book && R.book.length && !R.bookDone){ R.bookDone = true; return bookCheck(R.book, finishRound); }
   const acc = R.firstTry / R.total;
   let bonus = 0;
-  if (R.firstTry === R.total && R.total >= 5){ bonus = 3; R.points += bonus; S.points += bonus; S.stats.perfect++; }
+  const rabbitWasLocked = R.kind === 'rabbit' && rabbitLockedNow();
+  if (R.kind === 'rabbit'){
+    S.stats.rmatch = (S.stats.rmatch || 0) + 1;
+    if (R.firstTry === R.total && R.total >= 5){ bonus = 3; S.carrots = (S.carrots || 0) + 3; R.carrots = (R.carrots || 0) + 3; S.stats.rperf = (S.stats.rperf || 0) + 1; R.carrotBonus = 3; }
+  }
+  else if (R.firstTry === R.total && R.total >= 5){ bonus = 3; R.points += bonus; S.points += bonus; S.stats.perfect++; }
   if (R.firstTry >= R.total && R.mfish >= R.points){ const cut = R.mfish - Math.max(0, R.points - 1); R.mfish -= cut; S.race.mf = Math.max(0, S.race.mf - cut); }   // all right first time: the round is always his
   else if (R.firstTry >= R.total){ const over = (S.points - S.race.mf) - Math.round(leadTarget()), room = R.points - 1 - R.mfish; if (over > 0 && room > 0){ const t = Math.min(over, room); R.mfish += t; S.race.mf += t; } }   // perfect round, already well clear: he still wins it, but the lead grows slowly
   raceFix();
@@ -2009,6 +2049,7 @@ function finishRound(){
   S.last = today(); snapshot();
   const crowned = !S.leader && allDone() && S.points > S.race.mf;
   if (crowned) S.leader = { d:today(), a:S.points, m:S.race.mf };
+  checkRabbitLock();
   const badges = (R.newBadges || []).concat(checkBadges()), prizes = [], m = masteredCount();
   for (const p of S.prizes) if (!p.announced && m >= p.at){ p.announced = true; prizes.push(p); }
   save();
@@ -2020,6 +2061,7 @@ function finishRound(){
   if (party.length){ screen = 'party'; celebrateAll(party, end); } else end();
 }
 function summary(x){
+  if (x.round.kind === 'rabbit') return rabbitSummary(x);
   screen = 'summary';
   const r = x.round, mirWon = r.mfish > r.points, tie = r.mfish === r.points;
   const key = x.stars === 3 ? 'end3' : x.stars === 2 ? 'end2' : x.stars === 1 ? 'end1' : 'end0';
@@ -2096,9 +2138,11 @@ function bookCheck(list, done){
       ev.preventDefault(); const v = input.value.trim(); if (!v) return;
       if (norm(v) === norm(e.w)){
         input.disabled = true; go.disabled = true; right++; e.ok = true; markBook(e.k, true);
-        S.points += 1; R.points += 1; save();
+        const rab = R.kind === 'rabbit';
+        if (rab){ S.carrots = (S.carrots || 0) + 1; R.carrots = (R.carrots || 0) + 1; } else { S.points += 1; R.points += 1; }   // the Rabbit match pays carrots, never fish
+        save();
         SND.fx('goal'); if (!VOICE.play('c19')) {}
-        put(fb, h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'✅' }), h('span', { text:'It’s in the book. +1 bonus fish!' })));
+        put(fb, h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'✅' }), h('span', { text: rab ? 'It’s in the book. +1 bonus carrot!' : 'It’s in the book. +1 bonus fish!' })));
         nextBtn();
       } else {
         tries++; SND.fx('wrong');
@@ -2122,13 +2166,13 @@ function bookCheck(list, done){
     const b = h('button', { class:'btn wide', type:'button', onclick:() => { SND.fx('tap'); done(); } }, 'Full time ⚽');
     put(body2, h('div', { class:'stat4' },
       h('div', { class:'st' }, h('div', { class:'k', text:'IN THE BOOK' }), h('div', { class:'v', text:right + '/' + items.length })),
-      h('div', { class:'st cus' }, h('div', { class:'k', text:'BONUS FISH' }), h('div', { class:'v', text:'+' + right + ' 🐟' }))),
-      h('div', { class:'mline' }, cimg(all ? MIMG.sad : MIMG.smug, '', 34, 'The Mirror'), h('span', { class:'q', text: all ? (VOICE.can('m10') ? VO.m10 : 'Writing things down? That’s cheating! …Is it? It looks like it works.') : 'Ha! Not in the book! I keep all my words in my head. Next to my reflection.' })),
+      R.kind === 'rabbit' ? h('div', { class:'st cus' }, h('div', { class:'k', text:'BONUS CARROTS' }), h('div', { class:'v', text:'+' + right + ' 🥕' })) : h('div', { class:'st cus' }, h('div', { class:'k', text:'BONUS FISH' }), h('div', { class:'v', text:'+' + right + ' 🐟' }))),
+      R.kind === 'rabbit' ? null : h('div', { class:'mline' }, cimg(all ? MIMG.sad : MIMG.smug, '', 34, 'The Mirror'), h('span', { class:'q', text: all ? (VOICE.can('m10') ? VO.m10 : 'Writing things down? That’s cheating! …Is it? It looks like it works.') : 'Ha! Not in the book! I keep all my words in my head. Next to my reflection.' })),
       h('div', { class:'grow' }), b);
     setTimeout(() => b.focus({ preventScroll:true }), 60);
   }
   const endB = h('button', { class:'quit', type:'button', 'aria-label':'End the book check and go on', onclick:() => { SND.fx('tap'); if (R) R.toHome = true; done(); } }, icon('x'), h('span', { text:'End' }));
-  mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'FULL TIME · BOOK CHECK' }), h('div', { class:'tools' }, soundBtns())), led(true, 'BOOK'), cue2, h('div', { class:'pitch' }, strip2, body2)], null);
+  mount([h('div', { class:'qbar' }, endB, h('span', { class:'qn', text:'FULL TIME · BOOK CHECK' }), h('div', { class:'tools' }, soundBtns())), R.kind === 'rabbit' ? rabbitGate(true) : led(true, 'BOOK'), cue2, h('div', { class:'pitch' }, strip2, body2)], null);
   show();
 }
 function markBook(k, ok){ const e = bookStore().list.find(b => b.k === k); if (e){ e.ok = ok; e.chk = ok ? 'ok' : 'miss'; } }
@@ -2266,7 +2310,7 @@ const bigEmoji = e => h('div', { class:'celart', 'aria-hidden':'true', text:e })
 
 /* "How are we doing?" */
 function progressReport(){
-  const T = allItems().length, aM = masteredCount(), A = S.points, M = S.race.mf, d = A - M, ri = rankInfo(aM), st = dayStreak();
+  const T = mainItems().length, aM = masteredCount(), A = S.points, M = S.race.mf, d = A - M, ri = rankInfo(aM), st = dayStreak();
   const playedToday = S.history.some(x => x.d === today());
   VOICE.play('c23');
   const line = d >= 10 ? 'We are well clear. The Mirror has gone very quiet. Suspiciously quiet.' : d > 0 ? 'We are ahead, but only just. No time for custard.' : d === 0 ? 'Dead level. Every answer counts.' : 'The Mirror is in front. Four in. Four hold. Four out. We can catch him.';
@@ -2352,6 +2396,10 @@ function prizeParties(){
 }
 function matchCelebrations(round, badges){
   const list = prizeParties(), m = masteredCount(), ri = rankInfo(m);
+  if (S.rabbitLock && S.rabbitLock.party){ S.rabbitLock.party = false; save();
+    list.push({ kicker:'RABBIT LOCKED OUT', art:h('div', { class:'celbadge' }, h('span', { class:'bem big', text:'🔒🐰' })), title:'Gate locked!', sub:'Every Rabbit word mastered. The Rabbit is locked out of the Puffin Community' + (S.rabbitLocks > 1 ? ' (' + S.rabbitLocks + ' times now!)' : '') + '.', fireworks:true, confetti:90, tune:'anthem',
+      line:'The Rabbit rattled the gate, stamped his foot and hopped off sulking. He will be back with new words. He always is.' }); }
+  for (const t of newRabbitTrophies()) list.push({ kicker:'RABBIT TROPHY', art:h('div', { class:'celtro' }, rabbitTrophyEl(t, 'won')), title:t.name + '!', sub:t.d + '.', line:'Another one for the cabinet. The Rabbit is furious.' });
   if (round.rank0 != null && ri.i > round.rank0) list.push({ kicker:'NEW TROPHY', art:h('div', { class:'celtro' }, trophyEl(ri.i, true)), title:TROPHY_NAMES[ri.i] + '!', sub:'You are now ' + ri.cur.name + '. ' + m + ' words mastered.', voice:VOICE.pick('c15'), tune:'win', line:VOICE.can('c15') ? VO.c15 : 'A new trophy. I would like that noted.' });
   for (const b of badges){
     const pw = b.id === 'd7', v = pw ? VOICE.pick('c31') : VOICE.pick('c27');
@@ -2447,7 +2495,7 @@ function insightsPanel(){
     tricky.length ? h('p', { class:'small', text:'Worth a chat: ' + tricky.slice(0, 3).map(o => o.x.w).join(', ') + '.' }) : null,
     schoolDue() ? h('button', { class:'linkbtn', type:'button', style:'align-self:flex-start', onclick:() => { gTab = 'school'; grownups(); } }, '📅 Add this week’s school words →') : null);
   return h('div', { class:'insights' }, week,
-    h('div', { class:'stat4' }, cell('MASTERED', c.mastered, 'of ' + allItems().length), cell('LEARNING', c.learning + c.lock, c.new + ' not started'), cell('DUE TODAY', dueToday, dueWeek + ' more this week'),
+    h('div', { class:'stat4' }, cell('MASTERED', c.mastered, 'of ' + mainItems().length), cell('LEARNING', c.learning + c.lock, c.new + ' not started'), cell('DUE TODAY', dueToday, dueWeek + ' more this week'),
       cell('RIGHT FIRST TIME', p7 == null ? '–' : p7 + '%', p7 == null ? 'last 7 days' : pOld == null ? 'last 7 days' : (p7 > pOld ? '▲ ' : p7 < pOld ? '▼ ' : '= ') + 'was ' + pOld + '% before')),
     h('h3', { class:'ih', text:'Words he finds hardest' }),
     tricky.length ? h('div', { class:'saves' }, tricky.map(o => h('div', { class:'sv' }, h('div', { class:'d' }, h('b', { text:o.x.w }),
@@ -2460,7 +2508,7 @@ function insightsPanel(){
 
 /* ---------- Progress → Aaron's own word lists ---------- */
 function wordLists(){
-  const all = allItems().map(x => ({ x, r:peek(x) }));
+  const all = mainItems().map(x => ({ x, r:peek(x) }));
   return {
     mastered:all.filter(o => isMasteredRec(o.r)).map(o => o.x).sort((a, b) => a.w.localeCompare(b.w)),
     almost:all.filter(o => isAlmost(o.r)).sort((a, b) => (b.r.wob ? 1 : 0) - (a.r.wob ? 1 : 0) || b.r.streak - a.r.streak).map(o => o.x),
@@ -2785,6 +2833,65 @@ function checkPanel(){
   return box;
 }
 
+/* ---------- Stop the Rabbit: his words are their own challenge ---------- */
+const rabbitLockedNow = () => rabbitAllDone();
+function checkRabbitLock(){
+  const pk = SCHOOL_PACKS[SCHOOL_PACKS.length - 1];
+  if (pk && rabbitAllDone() && (!S.rabbitLock || S.rabbitLock.d !== pk.d)){ S.rabbitLocks = (S.rabbitLocks || 0) + 1; S.rabbitLock = { d:pk.d, on:today(), party:true }; const nb = checkBadges(); if (nb.length && R) R.newBadges = (R.newBadges || []).concat(nb); }
+}
+const RABBIT_TROPHIES = [
+  { id:'rt1', name:'Carrot Medal', d:'Master 5 Rabbit words', svg:1, t:() => rabbitMastered() >= 5 },
+  { id:'rt2', name:'Gate Shield', d:'Lock the Rabbit out of the community', svg:4, t:() => (S.rabbitLocks || 0) >= 1 },
+  { id:'rt3', name:'Golden Carrot Cup', d:'Win 100 carrots back from the Rabbit', svg:6, t:() => (S.carrots || 0) >= 100 },
+  { id:'rt4', name:'Rabbit-Proof Cup', d:'Lock the Rabbit out 3 times', svg:8, t:() => (S.rabbitLocks || 0) >= 3 },
+];
+function newRabbitTrophies(){
+  S.rtrophy = S.rtrophy || {};
+  const out = RABBIT_TROPHIES.filter(t => !S.rtrophy[t.id] && t.t());
+  out.forEach(t => S.rtrophy[t.id] = today());
+  if (out.length) save();
+  return out;
+}
+function rabbitTrophyEl(t, state){
+  const sp = h('span', { class:'tsv', 'aria-hidden':'true' });
+  const vars = state === 'locked' ? '' : '--m:#FF9A3C;--d:#C4590F;--w:#FFFFFF;--r1:#3BA55C;--r2:#F07A1A';
+  sp.innerHTML = '<svg viewBox="0 0 64 64" style="' + vars + '">' + TROPHY_SVG[t.svg] + '</svg>';   // constant markup, no user text
+  return sp;
+}
+/* how close the Rabbit is to the gate: one step per Rabbit word not yet mastered */
+function rabbitGate(compact){
+  const tot = rabbitItems().length, done = rabbitMastered(), left = tot - done, locked = tot > 0 && left === 0;
+  const pct = tot ? Math.round(100 * left / tot) : 0;
+  const track = h('div', { class:'rgtrack', role:'img', 'aria-label': locked ? 'The Rabbit is locked out' : 'The Rabbit is ' + left + ' steps from the gate' },
+    h('span', { class:'rgburrow', 'aria-hidden':'true', text:'🕳️' }), h('div', { class:'rgline' }, h('span', { class:'rgbun', style:'left:calc(' + (locked ? 0 : pct) + '% - 14px)', text:'🐰' })), h('span', { class:'rggate', 'aria-hidden':'true', text: locked ? '🔒' : '🚪' }));
+  const txt = locked ? 'Gate locked! The Rabbit is out, for now.' : left + ' Rabbit word' + (left === 1 ? '' : 's') + ' to master to lock him out';
+  return compact ? h('div', { class:'rgate compact' }, track, h('span', { class:'small', text:txt })) : h('div', { class:'rgate' }, track, h('p', { class:'small', text:txt }));
+}
+function rabbitSummary(x){
+  screen = 'summary';
+  const r = x.round, missed = [...new Set(r.missed)], locked = rabbitAllDone();
+  SND.tune(r.firstTry >= r.total / 2 ? 'win' : 'lose');
+  const extra = [x.badges.length ? '🏅 New badge: ' + x.badges.map(b => b.n).join(', ') : null, r.carrotBonus ? '⭐ Perfect! +' + r.carrotBonus + ' bonus carrots' : null].filter(Boolean);
+  mount([
+    topbar(),
+    h('div', { class:'led', role:'group', 'aria-label':'Full time' },
+      h('div', { class:'lhead' }, h('span', { class:'live' }, h('i'), 'FULL TIME'), h('b', { text: locked ? 'RABBIT LOCKED OUT' : 'STOP THE RABBIT' })),
+      h('div', { class:'lgrid' },
+        h('div', { class:'lside me' }, cimg(IMG.right, 'ava', 82, ''), h('div', { class:'digits' }, '+' + (r.carrots || 0), h('small', { text:'🥕' }))),
+        h('div', { class:'lmid' }, h('div', { class:'vs', text:'VS' }), h('div', { class:'lead', text:'🥕 ' + (S.carrots || 0) + ' won back' })),
+        h('div', { class:'lside mir' }, h('span', { class:'rabbitface', style:'width:82px;height:82px;border-radius:50%;font-size:3rem !important', 'aria-hidden':'true', text:'🐰' }), h('div', { class:'digits' }, String(missed.length), h('small', { text:'😈' }))))),
+    rabbitGate(true),
+    h('div', { class:'stat4' },
+      h('div', { class:'st' }, h('div', { class:'k', text:'RIGHT FIRST TIME' }), h('div', { class:'v', text:r.firstTry + '/' + r.total }), h('div', { class:'d', text:'⭐'.repeat(x.stars) || 'Keep going' })),
+      h('div', { class:'st' }, h('div', { class:'k', text:'LOCKED IN' }), h('div', { class:'v', text:String(r.mastered.length) }), h('div', { class:'d', text:r.mastered.slice(0, 2).join(', ') })),
+      h('div', { class:'st' }, h('div', { class:'k', text:'TO LOOK AT AGAIN' }), h('div', { class:'v', text:String(missed.length) }), h('div', { class:'d', style:'color:var(--miss)', text:missed.slice(0, 2).join(', ') }))),
+    extra.length ? h('div', { class:'note' }, h('span', { text:extra.join(' · ') })) : sayBlock('com', locked ? 'Gate locked. Not today, Rabbit. Not today.' : r.firstTry === r.total ? 'Every one right. The Rabbit is sulking behind a rock.' : 'Good. Every carrot we win back is one he cannot eat.', IMG.right),
+    h('div', { class:'grow' }),
+    h('button', { class:'btn kick rabbitbtn', type:'button', onclick:() => startRound('rabbit') }, '🐰 AGAIN'),
+    h('div', { class:'homerow' }, h('button', { class:'btn alt small', type:'button', onclick:() => home() }, 'Home'), h('button', { class:'btn alt small', type:'button', onclick:() => trophies() }, 'Trophies'))
+  ], 'home');
+}
+
 /* ---------- Cuffin's word stories: short, silly, read aloud, each using a few of Aaron's words ---------- */
 const STORIES = [
   { t:'The Custard Map', w:['inaccurate','ponder','ramble','dismal','acquire'], p:[
@@ -2909,6 +3016,11 @@ const STORY_Q = {
   'The Untidy Burrow':[['What was in the Mirror’s burrow that nobody could explain?', 'A sock', 'A custard pie', 'A crab', 'A map'], ['What could the Mirror not find?', 'His comb', 'His mirror', 'His sock', 'His fish'], ['Who helped tidy up?', 'Cuffin', 'Giles', 'A seagull', 'Nobody'], ['What did Cuffin tell him to do every morning?', 'Tidy up', 'Brush his feathers', 'Catch a fish', 'Practise spelling']],
   'The Superglue Disaster':[['Why did the Mirror buy superglue?', 'To glue his best feathers on forever', 'To fix a shell', 'To mend Giles’s hat', 'To make a crown for Cuffin'], ['Who sold him the superglue?', 'A crab', 'A seagull', 'Giles', 'Cuffin'], ['What did the Mirror accidentally glue together?', 'His own wings', 'Two shells', 'Giles’s feet', 'The receipt'], ['How was the Mirror unstuck?', 'Sitting in warm salty water for an hour', 'Cuffin pulled hard', 'A supernatural spell', 'He waited until morning']],
 };
+STORIES.push({ t:'The Supermarket Submarine', w:['supermarket','submarine','superhero','subtitle','intercity','superstar'], p:[
+  'The Rabbit opened a supermarket at the bottom of the sea. To get there, you had to take his submarine. "Carrots half price!" said the sign. "Puffins pay double."',
+  'The Mirror dressed up as a superhero to investigate, with a cape made from a tea towel. He flew straight into a rock. Giles watched the whole thing like a film with no subtitles: confusing, and slightly embarrassing.',
+  'In the end, Cuffin simply caught the intercity ferry home with a bag of fish. "Who needs an underwater supermarket?" he said. Everyone agreed Cuffin was the real superstar. The Rabbit was not invited to the party.'] });
+STORY_Q['The Supermarket Submarine'] = [['Where was the Rabbit’s supermarket?', 'At the bottom of the sea', 'On top of the lighthouse', 'In a burrow', 'On the beach'], ['How did you get to the supermarket?', 'By submarine', 'By bus', 'By flying', 'By digging'], ['What was the Mirror’s cape made from?', 'A tea towel', 'Seaweed', 'A sail', 'A flag'], ['Who was the real superstar?', 'Cuffin', 'The Mirror', 'The Rabbit', 'Giles']];
 
 /* ---------- "How do you say it?": the right way (the phone's own British voice) against silly wrong ways ----------
    Each wrong version: [what the voice says, how it is written on screen, Cuffin's joke]. Words not listed get wrong versions made automatically. */
@@ -3154,6 +3266,16 @@ const PRON = {
   calculate:[['cackle ate', 'CACKLE-ate', 'Cackle like a witch? No.'], ['calcium late', 'CALCIUM-late', 'Late for calcium? No.']],
   grant:[['grunt', 'GRUNT', 'A grunt. Like a pig.'], ['gray ant', 'GRAY-ant', 'A grey ant? No.']],
   prompt:[['prompty', 'PROMP-tee', 'Prompty? No.'], ['pomp', 'POMP', 'Pomp is posh. No.']],
+  interactive:[['inter rack tiv', 'inter-RACK-tiv', 'Rack? No.'], ['in terrapin', 'in-TERRAPIN', 'A terrapin is a turtle. Wrong.']],
+  intercity:[['inter kitty', 'inter-KITTY', 'A kitty? Meow. Wrong.'], ['hamster city', 'HAMSTER-city', 'A city for hamsters? Squeak.']],
+  subdivided:[['sub dove ided', 'sub-DOVE-ided', 'A dove? Coo. Wrong.'], ['sardine vided', 'SARDINE-vided', 'Sardines? Cuffin approves. Wrong.']],
+  subheading:[['sub hedgehog', 'sub-HEDGEHOG', 'A hedgehog? Spiky. Wrong.'], ['soup heading', 'SOUP-heading', 'Heading for soup? Wrong.']],
+  submarine:[['sub marmalade', 'sub-MARMALADE', 'Marmalade? On toast. Wrong.'], ['sumo rain', 'SUMO-rain', 'Sumo wrestlers falling from the sky? No.']],
+  subtitle:[['sub tickle', 'sub-TICKLE', 'A tickle under the sea? Wrong.'], ['soup turtle', 'SOUP-turtle', 'Turtle soup? Never!']],
+  superhero:[['super hairy', 'super-HAIRY', 'Super hairy? That is the Mirror after a bath.'], ['soup a zero', 'SOUP-a-ZERO', 'Zero soup? Hungry.']],
+  superman:[['super mango', 'super-MANGO', 'A super mango? Fruity. Wrong.'], ['soapy van', 'SOAPY-van', 'A van full of bubbles? Wrong.']],
+  supermarket:[['super car kit', 'super-CAR-kit', 'A car kit? Vroom. Wrong.'], ['soupy carpet', 'SOUPY-carpet', 'A carpet covered in soup? Yuck.']],
+  superstar:[['super stair', 'super-STAIR', 'A super stair? Climb it.'], ['soup a jar', 'SOUP-a-JAR', 'Soup in a jar? Wrong.']],
 };
 /* automatic wrong versions for any other word: sound out the silent letters, or make a vowel say its name */
 function autoWrong(w){
@@ -3194,7 +3316,7 @@ function homeLine(){
   return say(l === 'behind' ? 'aheadHome' : l === 'ahead' ? 'behindHome' : 'levelHome');
 }
 function mission(){
-  const T = allItems().length, aM = masteredCount(), d = S.points - S.race.mf, lock = lockReadyToday();
+  const T = mainItems().length, aM = masteredCount(), d = S.points - S.race.mf, lock = lockReadyToday();
   if (S.leader) return 'Keep your crown shiny: play a match to keep the words fresh.';
   if (lock >= 3) return 'Lock in ' + lock + ' words you got right 3 in a row on another day.';
   if (d < 0) return 'Catch the Mirror. He is ' + (-d) + ' fish ahead.';
@@ -3228,6 +3350,7 @@ function home(greeting){
       sayBlock('com', greet || homeLine(), S.leader ? IMG.right : IMG.hello),
       streakRow(),
       h('button', { class:'btn kick', type:'button', onclick:() => startRound('mixed') }, '⚽ KICK OFF'),
+      rabbitItems().length ? h('button', { class:'btn rabbitbtn rabhome', type:'button', onclick:() => startRound('rabbit') }, h('span', { class:'rht', text:'🐰 STOP THE RABBIT' }), (() => { const left = rabbitItems().length - rabbitMastered(); return h('span', { class:'rhs', text: left ? left + ' word' + (left === 1 ? '' : 's') + ' to lock him out · 🥕 ' + (S.carrots || 0) : 'Gate locked! Keep him out · 🥕 ' + (S.carrots || 0) }); })()) : null,
       h('div', { class:'homerow' }, h('button', { class:'btn alt small', type:'button', onclick:moreSheet }, icon('more'), 'More matches'), reportBtn(false)))
   ], 'home');
 }
@@ -3323,11 +3446,11 @@ function rabbitSlides(){   // two slides: the news, then what everyone thinks of
             : h('p', { text:'Somebody crept into the word store again. Muddy paw prints, a nibbled carrot top and ' + words.length + ' brand-new words.' }),
       h('p', { class:'big', text:show }),
       rabbitSay(first ? 'Hee hee. Good luck with THOSE. They’re extra long. I checked.' : pickOne(['Missed me? I brought presents. Long ones.', 'Hee hee. More words. You’re welcome.', 'I left you a few little extras. Hee hee.']))); },
-    () => h('div', {}, h('h2', {}, 'Win back the ', h('em', { text:'carrots' })),
-      sayBlock('com', 'Typical. But here’s the good news: look for 🐰 RABBIT WORD. Get one right and we win back a carrot. Master it and we take a whole bunch.', IMG.hello),
+    () => h('div', {}, h('h2', {}, first ? 'Win back the ' : 'Lock the ', h('em', { text: first ? 'carrots' : 'gate' })),
+      sayBlock('com', first ? 'Typical. But here’s the good news: tap 🐰 STOP THE RABBIT on Home. Get a Rabbit word right and we win back a carrot. Master it and we take a whole bunch.' : 'Giles has had enough. The Rabbit’s words are now their own challenge: 🐰 STOP THE RABBIT on Home. Master every Rabbit word and the gate locks him out. Carrots for every one you get right.', IMG.hello),
       first ? sayBlock('rival', 'A RABBIT? In MY race? I don’t trust him. His ears are bigger than mine.', MIMG.ask) : null,
       h('p', { class:'big', text:'🥕 ' + (S.carrots || 0) + ' carrot' + ((S.carrots || 0) === 1 ? '' : 's') + ' won back so far' }),
-      lower('WATCH OUT', first ? 'He says he’ll be back. Rabbits always come back.' : 'Win those carrots back!', 'cus'))];
+      lower('WATCH OUT', first ? 'He says he’ll be back. Rabbits always come back.' : 'Your Leader words are safe. This is a separate fight.', 'cus'))];
 }
 function rabbitNews(finish){
   screen = 'chapter';
@@ -3339,7 +3462,7 @@ function rabbitNews(finish){
 function chapter(finish){
   screen = 'chapter';
   const v = S.lastVisit || visitSnap(), n = matchDay(), title = CHAPTERS[(n - 1) % CHAPTERS.length];
-  const da = S.points - (v.a || 0), dm = S.race.mf - (v.m || 0), d = S.points - S.race.mf, T = allItems().length, aM = masteredCount();
+  const da = S.points - (v.a || 0), dm = S.race.mf - (v.m || 0), d = S.points - S.race.mf, T = mainItems().length, aM = masteredCount();
   const ri = rankInfo(aM), sinceKey = da > dm ? 'won' : da < dm ? 'lost' : 'level';
   const rows = chartRows();
   const plus = x => x > 0 ? '+' + x + ' since last time' : 'same as last time';
@@ -3423,7 +3546,7 @@ function chartRows(){
 let progView = 'fish';
 function progress(){
   screen = 'progress';
-  const c = counts(), T = allItems().length, rows = chartRows();
+  const c = counts(), T = mainItems().length, rows = chartRows();
   const seg = [['mastered','var(--win)','Mastered'],['lock','var(--gold)','Nearly there'],['learning','var(--sim)','Learning'],['new','var(--line)','Not seen yet']];
   const pick = v => h('button', { type:'button', 'aria-pressed':String(progView === v), onclick:() => { progView = v; SND.fx('tap'); progress(); } }, v === 'fish' ? '🐟 FRESH FISH' : '🔒 WORDS MASTERED');
   mount([
@@ -3497,6 +3620,10 @@ function trophies(){
     h('div', { class:'panel', style:'flex:none;gap:5px' }, h('div', { class:'row', style:'justify-content:space-between' }, h('span', { class:'rankname', text:ri.cur.name }), h('span', { class:'small muted', text:m + ' words' })),
       h('div', { class:'bar', role:'progressbar', 'aria-label':'Progress to the next trophy', 'aria-valuenow':pct, 'aria-valuemin':0, 'aria-valuemax':100 }, h('i', { style:'width:' + pct + '%' })), sub),
     cab,
+    rabbitItems().length ? (() => { const rsub = h('div', { class:'small muted', 'aria-live':'polite', text:'Tap a Rabbit trophy to see how to win it.' });
+      return h('div', { class:'panel rcab', style:'flex:none;gap:4px' }, h('div', { class:'row', style:'justify-content:space-between' }, h('b', { text:'🐰 Rabbit trophies' }), h('span', { class:'small muted', text:'🥕 ' + (S.carrots || 0) })), rabbitGate(true),
+        h('div', { class:'rtrow' }, RABBIT_TROPHIES.map(t => { const won = !!(S.rtrophy || {})[t.id];
+          return h('button', { class:'tr mini ' + (won ? 'won' : 'locked'), type:'button', 'aria-label':t.name + (won ? ', won' : ', not won yet'), onclick:() => { SND.fx('tap'); rsub.textContent = t.name + ' · ' + t.d + (won ? ' · WON!' : ''); } }, rabbitTrophyEl(t, won ? 'won' : 'locked'), h('span', { class:'n', text:t.name })); })), rsub); })() : null,
     h('div', { class:'homerow', style:'flex:none' }, h('button', { class:'btn alt small', type:'button', onclick:badgeSheet }, '🏅 Badges ' + badgesN + '/' + BADGES.length), h('button', { class:'btn alt small', type:'button', onclick:prizeSheet }, '🎁 Prizes'))
   ], 'trophies');
 }
@@ -3546,7 +3673,7 @@ function grownups(){
   const tabs = [['play','Play'],['insights','Insights'],['check','Check words' + (Object.values(S.practice || {}).filter(p => p.on).length ? ' 🔁' : '')],['school','School' + (schoolDue() ? ' ⚠️' : '')],['book','Book' + (nb ? ' (' + nb + ' today)' : '')],['saves','Saves'],['words','Words'],['prizes','Prizes'],['how','How it works'],['more','More']];
   const bar = h('div', { class:'subtabs', role:'group', 'aria-label':'Grown-ups sections' }, tabs.map(([id, t]) => h('button', { type:'button', 'aria-pressed':String(gTab === id), onclick:() => { gTab = id; grownups(); } }, t)));
   const panel = h('div', { class:'panel grow', style:'overflow-y:auto' });
-  const c = counts(), T = allItems().length;
+  const c = counts(), T = mainItems().length;
   if (gTab === 'play'){
     put(panel,
       sw('sw-hints', S.settings.hints, 'Hints', S.settings.hints ? 'On: “not sure” explanations, peeks and hint buttons.' : 'Off (test mode): no hints, every answer is ' + S.name + '’s own.', v => { S.settings.hints = v; save(); grownups(); }),
