@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "2a3cd92216";
+const APPV = "b679565194";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -562,6 +562,17 @@ const SCHOOL_PACKS = [
     ['superman', 'A man with powers far beyond normal people.', 'Grandad lifted the heavy box like a superman.'],
     ['supermarket', 'A big shop that sells food and things for the home.', 'We bought milk and bread at the supermarket.'],
     ['superstar', 'A very famous and successful performer or player.', 'The footballer became a superstar after scoring the winning goal.']] },
+  { d:'2026-11-23', rows:[
+    ['beginning', 'The start of something.', 'At the beginning of the film, the hero was just a farmer.'],
+    ['equipped', 'Having the tools or things you need for a job.', 'The explorers were equipped with ropes, torches and maps.'],
+    ['gardening', 'Looking after a garden: planting, weeding and watering.', 'Grandma spends every Saturday morning gardening.'],
+    ['jumping', 'Pushing yourself up into the air with your legs.', 'The children were jumping in the puddles.'],
+    ['offering', 'Holding something out so someone can take it if they want.', 'He was offering everyone a slice of cake.'],
+    ['playing', 'Having fun with a game or toy, or making music on an instrument.', 'They were playing football in the park.'],
+    ['preferred', 'Liked one thing more than another.', 'She preferred strawberry ice cream to chocolate.'],
+    ['running', 'Moving very quickly on your feet.', 'The dog came running when it heard its name.'],
+    ['stopping', 'Coming to a halt, or making something end.', 'The bus was stopping at every lamp post.'],
+    ['swimming', 'Moving through water using your arms and legs.', 'We go swimming at the leisure centre on Sundays.']] },
 ];
 /* the Rabbit's words: every word from the school lists. They are their own challenge (Stop the Rabbit), separate from the words for Leader */
 const RABBIT_KEYS = new Set(SCHOOL_PACKS.flatMap(pk => pk.rows.map(r => norm(r[0]))));
@@ -1075,7 +1086,8 @@ function startRound2(kind){
   if (kind === 'cards') pool = CARD_ITEMS;
   else if (kind === 'rabbit'){ pool = rabbitItems(); if (!pool.length){ toast('No Rabbit words yet!'); return home(); } }
   else if (kind === 'tricky'){ pool = trickyWords().filter(x => !isRabbitItem(x)); if (!pool.length){ toast('Nothing tricky yet!'); return home(say('empty')); }
-    if (pool.length < 5) pool = pool.concat(mainItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r) && !pool.includes(x); }).sort((a, b) => (peek(b).miss / peek(b).seen) - (peek(a).miss / peek(a).seen)).slice(0, 5 - pool.length)); }   // short of tricky words: top up with the next-shakiest
+    if (pool.length < 5) pool = pool.concat(mainItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r) && !pool.includes(x); }).sort((a, b) => (peek(b).miss / peek(b).seen) - (peek(a).miss / peek(a).seen)).slice(0, 5 - pool.length));   // short of tricky words: top up with the next-shakiest
+    if (pool.length < 8) pool = pool.concat(shuffle(mainItems().filter(x => { const r = peek(x); return !r || !r.seen; })).slice(0, Math.min(3, 8 - pool.length))); }   // and a few brand-new words, so Training isn't the same handful every time
   if (!pool.length){ toast('The word bank is empty. Add words in Grown-ups.'); return; }
   const B = S.book && S.book.next || [], n = Math.min(kind === 'rabbit' ? 8 : 10, pool.length);
   const prac = shuffle(pracDue(pool)).slice(0, 3);   // words a grown-up marked: up to 3 each match, picked first so they always get their practice step
@@ -1086,8 +1098,20 @@ function startRound2(kind){
   const due = due0;
   const school = (S.school && S.school.list || []).map(k => pool.find(x => norm(x.w) === k)).filter(x => x && !first.includes(x) && !isMastered(x)); first.push(...shuffle(school).slice(0, Math.max(0, Math.min(3, n - first.length))));   // this week's school words: up to 3 each match
   first.push(...due.filter(x => !first.includes(x)).slice(0, Math.max(0, n - first.length)));
-  const rest = pickWords(n - first.length, pool.filter(x => !first.includes(x)));
-  R = newRound(shuffle(first).concat(rest), kind);
+  let rest = pickWords(n - first.length, pool.filter(x => !first.includes(x)));
+  if (kind === 'mixed'){   // make sure new words keep coming: at least 4 a match while only a few words are in progress
+    const isNew = x => { const r = peek(x); return !r || !r.seen; };
+    const learningN = mainItems().filter(x => { const r = peek(x); return r && r.seen && !isMasteredRec(r); }).length;
+    const want = learningN < 15 ? 4 : learningN < 25 ? 2 : 0;
+    const fresh0 = pool.filter(x => isNew(x) && !first.includes(x) && !rest.includes(x)), fresh = shuffle(fresh0.filter(x => x.card)).concat(shuffle(fresh0.filter(x => !x.card)));   // plain new words come out first, then cards
+    let have = first.concat(rest).filter(isNew).length;
+    const resting = x => { const r = peek(x); return r && isMasteredRec(r) && !r.wob && (dueIn(r) == null || dueIn(r) > 0); };
+    for (let i = rest.length - 1; i >= 0 && have < want && fresh.length; i--) if (resting(rest[i])){ rest[i] = fresh.pop(); have++; }   // swap out resting mastered words first
+    for (let i = rest.length - 1; i >= 0 && have < want && fresh.length; i--) if (!isNew(rest[i]) && isMasteredRec(peek(rest[i]))){ rest[i] = fresh.pop(); have++; }   // then extra reviews
+    const bookFirst = first.filter(x => B.includes(pk(x)));
+    R = newRound(bookFirst.concat(shuffle(first.filter(x => !bookFirst.includes(x)).concat(rest))), kind);   // book words first, then everything mixed so new words aren't all at the end
+  } else if (kind === 'tricky') R = newRound(shuffle(first.concat(rest)), kind);   // new words mixed in, not all at the end
+  else R = newRound(shuffle(first).concat(rest), kind);
   R.queue.forEach(it => { if (prac.includes(it.w)){ const p = S.practice[pk(it.w)]; it.prac = pracSteps(it.w)[Math.min(PRAC_STEPS - 1, p.st || 0)]; } });
   R.rank0 = rankInfo(masteredCount()).i; R.lastD = S.points - S.race.mf; R.badges0 = Object.keys(S.badges || {}).length;
   SND.prime(); SND.fx('whistle'); SND.loop(true);
@@ -2579,7 +2603,7 @@ function schoolPanel(){
   return h('div', { class:'insights' },
     due ? h('div', { class:'note custard' }, h('span', { 'aria-hidden':'true', text:'📅' }), h('b', { text: L.length ? 'New week: add this week’s school words.' : 'Add Aaron’s school spelling words for this week.' }))
         : h('div', { class:'note' }, h('span', { 'aria-hidden':'true', text:'✅' }), h('span', { text:'This week’s words added ' + longDate(S.school.d) + '. Next reminder in ' + (7 - daysSince(S.school.d)) + ' day' + (7 - daysSince(S.school.d) === 1 ? '' : 's') + '.' })),
-    h('p', { class:'small muted', text:'Paste or type the list. Meanings are optional: words with a meaning get every question type; words without one get “Listen and spell” and unscramble. Up to 3 of these words open every match until they are mastered. Last week’s words stay in his word bank.' }),
+    h('p', { class:'small muted', text:'Paste or type the list. Meanings are optional: words with a meaning get every question type; words without one get “Listen and spell” and unscramble. Up to 3 of these words open every Kick Off until they are mastered. (Spelling lists added for you in an update become Rabbit words instead.)' }),
     ta, h('button', { class:'btn small', type:'button', style:'align-self:flex-start', onclick:() => {
       const rows = parseSchool(ta.value);
       if (!rows.length){ msg.style.color = 'var(--miss)'; msg.textContent = 'Type at least one word first.'; return; }
@@ -3021,6 +3045,11 @@ STORIES.push({ t:'The Supermarket Submarine', w:['supermarket','submarine','supe
   'The Mirror dressed up as a superhero to investigate, with a cape made from a tea towel. He flew straight into a rock. Giles watched the whole thing like a film with no subtitles: confusing, and slightly embarrassing.',
   'In the end, Cuffin simply caught the intercity ferry home with a bag of fish. "Who needs an underwater supermarket?" he said. Everyone agreed Cuffin was the real superstar. The Rabbit was not invited to the party.'] });
 STORY_Q['The Supermarket Submarine'] = [['Where was the Rabbit’s supermarket?', 'At the bottom of the sea', 'On top of the lighthouse', 'In a burrow', 'On the beach'], ['How did you get to the supermarket?', 'By submarine', 'By bus', 'By flying', 'By digging'], ['What was the Mirror’s cape made from?', 'A tea towel', 'Seaweed', 'A sail', 'A flag'], ['Who was the real superstar?', 'Cuffin', 'The Mirror', 'The Rabbit', 'Giles']];
+STORIES.push({ t:'Sports Day at the Cliff', w:['beginning','equipped','jumping','running','swimming','preferred','stopping'], p:[
+  'At the beginning of Sports Day, Giles blew his whistle so hard that his hat flew off. The Mirror arrived equipped with sunglasses, a headband and three mirrors, so he could watch himself win.',
+  'First came the running race. The Mirror kept stopping to check his reflection, and a crab beat him. Then came the jumping. Cuffin jumped over a puddle. The Mirror jumped into it.',
+  'Last was the swimming race. Cuffin preferred a calm, steady paddle and won easily. The Rabbit watched from behind a rock, muttering. "Rabbits can’t swim," said Giles. "That is why he is not invited."'] });
+STORY_Q['Sports Day at the Cliff'] = [['What happened when Giles blew his whistle?', 'His hat flew off', 'He fell over', 'A seagull stole it', 'Nothing at all'], ['Why did the Mirror bring three mirrors?', 'To watch himself win', 'To dazzle Cuffin', 'To signal for help', 'To sell them'], ['Who beat the Mirror in the running race?', 'A crab', 'Cuffin', 'The Rabbit', 'Giles'], ['Why wasn’t the Rabbit invited?', 'Rabbits can’t swim', 'He was too fast', 'He was asleep', 'He was busy gardening']];
 
 /* ---------- "How do you say it?": the right way (the phone's own British voice) against silly wrong ways ----------
    Each wrong version: [what the voice says, how it is written on screen, Cuffin's joke]. Words not listed get wrong versions made automatically. */
@@ -3276,6 +3305,16 @@ const PRON = {
   superman:[['super mango', 'super-MANGO', 'A super mango? Fruity. Wrong.'], ['soapy van', 'SOAPY-van', 'A van full of bubbles? Wrong.']],
   supermarket:[['super car kit', 'super-CAR-kit', 'A car kit? Vroom. Wrong.'], ['soupy carpet', 'SOUPY-carpet', 'A carpet covered in soup? Yuck.']],
   superstar:[['super stair', 'super-STAIR', 'A super stair? Climb it.'], ['soup a jar', 'SOUP-a-JAR', 'Soup in a jar? Wrong.']],
+  beginning:[['bacon ink', 'BACON-ink', 'Bacon ink? Smelly writing.'], ['bee gnawing', 'BEE-gnawing', 'A bee chewing? Odd. Wrong.']],
+  equipped:[['a squid', 'a-SQUID', 'A squid? Eight arms. Wrong.'], ['egg chips', 'EGG-chips', 'Egg and chips? Dinner. Wrong.']],
+  gardening:[['garlic ring', 'GARLIC-ring', 'A garlic ring? Smelly.'], ['carton king', 'CARTON-king', 'King of the cartons? Wrong.']],
+  jumping:[['chomping', 'CHOMPING', 'Chomping? That is eating. Wrong.'], ['dumpling', 'DUMPLING', 'A dumpling? Tasty. Wrong.']],
+  offering:[['awful wing', 'AWFUL-wing', 'An awful wing? Flap flap. Wrong.'], ['puffin ring', 'PUFFIN-ring', 'A puffin ring? Cuffin is not getting married.']],
+  playing:[['planking', 'PLANKING', 'Planking? Lying stiff like a plank. Wrong.'], ['clay king', 'CLAY-king', 'A king made of clay? Squishy.']],
+  preferred:[['pre fudge', 'pre-FUDGE', 'Pre-fudge? Before pudding. Wrong.'], ['pear bird', 'PEAR-bird', 'A bird made of pears? Juicy.']],
+  running:[['raining', 'RAINING', 'Raining? Get a brolly. Wrong.'], ['rhino king', 'RHINO-king', 'A rhino king? Big crown. Wrong.']],
+  stopping:[['shopping', 'SHOPPING', 'Shopping? Not now. Wrong.'], ['stop a pig', 'STOP-a-PIG', 'Stop that pig! Wrong.']],
+  swimming:[['swinging', 'SWINGING', 'Swinging? On a swing. Wrong.'], ['sweet mint', 'SWEET-mint', 'A sweet mint? Fresh. Wrong.']],
 };
 /* automatic wrong versions for any other word: sound out the silent letters, or make a vowel say its name */
 function autoWrong(w){
@@ -3445,7 +3484,7 @@ function rabbitSlides(){   // two slides: the news, then what everyone thinks of
       first ? h('p', { text:'“I would like to enter the race,” whispered the Rabbit. “You are a rabbit,” said Giles. “This is a race for puffins.” So that night the Rabbit crept into the word store and sneaked in ' + words.length + ' brand-new words, just to annoy everyone.' })
             : h('p', { text:'Somebody crept into the word store again. Muddy paw prints, a nibbled carrot top and ' + words.length + ' brand-new words.' }),
       h('p', { class:'big', text:show }),
-      rabbitSay(first ? 'Hee hee. Good luck with THOSE. They’re extra long. I checked.' : pickOne(['Missed me? I brought presents. Long ones.', 'Hee hee. More words. You’re welcome.', 'I left you a few little extras. Hee hee.']))); },
+      rabbitSay(first ? 'Hee hee. Good luck with THOSE. They’re extra long. I checked.' : pickOne(['Missed me? I brought action words. Try to keep up.', 'Hee hee. More words. You’re welcome.', 'I left you a few little extras. Hee hee.']))); },
     () => h('div', {}, h('h2', {}, first ? 'Win back the ' : 'Lock the ', h('em', { text: first ? 'carrots' : 'gate' })),
       sayBlock('com', first ? 'Typical. But here’s the good news: tap 🐰 STOP THE RABBIT on Home. Get a Rabbit word right and we win back a carrot. Master it and we take a whole bunch.' : 'Giles has had enough. The Rabbit’s words are now their own challenge: 🐰 STOP THE RABBIT on Home. Master every Rabbit word and the gate locks him out. Carrots for every one you get right.', IMG.hello),
       first ? sayBlock('rival', 'A RABBIT? In MY race? I don’t trust him. His ears are bigger than mine.', MIMG.ask) : null,
