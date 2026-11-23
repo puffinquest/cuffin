@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "b679565194";
+const APPV = "6a5c0a2a64";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -3295,6 +3295,14 @@ const PRON = {
   calculate:[['cackle ate', 'CACKLE-ate', 'Cackle like a witch? No.'], ['calcium late', 'CALCIUM-late', 'Late for calcium? No.']],
   grant:[['grunt', 'GRUNT', 'A grunt. Like a pig.'], ['gray ant', 'GRAY-ant', 'A grey ant? No.']],
   prompt:[['prompty', 'PROMP-tee', 'Prompty? No.'], ['pomp', 'POMP', 'Pomp is posh. No.']],
+  interlock:[['inter lamb chop', 'inter-LAMB-chop', 'A lamb chop? Dinner. Wrong.'], ['winter sock', 'WINTER-sock', 'A winter sock? Cosy. Wrong.']],
+  interrelated:[['inter jelly ated', 'inter-JELLY-ated', 'Jelly? Wobbly. Wrong.'], ['enter a rattle ed', 'ENTER-a-RATTLE-ed', 'A rattle? For babies. Wrong.']],
+  sublet:[['sub lettuce', 'sub-LETTUCE', 'Lettuce? Crunchy. Wrong.'], ['soup bit', 'SOUP-bit', 'A bit of soup? Wrong.']],
+  submerge:[['sub marching', 'sub-MARCHING', 'Marching? Left, right. Wrong.'], ['sherbet merge', 'SHERBET-merge', 'Fizzy sherbet? Wrong.']],
+  subtotal:[['sub tortoise', 'sub-TORTOISE', 'A tortoise in a submarine? Slow. Wrong.'], ['soup tootle', 'SOUP-tootle', 'Tootle? That is a little trumpet tune.']],
+  superglue:[['super gloo gloo', 'super-GLOO-GLOO', 'That is the sound of a drain. Wrong.'], ['soapy shoe', 'SOAPY-shoe', 'A soapy shoe? Slippery.']],
+  supernatural:[['super nachos', 'super-NACHOS', 'Super nachos? Cheesy. Wrong.'], ['soup a natter', 'SOUP-a-NATTER', 'A chat about soup? Wrong.']],
+  superpower:[['super flower', 'super-FLOWER', 'A super flower? Pretty. Wrong.'], ['soupy tower', 'SOUPY-tower', 'A tower of soup? Messy.']],
   interactive:[['inter rack tiv', 'inter-RACK-tiv', 'Rack? No.'], ['in terrapin', 'in-TERRAPIN', 'A terrapin is a turtle. Wrong.']],
   intercity:[['inter kitty', 'inter-KITTY', 'A kitty? Meow. Wrong.'], ['hamster city', 'HAMSTER-city', 'A city for hamsters? Squeak.']],
   subdivided:[['sub dove ided', 'sub-DOVE-ided', 'A dove? Coo. Wrong.'], ['sardine vided', 'SARDINE-vided', 'Sardines? Cuffin approves. Wrong.']],

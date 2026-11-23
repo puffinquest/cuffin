@@ -45,8 +45,9 @@ def make_site():
 
 def serve(d):
     s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(d))
-    handler.log_message = lambda *a: None
+    class Quiet(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *a): pass
+    handler = functools.partial(Quiet, directory=str(d))
     httpd = http.server.ThreadingHTTPServer(('127.0.0.1', port), handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, 'http://127.0.0.1:%d/index.html' % port
@@ -120,9 +121,9 @@ def play(pg, kind, maxsteps=400):
             cand = [i for i in range(k.count()) if k.nth(i).inner_text().strip() and 'End' not in k.nth(i).inner_text()]
             if cand: k.nth(cand[-1]).click(timeout=3000)
             pg.wait_for_timeout(900); continue
-        if vis('.stopov'):
-            b = pg.locator('.stopov button:visible:not([disabled])')
-            if b.count(): b.last.click(timeout=3000)
+        if vis('.stopov'):   # the book STOP card: wait for the pencil timer, then pinky-promise "yes" (never "Not yet", which restarts the timer)
+            b = pg.locator('.stopov button.kick:visible:not([disabled])')
+            if b.count(): b.first.click(timeout=3000)
             pg.wait_for_timeout(900); continue
         sh = pg.locator('.sheet:visible button:visible:not([disabled])')
         if sh.count():
@@ -183,7 +184,7 @@ def run(browser, url):
     packs = ev(pg, 'SCHOOL_PACKS.reduce((n, p) => n + p.rows.length, 0)')
     check('main (Leader) words = 242', ev(pg, 'mainItems().length') == 242, ev(pg, 'mainItems().length'))
     check('every school-list word is a Rabbit word (%d)' % packs, ev(pg, 'rabbitItems().length') == packs, ev(pg, 'rabbitItems().length'))
-    check('no duplicate words', ev(pg, 'new Set(allItems().map(x => (x.card ? "c:" : "") + norm(x.w))).size === allItems().length'))
+    check('no duplicate words', ev(pg, 'new Set(allItems().map(pk)).size === allItems().length'))
     check('every Rabbit word has a meaning and a sentence', ev(pg, 'rabbitItems().every(x => x.m && x.s)'))
     pg.reload(); pg.wait_for_timeout(2500)
     check('reloading adds no duplicates', ev(pg, 'rabbitItems().length') == packs)
