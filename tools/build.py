@@ -31,7 +31,7 @@ def build(version=None):
         if MARK not in text:
             sys.exit('Version placeholder %s missing from %s' % (MARK, name))
     # never publish the family code
-    if any(c != 'PUFFIN-XXXX-XXXX' for c in re.findall(r'PUFFIN-[A-Z0-9]{4}-[A-Z0-9]{4}', js + html + sw)):   # XXXX is the input box's example text
+    if any(c.upper().replace('-', '') != 'PUFFINXXXXXXXX' for c in re.findall(r'PUFFIN-?[A-Z0-9]{4}-?[A-Z0-9]{4}', js + html + sw, re.I)):   # XXXX is the input box's example text
         sys.exit('A family code appears in the source. Remove it before building.')
     if version is None:
         version = hashlib.sha1((js + html + sw).encode('utf-8')).hexdigest()[:10]
@@ -48,7 +48,10 @@ def main():
         v = live_version()
         if not v:
             sys.exit('Could not read the version from app.js')
-        _, out = build(v)
+        fresh, out = build()
+        if fresh != v:
+            print('MISMATCH: app.js says version %s but the source hashes to %s. Run tools/build.py.' % (v, fresh))
+            sys.exit(1)
         bad = [f for f in OUT if (ROOT / f).read_text(encoding='utf-8') != out[f]]
         if bad:
             print('MISMATCH: %s differ from src/ (version %s). Someone edited the built files directly.' % (', '.join(bad), v))

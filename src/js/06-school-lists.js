@@ -1,4 +1,4 @@
-/* school spelling lists Shaw sends: added once to the word bank (with meanings) and set as that week's school words */
+/* school spelling lists Shaw sends: each pack is added once to the word bank (with meanings). They are Rabbit words: played only in Stop the Rabbit, never counted for Leader */
 const SCHOOL_PACKS = [
   { d:'2026-11-07', rows:[
     ['interlock', 'To fit or link together tightly, like jigsaw pieces.', 'The jigsaw pieces interlock to make one big picture.'],

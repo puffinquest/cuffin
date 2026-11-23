@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-const APPV = "6a5c0a2a64";
+const APPV = "a8dac31b92";
 /* ---------- tiny DOM helpers ---------- */
 const $ = (s, r=document) => r.querySelector(s);
 function h(tag, props, ...kids){
@@ -540,7 +540,7 @@ function fresh(){
 }
 const isBlank = o => !o || ((!o.stats || !o.stats.answered) && !(o.history && o.history.length));
 /* restoring = keep the old progress (a backup code, a save point, the archive); otherwise a pre-race save starts the race from scratch */
-/* school spelling lists Shaw sends: added once to the word bank (with meanings) and set as that week's school words */
+/* school spelling lists Shaw sends: each pack is added once to the word bank (with meanings). They are Rabbit words: played only in Stop the Rabbit, never counted for Leader */
 const SCHOOL_PACKS = [
   { d:'2026-11-07', rows:[
     ['interlock', 'To fit or link together tightly, like jigsaw pieces.', 'The jigsaw pieces interlock to make one big picture.'],

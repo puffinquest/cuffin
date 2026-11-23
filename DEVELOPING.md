@@ -52,6 +52,8 @@ For big changes, also have an independent agent test the game before reporting i
 
 ## Rules that matter
 
+- **Everything in this repo is public**, docs and tests included, because GitHub Pages serves it.
+- **Phone reminders and prize notifications** come from `.github/workflows/reminder.yml`, which runs `scripts/remind.mjs` hourly (4pm reminder, Sunday report, prize alerts). It uses the `FIREBASE_SERVICE_ACCOUNT` secret and touches real family data, so never run it locally.
 - **Aaron's progress lives in Firebase, never in this repo.** Never put the family code (PUFFIN-…) in the source; `build.py` refuses to build if one appears.
 - **The 242 Leader words** (58 bank words + 184 cards) drive mastery, ranks, prizes and the Mirror race. School-list words are Rabbit words: Stop the Rabbit only, paying carrots, not fish.
 - **Tests never touch real data.** `tests/run_tests.py` blocks all Firebase/Google requests and plays a copy of the game.

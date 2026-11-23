@@ -173,7 +173,7 @@ def run(browser, url):
     print('\n1. Loads cleanly')
     for name, dev in (('SE', SE), ('iPad', IPAD)):
         pg, errs = new_page(browser, url, dev)
-        check('%s: home screen shows' % name, ev(pg, 'screen') in ('home', 'chapter', 'intro', 'join') or pg.locator('body').inner_text() != '')
+        check('%s: the game starts (welcome or home screen)' % name, ev(pg, 'typeof screen') == 'string' and ev(pg, 'screen') not in ('', None) and pg.locator('button:visible').count() > 0, ev(pg, 'screen'))
         check('%s: no sideways scrolling' % name, not overflow(pg))
         check('%s: no JS errors on load' % name, not errs, errs)
         pg.close()
@@ -181,6 +181,10 @@ def run(browser, url):
     pg, errs = new_page(browser, url)
     existing_player(pg)
     print('\n2. Word lists')
+    stamp = ev(pg, 'APPV'); html = (ROOT / 'index.html').read_text(encoding='utf-8'); sw = (ROOT / 'sw.js').read_text(encoding='utf-8')
+    check('the same version stamp in app.js, index.html and sw.js', ('app.js?v=' + stamp) in html and ('cuffin-' + stamp) in sw, stamp)
+    newest = ev(pg, 'JSON.stringify(SCHOOL_PACKS[SCHOOL_PACKS.length - 1].rows.map(r => r[0]))')
+    check("the newest spelling list's words are in the game as Rabbit words", ev(pg, 'SCHOOL_PACKS[SCHOOL_PACKS.length - 1].rows.every(r => rabbitItems().some(x => norm(x.w) === norm(r[0])))'), newest)
     packs = ev(pg, 'SCHOOL_PACKS.reduce((n, p) => n + p.rows.length, 0)')
     check('main (Leader) words = 242', ev(pg, 'mainItems().length') == 242, ev(pg, 'mainItems().length'))
     check('every school-list word is a Rabbit word (%d)' % packs, ev(pg, 'rabbitItems().length') == packs, ev(pg, 'rabbitItems().length'))
@@ -258,8 +262,12 @@ def run(browser, url):
     print('\n6. Rabbit news for a new spelling list')
     ev(pg, "S.rabbitNews = { d:'2000-01-01', on:'2000-01-01', v:2 }; save(); home.rabbitShown = false; 1")
     pg.reload(); pg.wait_for_timeout(2500)
-    check('the "He\'s back" news shows for a new list', ev(pg, 'screen') == 'chapter' or ev(pg, 'rabbitDue()'))
-    check('every JS error so far', not errs, errs)
+    clear_overlays(pg)   # the test copy has no family code, so a "join the family" sheet opens first; Aaron's devices are already joined
+    ev(pg, 'home(); 1'); pg.wait_for_timeout(1200)
+    check('the "He\'s back" news shows for a new list', ev(pg, 'screen') == 'chapter' and 'BREAKING NEWS' in pg.locator('body').inner_text().upper(), ev(pg, 'screen'))
+    blocked = pg.evaluate("() => fetch('https://firestore.googleapis.com/').then(() => 'reached', () => 'blocked')")
+    check('Firebase really is blocked in tests', blocked == 'blocked', blocked)
+    check('no JS errors anywhere in the run', not errs, errs)
     pg.close()
 
 
